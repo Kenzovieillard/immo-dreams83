@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import {
   formatNumber,
   formatPrice,
@@ -37,6 +38,8 @@ import {
 } from "@/lib/property-management";
 import type { Activity, ContactLead, EstimationLead, LeadStatus } from "@/types/crm";
 
+const contactRequestTypes = ["Achat", "Vente", "Estimation", "Terrain", "Autre"] as const;
+
 type AdminLead = {
   id: string;
   kind: "contacts" | "estimations";
@@ -51,6 +54,33 @@ type AdminLead = {
   notes: string;
   archived: boolean;
 };
+
+type ContactFormState = {
+  fullName: string;
+  email: string;
+  phone: string;
+  requestType: (typeof contactRequestTypes)[number];
+  city: string;
+  message: string;
+};
+
+const emptyContactForm: ContactFormState = {
+  fullName: "",
+  email: "",
+  phone: "",
+  requestType: "Achat",
+  city: "",
+  message: "",
+};
+
+function getStatusSelectLabel(value: unknown) {
+  if (value === "ALL") return "Tous les statuts";
+  if (typeof value === "string" && leadStatuses.includes(value as LeadStatus)) {
+    return leadStatusLabels[value as LeadStatus];
+  }
+
+  return "Tous les statuts";
+}
 
 type Props = {
   contacts: ContactLead[];
@@ -95,6 +125,198 @@ function normalizeEstimations(items: EstimationLead[]): AdminLead[] {
   }));
 }
 
+function CreateContactCard({
+  setLeads,
+  expectedCode,
+  connected,
+}: {
+  setLeads: React.Dispatch<React.SetStateAction<AdminLead[]>>;
+  expectedCode: string;
+  connected: boolean;
+}) {
+  const [form, setForm] = useState<ContactFormState>(emptyContactForm);
+  const [submitting, setSubmitting] = useState(false);
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  function updateField(field: keyof ContactFormState, value: string) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function createLocalLead() {
+    const now = new Date().toISOString();
+    const id =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `local-contact-${Date.now()}`;
+
+    setLeads((current) => [
+      {
+        id,
+        kind: "contacts",
+        createdAt: now,
+        name: form.fullName.trim(),
+        email: form.email.trim(),
+        phone: form.phone.trim() || "Non renseigné",
+        category: form.requestType,
+        city: form.city.trim() || "Non renseignée",
+        message: form.message.trim(),
+        status: "NEW",
+        notes: "",
+        archived: false,
+      },
+      ...current,
+    ]);
+  }
+
+  async function submitContact(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setFeedback(null);
+
+    if (!form.fullName.trim() || !form.email.trim() || !form.message.trim()) {
+      setFeedback({
+        type: "error",
+        message: "Nom, email et message sont nécessaires pour créer un contact.",
+      });
+      return;
+    }
+
+    if (!connected) {
+      createLocalLead();
+      setForm(emptyContactForm);
+      setFeedback({ type: "success", message: "Contact créé dans cette session locale." });
+      return;
+    }
+
+    setSubmitting(true);
+    const response = await fetch("/api/admin/leads", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-admin-code": expectedCode },
+      body: JSON.stringify(form),
+    }).catch(() => null);
+    const payload = response
+      ? ((await response.json().catch(() => null)) as {
+          message?: string;
+          contact?: ContactLead;
+        } | null)
+      : null;
+    setSubmitting(false);
+
+    if (!response?.ok || !payload?.contact) {
+      setFeedback({
+        type: "error",
+        message: payload?.message ?? "Le contact n'a pas pu être créé.",
+      });
+      return;
+    }
+
+    setLeads((current) => [normalizeContacts([payload.contact!])[0], ...current]);
+    setForm(emptyContactForm);
+    setFeedback({ type: "success", message: payload.message ?? "Contact créé." });
+  }
+
+  return (
+    <Card className="border-orange-100 bg-white">
+      <CardHeader>
+        <CardTitle className="text-lg text-[#111111]">Créer un contact</CardTitle>
+        <p className="text-sm leading-6 text-gray-600">
+          Ajoutez manuellement un prospect reçu par téléphone, email ou passage agence.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={(event) => void submitContact(event)} className="grid gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="contact-full-name">Nom complet</Label>
+              <Input
+                id="contact-full-name"
+                value={form.fullName}
+                onChange={(event) => updateField("fullName", event.target.value)}
+                placeholder="Nom du prospect"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="contact-email">Email</Label>
+              <Input
+                id="contact-email"
+                type="email"
+                value={form.email}
+                onChange={(event) => updateField("email", event.target.value)}
+                placeholder="prospect@email.fr"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="contact-phone">Téléphone</Label>
+              <Input
+                id="contact-phone"
+                value={form.phone}
+                onChange={(event) => updateField("phone", event.target.value)}
+                placeholder="06 00 00 00 00"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Type de demande</Label>
+              <Select
+                value={form.requestType}
+                onValueChange={(value) =>
+                  updateField("requestType", value as ContactFormState["requestType"])
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {contactRequestTypes.map((requestType) => (
+                    <SelectItem key={requestType} value={requestType}>
+                      {requestType}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2 sm:col-span-2">
+              <Label htmlFor="contact-city">Ville concernée</Label>
+              <Input
+                id="contact-city"
+                value={form.city}
+                onChange={(event) => updateField("city", event.target.value)}
+                placeholder="Solliès-Pont, Toulon, Hyères..."
+              />
+            </div>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="contact-message">Message</Label>
+            <Textarea
+              id="contact-message"
+              value={form.message}
+              onChange={(event) => updateField("message", event.target.value)}
+              placeholder="Besoin exprimé, budget, délai, informations utiles..."
+            />
+          </div>
+          {feedback ? (
+            <p
+              className={
+                feedback.type === "success"
+                  ? "rounded-md bg-emerald-50 p-3 text-sm font-medium text-emerald-800"
+                  : "rounded-md bg-red-50 p-3 text-sm font-medium text-red-700"
+              }
+            >
+              {feedback.message}
+            </p>
+          ) : null}
+          <Button
+            type="submit"
+            disabled={submitting}
+            className="h-11 w-full bg-orange-500 text-white hover:bg-orange-600 sm:w-fit"
+          >
+            <ContactRound className="size-4" />
+            {submitting ? "Création..." : "Créer le contact"}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
 function LeadManager({ leads, setLeads, expectedCode, connected }: { leads: AdminLead[]; setLeads: React.Dispatch<React.SetStateAction<AdminLead[]>>; expectedCode: string; connected: boolean }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("ALL");
@@ -124,7 +346,9 @@ function LeadManager({ leads, setLeads, expectedCode, connected }: { leads: Admi
       <div className="flex flex-col gap-3 sm:flex-row">
         <div className="relative flex-1"><Search className="absolute left-3 top-2.5 size-4 text-gray-400" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Rechercher un nom, une ville, un email" className="pl-9" /></div>
         <Select value={status} onValueChange={(value) => setStatus(value ?? "ALL")}>
-          <SelectTrigger className="w-full sm:w-48"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-full sm:w-48">
+            <SelectValue>{(value) => getStatusSelectLabel(value)}</SelectValue>
+          </SelectTrigger>
           <SelectContent><SelectItem value="ALL">Tous les statuts</SelectItem>{leadStatuses.map((value) => <SelectItem key={value} value={value}>{leadStatusLabels[value]}</SelectItem>)}</SelectContent>
         </Select>
       </div>
@@ -141,7 +365,7 @@ function LeadManager({ leads, setLeads, expectedCode, connected }: { leads: Admi
             <div className="grid gap-2 text-sm text-gray-700 sm:grid-cols-3"><p><strong>Email</strong><br />{lead.email}</p><p><strong>Téléphone</strong><br />{lead.phone}</p><p><strong>Demande</strong><br />{lead.category}</p></div>
             <p className="rounded-md bg-orange-50 p-4 text-sm leading-6 text-gray-700">{lead.message}</p>
             <div className="grid gap-3 sm:grid-cols-[200px_1fr_auto_auto] sm:items-end">
-              <div className="grid gap-2"><Label>Statut</Label><Select value={lead.status} onValueChange={(value) => persist(lead, { status: value as LeadStatus })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{leadStatuses.map((value) => <SelectItem key={value} value={value}>{leadStatusLabels[value]}</SelectItem>)}</SelectContent></Select></div>
+              <div className="grid gap-2"><Label>Statut</Label><Select value={lead.status} onValueChange={(value) => persist(lead, { status: value as LeadStatus })}><SelectTrigger><SelectValue>{(value) => getStatusSelectLabel(value)}</SelectValue></SelectTrigger><SelectContent>{leadStatuses.map((value) => <SelectItem key={value} value={value}>{leadStatusLabels[value]}</SelectItem>)}</SelectContent></Select></div>
               <div className="grid gap-2"><Label htmlFor={`notes-${lead.id}`}>Notes internes</Label><Input id={`notes-${lead.id}`} value={lead.notes} onChange={(event) => setLeads((current) => current.map((item) => item.id === lead.id ? { ...item, notes: event.target.value } : item))} /></div>
               <Button variant="outline" onClick={() => persist(lead, { notes: lead.notes })}><Save className="size-4" />Sauver</Button>
               <Button variant="outline" onClick={() => persist(lead, { archived: true })}><Archive className="size-4" />Archiver</Button>
@@ -229,7 +453,12 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
         <Tabs defaultValue="overview" className="gap-6">
           <div className="no-scrollbar overflow-x-auto"><TabsList className="min-w-max bg-white"><TabsTrigger value="overview"><LayoutDashboard />Vue d&apos;ensemble</TabsTrigger><TabsTrigger value="contacts"><ContactRound />Contacts</TabsTrigger><TabsTrigger value="estimations"><ClipboardCheck />Estimations</TabsTrigger><TabsTrigger value="properties"><Building2 />Biens</TabsTrigger><TabsTrigger value="activities"><ListChecks />Activités</TabsTrigger><TabsTrigger value="statistics"><BarChart3 />Statistiques</TabsTrigger></TabsList></div>
           <TabsContent value="overview" className="grid gap-6"><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{[{ label: "Contacts", value: metrics.contacts }, { label: "Estimations", value: metrics.estimations }, { label: "Biens en ligne", value: metrics.online }, { label: "Biens à la une", value: metrics.featured }].map((metric) => <Card key={metric.label} className="border-orange-100 bg-white"><CardContent className="p-5"><p className="text-sm text-gray-500">{metric.label}</p><p className="mt-2 text-3xl font-black text-[#111111]">{metric.value}</p></CardContent></Card>)}</div><Card className="border-orange-100 bg-white"><CardHeader><CardTitle>Activité récente</CardTitle></CardHeader><CardContent>{activities.length ? <div className="grid gap-3">{activities.slice(0, 6).map((activity) => <p key={activity.id} className="flex justify-between gap-4 border-b border-orange-100 pb-3 text-sm"><span>{activity.action} · {activity.user_name}</span><span className="text-gray-500">{new Date(activity.created_at).toLocaleString("fr-FR")}</span></p>)}</div> : <p className="text-sm text-gray-600">Aucune activité enregistrée pour le moment.</p>}</CardContent></Card></TabsContent>
-          <TabsContent value="contacts"><LeadManager leads={contactLeads} setLeads={setContactLeads} expectedCode={expectedCode} connected={connected} /></TabsContent>
+          <TabsContent value="contacts">
+            <div className="grid gap-5">
+              <CreateContactCard setLeads={setContactLeads} expectedCode={expectedCode} connected={connected} />
+              <LeadManager leads={contactLeads} setLeads={setContactLeads} expectedCode={expectedCode} connected={connected} />
+            </div>
+          </TabsContent>
           <TabsContent value="estimations"><LeadManager leads={estimationLeads} setLeads={setEstimationLeads} expectedCode={expectedCode} connected={connected} /></TabsContent>
           <TabsContent value="properties"><div className="grid gap-6"><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{propertyInventoryMetrics.map((metric) => <Card key={metric.label} className="border-orange-100 bg-white"><CardContent className="p-5"><p className="text-sm text-gray-500">{metric.label}</p><p className="mt-2 text-2xl font-black text-[#111111]">{metric.value}</p><p className="mt-2 text-xs leading-5 text-gray-500">{metric.description}</p></CardContent></Card>)}</div><Card className="border-orange-100 bg-white"><CardHeader><CardTitle>Source catalogue</CardTitle></CardHeader><CardContent className="grid gap-2 text-sm text-gray-700"><p><strong>{propertyImportSource.name}</strong></p><p>Source actuelle : <span className="font-mono text-xs">{propertyImportSource.currentSource}</span></p><p>Source cible : {propertyImportSource.futureSource}</p><p className="text-gray-500">{propertyImportSource.note}</p></CardContent></Card><div className="grid gap-4 lg:grid-cols-2"><Card className="border-orange-100 bg-white"><CardHeader><CardTitle>Répartition par statut</CardTitle></CardHeader><CardContent className="grid gap-3">{propertyStatusBreakdown.map((item) => <p key={item.key} className="flex items-center justify-between border-b border-orange-100 pb-2 text-sm"><span>{item.label}</span><strong>{item.count}</strong></p>)}</CardContent></Card><Card className="border-orange-100 bg-white"><CardHeader><CardTitle>Répartition par type</CardTitle></CardHeader><CardContent className="grid gap-3">{propertyTypeBreakdown.map((item) => <p key={item.key} className="flex items-center justify-between border-b border-orange-100 pb-2 text-sm"><span>{item.label}</span><strong>{item.count}</strong></p>)}</CardContent></Card></div><div className="grid gap-4 md:grid-cols-2">{properties.map((property) => <Card key={property.id} className="border-orange-100 bg-white"><CardContent className="grid gap-4 p-5"><div className="flex items-start justify-between gap-4"><div><p className="font-mono text-xs text-gray-500">Réf. {property.reference} · Mandat {property.mandateNumber}</p><p className="mt-1 font-bold text-[#111111]">{property.title}</p><p className="mt-1 text-sm text-gray-600">{property.city} · {formatNumber(property.surface)} m² · {propertyTypeLabels[property.type]}</p></div><Badge className="border-0 bg-orange-100 text-orange-800">{propertyStatusLabels[property.status]}</Badge></div><div className="grid gap-2 text-sm text-gray-700 sm:grid-cols-3"><p><strong>Prix</strong><br />{formatPrice(property.price)}</p><p><strong>Pièces</strong><br />{property.rooms ?? "Non renseigné"}</p><p><strong>Photos</strong><br />{property.photos.length}</p></div><a href={property.sourceUrl} target="_blank" rel="noreferrer" className="text-sm font-semibold text-orange-700 hover:text-orange-900">Voir l&apos;annonce source</a></CardContent></Card>)}</div></div></TabsContent>
           <TabsContent value="activities"><Card className="border-orange-100 bg-white"><CardContent className="grid gap-3 p-6">{activities.length ? activities.map((activity) => <div key={activity.id} className="border-b border-orange-100 pb-3"><p className="font-semibold text-[#111111]">{activity.action}</p><p className="mt-1 text-xs text-gray-500">{activity.entity_type} · {activity.user_name} · {new Date(activity.created_at).toLocaleString("fr-FR")}</p></div>) : <p className="text-sm text-gray-600">Aucune activité enregistrée.</p>}</CardContent></Card></TabsContent>

@@ -95,6 +95,40 @@ export async function POST(request: NextRequest) {
 
       leadId = lead.id;
       if (admin) {
+        const contactMessage = [
+          `Demande d'estimation ${data.propertyType} à ${data.city}${data.postalCode ? ` (${data.postalCode})` : ""}.`,
+          `Surface : ${data.surface} m²${data.rooms ? ` · Pièces : ${data.rooms}` : ""}.`,
+          details,
+        ]
+          .filter(Boolean)
+          .join("\n\n");
+
+        const { data: contact, error: contactError } = await admin
+          .from("contacts")
+          .insert({
+            name: data.fullName,
+            email: data.email,
+            phone: data.phone,
+            request_type: "Estimation",
+            city: data.city,
+            message: contactMessage,
+            status: "NEW",
+            archived: false,
+          })
+          .select("id")
+          .single();
+
+        if (contactError) {
+          console.error("[IMMO-DREAMS83] Contact mirror from estimation failed", contactError.message);
+        } else {
+          await admin.from("activities").insert({
+            entity_type: "contact",
+            entity_id: contact.id,
+            action: "Contact créé depuis une estimation",
+            user_name: "Site public",
+          });
+        }
+
         await admin.from("activities").insert({
           entity_type: "estimation",
           entity_id: leadId,
