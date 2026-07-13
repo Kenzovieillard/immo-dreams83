@@ -1,0 +1,78 @@
+import { Search } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+export function PropertySearch() {
+  return (
+    <form
+      action="/a-vendre"
+      className="grid gap-4 rounded-xl border border-orange-100 bg-white p-5 shadow-2xl shadow-black/15 md:grid-cols-[1fr_1fr_1fr_1fr_auto] md:items-end"
+    >
+      <div className="md:col-span-5">
+        <p className="text-sm font-bold uppercase tracking-[0.18em] text-orange-600">
+          Recherche immobilière
+        </p>
+        <p className="mt-1 text-sm text-gray-500">
+          Précisez votre projet, nous vous guidons vers les biens les plus adaptés.
+        </p>
+      </div>
+
+      <label className="grid gap-2 text-sm font-semibold text-gray-800">
+        Type de bien recherché
+        <Select name="type" defaultValue="all">
+          <SelectTrigger className="h-12 w-full border-orange-200 bg-orange-50/40">
+            <SelectValue placeholder="Maison, appartement, terrain" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tous les biens</SelectItem>
+            <SelectItem value="apartment">Appartement</SelectItem>
+            <SelectItem value="house">Maison</SelectItem>
+            <SelectItem value="land">Terrain</SelectItem>
+          </SelectContent>
+        </Select>
+      </label>
+
+      <label className="grid gap-2 text-sm font-semibold text-gray-800">
+        Ville ou secteur
+        <Input
+          name="city"
+          className="h-12 border-orange-200 bg-orange-50/40"
+          placeholder="Solliès-Pont, Toulon..."
+        />
+      </label>
+
+      <label className="grid gap-2 text-sm font-semibold text-gray-800">
+        Budget maximum
+        <Input
+          name="budget"
+          className="h-12 border-orange-200 bg-orange-50/40"
+          placeholder="Ex. 450 000 €"
+        />
+      </label>
+
+      <label className="grid gap-2 text-sm font-semibold text-gray-800">
+        Surface souhaitée
+        <Input
+          name="surface"
+          className="h-12 border-orange-200 bg-orange-50/40"
+          placeholder="Ex. 90 m2"
+        />
+      </label>
+
+      <Button
+        type="submit"
+        className="h-12 bg-orange-500 px-6 text-white shadow-lg shadow-orange-200 hover:bg-orange-600"
+      >
+        <Search className="size-4" aria-hidden="true" />
+        Rechercher
+      </Button>
+    </form>
+  );
+}
