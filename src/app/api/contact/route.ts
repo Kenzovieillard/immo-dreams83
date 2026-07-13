@@ -42,7 +42,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseClient();
+    const admin = getSupabaseAdminClient();
+    const supabase = admin ?? getSupabaseClient();
     let leadId: string | null = null;
 
     if (supabase) {
@@ -56,6 +57,7 @@ export async function POST(request: NextRequest) {
           city: data.city || null,
           message: data.message,
           status: "NEW",
+          archived: false,
         })
         .select("id")
         .single();
@@ -69,7 +71,6 @@ export async function POST(request: NextRequest) {
       }
 
       leadId = lead.id;
-      const admin = getSupabaseAdminClient();
       if (admin) {
         await admin.from("activities").insert({
           entity_type: "contact",

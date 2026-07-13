@@ -59,7 +59,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseClient();
+    const admin = getSupabaseAdminClient();
+    const supabase = admin ?? getSupabaseClient();
     let leadId: string | null = null;
 
     if (supabase) {
@@ -79,6 +80,7 @@ export async function POST(request: NextRequest) {
           rooms: toNumber(data.rooms),
           message: details || null,
           status: "NEW",
+          archived: false,
         })
         .select("id")
         .single();
@@ -92,7 +94,6 @@ export async function POST(request: NextRequest) {
       }
 
       leadId = lead.id;
-      const admin = getSupabaseAdminClient();
       if (admin) {
         await admin.from("activities").insert({
           entity_type: "estimation",
