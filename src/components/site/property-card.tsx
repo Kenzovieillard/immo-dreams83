@@ -32,7 +32,7 @@ export function PropertyCard({ property, priority = false }: PropertyCardProps) 
 
   return (
     <Card className="group overflow-hidden border-orange-100 bg-white py-0 shadow-sm shadow-orange-100/60 transition duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-orange-200/50">
-      <Link href={detailHref} className="relative block aspect-[4/3] overflow-hidden bg-orange-50">
+      <Link href={detailHref} className="relative block aspect-[16/11] overflow-hidden bg-orange-50 sm:aspect-[4/3]">
         <Image
           src={mainPhoto}
           alt={property.title}
@@ -44,19 +44,19 @@ export function PropertyCard({ property, priority = false }: PropertyCardProps) 
         <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent" />
         <Badge
           className={cn(
-            "absolute left-4 top-4 border-0 px-3 py-1 shadow-sm",
+            "absolute left-3 top-3 border-0 px-3 py-1 shadow-sm sm:left-4 sm:top-4",
             propertyStatusBadgeClasses[property.status]
           )}
         >
           {propertyStatusLabels[property.status]}
         </Badge>
-        <p className="absolute bottom-4 left-4 flex items-center gap-1.5 text-sm font-semibold text-white">
+        <p className="absolute bottom-3 left-3 flex max-w-[calc(100%-1.5rem)] items-center gap-1.5 text-sm font-semibold text-white sm:bottom-4 sm:left-4">
           <MapPin className="size-4 text-orange-300" aria-hidden="true" />
           {property.city} ({property.postalCode})
         </p>
       </Link>
 
-      <CardHeader className="gap-3">
+      <CardHeader className="gap-3 p-4 sm:p-5">
         <div className="flex items-center justify-between gap-3">
           <span className="inline-flex items-center gap-1.5 rounded-lg bg-orange-50 px-3 py-1 text-sm font-semibold text-orange-700">
             <Home className="size-4" aria-hidden="true" />
@@ -66,7 +66,7 @@ export function PropertyCard({ property, priority = false }: PropertyCardProps) 
             {property.reference}
           </span>
         </div>
-        <CardTitle className="text-xl font-black leading-tight text-[#111111]">
+        <CardTitle className="text-lg font-black leading-tight text-[#111111] sm:text-xl">
           <Link href={detailHref} className="transition hover:text-orange-600">
             {property.title}
           </Link>
@@ -79,20 +79,20 @@ export function PropertyCard({ property, priority = false }: PropertyCardProps) 
         </div>
       </CardHeader>
 
-      <CardContent>
+      <CardContent className="px-4 sm:px-5">
         <p className="min-h-14 text-sm leading-6 text-gray-600">
           {property.descriptionShort}
         </p>
         <div className="mt-5 grid grid-cols-3 gap-2 text-sm">
-          <span className="rounded-lg bg-orange-50 px-3 py-2 font-semibold text-gray-700">
+          <span className="rounded-lg bg-orange-50 px-2.5 py-2.5 font-semibold text-gray-700">
             <Ruler className="mb-1 size-4 text-orange-500" aria-hidden="true" />
             {property.surface} m2
           </span>
-          <span className="rounded-lg bg-orange-50 px-3 py-2 font-semibold text-gray-700">
+          <span className="rounded-lg bg-orange-50 px-2.5 py-2.5 font-semibold text-gray-700">
             <Home className="mb-1 size-4 text-orange-500" aria-hidden="true" />
             {property.rooms ?? "-"} pièces
           </span>
-          <span className="rounded-lg bg-orange-50 px-3 py-2 font-semibold text-gray-700">
+          <span className="rounded-lg bg-orange-50 px-2.5 py-2.5 font-semibold text-gray-700">
             <BedDouble className="mb-1 size-4 text-orange-500" aria-hidden="true" />
             {property.bedrooms ?? "-"} ch.
           </span>

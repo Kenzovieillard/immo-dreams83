@@ -202,16 +202,41 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    min-width: 0;
   }
   body {
     @apply bg-background text-foreground antialiased;
+    overflow-x: clip;
+    text-rendering: optimizeLegibility;
   }
   html {
     @apply scroll-smooth font-sans;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  button,
+  a,
+  input,
+  textarea,
+  [data-slot="select-trigger"],
+  [data-slot="select-item"] {
+    touch-action: manipulation;
   }
   ::selection {
     background: color-mix(in oklab, var(--primary) 28%, white);
     color: var(--foreground);
+  }
+}
+
+@media (max-width: 767px) {
+  input,
+  textarea,
+  select,
+  [data-slot="input"],
+  [data-slot="textarea"],
+  [data-slot="select-trigger"],
+  [data-slot="select-item"] {
+    font-size: 16px;
   }
 }
 

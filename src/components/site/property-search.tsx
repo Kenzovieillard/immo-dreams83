@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,14 +9,24 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 
+const propertySearchTypeLabels = {
+  all: "Tous les biens",
+  apartment: "Appartement",
+  house: "Maison",
+  land: "Terrain",
+} as const;
+
+type PropertySearchType = keyof typeof propertySearchTypeLabels;
+
 export function PropertySearch() {
+  const [selectedType, setSelectedType] = useState<PropertySearchType>("all");
+
   return (
     <form
       action="/a-vendre"
-      className="grid gap-4 rounded-xl border border-orange-100 bg-white p-5 shadow-2xl shadow-black/15 md:grid-cols-[1fr_1fr_1fr_1fr_auto] md:items-end"
+      className="grid gap-5 rounded-xl border border-orange-100 bg-white p-4 shadow-2xl shadow-black/15 sm:p-5 md:grid-cols-[1fr_1fr_1fr_1fr_auto] md:items-end"
     >
       <div className="md:col-span-5">
         <p className="text-sm font-bold uppercase tracking-[0.18em] text-orange-600">
@@ -24,11 +37,17 @@ export function PropertySearch() {
         </p>
       </div>
 
-      <label className="grid gap-2 text-sm font-semibold text-gray-800">
+      <label className="grid gap-2 text-base font-semibold text-gray-800 sm:text-sm">
         Type de bien recherché
-        <Select name="type" defaultValue="all">
+        <Select
+          name="type"
+          value={selectedType}
+          onValueChange={(value) => setSelectedType((value as PropertySearchType) ?? "all")}
+        >
           <SelectTrigger className="h-12 w-full border-orange-200 bg-orange-50/40">
-            <SelectValue placeholder="Maison, appartement, terrain" />
+            <span className="flex flex-1 text-left text-gray-900">
+              {propertySearchTypeLabels[selectedType]}
+            </span>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Tous les biens</SelectItem>
@@ -39,7 +58,7 @@ export function PropertySearch() {
         </Select>
       </label>
 
-      <label className="grid gap-2 text-sm font-semibold text-gray-800">
+      <label className="grid gap-2 text-base font-semibold text-gray-800 sm:text-sm">
         Ville ou secteur
         <Input
           name="city"
@@ -48,7 +67,7 @@ export function PropertySearch() {
         />
       </label>
 
-      <label className="grid gap-2 text-sm font-semibold text-gray-800">
+      <label className="grid gap-2 text-base font-semibold text-gray-800 sm:text-sm">
         Budget maximum
         <Input
           name="budget"
@@ -57,7 +76,7 @@ export function PropertySearch() {
         />
       </label>
 
-      <label className="grid gap-2 text-sm font-semibold text-gray-800">
+      <label className="grid gap-2 text-base font-semibold text-gray-800 sm:text-sm">
         Surface souhaitée
         <Input
           name="surface"

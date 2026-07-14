@@ -98,7 +98,7 @@ export function EstimationForm() {
   return (
     <form
       onSubmit={handleSubmit}
-      className="grid gap-5 rounded-xl border border-orange-100 bg-white p-6 shadow-xl shadow-orange-100/60"
+      className="grid gap-5 rounded-xl border border-orange-100 bg-white p-4 shadow-xl shadow-orange-100/60 sm:p-6"
     >
       {result ? (
         <div
@@ -121,7 +121,7 @@ export function EstimationForm() {
         </div>
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-5 sm:grid-cols-2">
         <div className="grid gap-2">
           <Label htmlFor="estimate-fullName">Nom complet</Label>
           <Input
@@ -155,7 +155,7 @@ export function EstimationForm() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-5 sm:grid-cols-2">
         <div className="grid gap-2">
           <Label htmlFor="estimate-phone">Téléphone</Label>
           <Input
@@ -178,7 +178,7 @@ export function EstimationForm() {
             value={form.propertyType}
             onValueChange={(value) => updateField("propertyType", value ?? "")}
           >
-            <SelectTrigger className="h-10 w-full" disabled={disabled}>
+            <SelectTrigger className="h-12 w-full sm:h-10" disabled={disabled}>
               <SelectValue placeholder="Sélectionner" />
             </SelectTrigger>
             <SelectContent>
@@ -197,7 +197,7 @@ export function EstimationForm() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-5 sm:grid-cols-2">
         <div className="grid gap-2">
           <Label htmlFor="estimate-city">Ville</Label>
           <Input
@@ -227,7 +227,7 @@ export function EstimationForm() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-5 sm:grid-cols-3">
         <div className="grid gap-2">
           <Label htmlFor="estimate-surface">Surface</Label>
           <Input
@@ -286,7 +286,7 @@ export function EstimationForm() {
       <Button
         type="submit"
         disabled={disabled}
-        className="h-11 bg-orange-500 text-white hover:bg-orange-600"
+        className="h-12 bg-orange-500 text-white hover:bg-orange-600"
       >
         {isSubmitting ? (
           <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />

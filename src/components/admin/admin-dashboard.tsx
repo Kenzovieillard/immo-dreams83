@@ -515,8 +515,8 @@ function CreateContactCard({
         </p>
       </CardHeader>
       <CardContent>
-        <form onSubmit={(event) => void submitContact(event)} className="grid gap-4">
-          <div className="grid gap-4 sm:grid-cols-2">
+        <form onSubmit={(event) => void submitContact(event)} className="grid gap-5">
+          <div className="grid gap-5 sm:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor="contact-full-name">Nom complet</Label>
               <Input
@@ -1393,7 +1393,7 @@ function PropertyEditorCard({
 
   return (
     <Card className="border-orange-100 bg-white">
-      <CardContent className="grid gap-4 p-5">
+      <CardContent className="grid gap-4 p-4 sm:p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="font-mono text-xs text-gray-500">Réf. {property.reference} · Mandat {property.mandateNumber}</p>
@@ -1418,7 +1418,7 @@ function PropertyEditorCard({
                 value={property.status}
                 onValueChange={(value) => void quickUpdate({ status: value as PropertyStatus })}
               >
-                <SelectTrigger className="h-10 w-full">
+                <SelectTrigger className="h-12 w-full sm:h-10">
                   <span className="flex flex-1 text-left text-gray-900">
                     {propertyStatusLabels[property.status]}
                   </span>
@@ -1445,7 +1445,7 @@ function PropertyEditorCard({
           <Button
             type="button"
             variant="outline"
-            className="h-10 border-orange-200 bg-white"
+            className="h-12 border-orange-200 bg-white sm:h-10"
             onClick={() => {
               setForm(propertyToForm(property));
               setPhotoOrder(property.photos);
@@ -1459,7 +1459,7 @@ function PropertyEditorCard({
         </div>
 
         {editing ? (
-          <form onSubmit={(event) => void saveEditor(event)} className="grid gap-4 rounded-xl border border-orange-100 bg-white p-4">
+          <form onSubmit={(event) => void saveEditor(event)} className="grid gap-5 rounded-xl border border-orange-100 bg-white p-4">
             <div className="grid gap-4 lg:grid-cols-3">
               <div className="grid gap-2 lg:col-span-2">
                 <Label>Titre</Label>
@@ -1468,7 +1468,7 @@ function PropertyEditorCard({
               <div className="grid gap-2">
                 <Label>Type</Label>
                 <Select value={form.type} onValueChange={(value) => updatePropertyType(value as PropertyType)}>
-                  <SelectTrigger className="h-10 w-full">
+                  <SelectTrigger className="h-12 w-full sm:h-10">
                     <span className="flex flex-1 text-left text-gray-900">
                       {propertyTypeLabels[form.type]}
                     </span>
@@ -1613,7 +1613,7 @@ function PropertyEditorCard({
                             disabled={index === 0}
                             title="Monter la photo"
                             onClick={() => movePhoto(index, -1)}
-                            className="h-9 border-orange-200"
+                            className="size-11 border-orange-200 sm:size-9"
                           >
                             <ArrowUp className="size-4" />
                           </Button>
@@ -1624,7 +1624,7 @@ function PropertyEditorCard({
                             disabled={index === photoOrder.length - 1}
                             title="Descendre la photo"
                             onClick={() => movePhoto(index, 1)}
-                            className="h-9 border-orange-200"
+                            className="size-11 border-orange-200 sm:size-9"
                           >
                             <ArrowDown className="size-4" />
                           </Button>
@@ -1635,7 +1635,7 @@ function PropertyEditorCard({
                             disabled={index === 0}
                             title="Définir comme photo principale"
                             onClick={() => setMainPhoto(index)}
-                            className="h-9 border-orange-200"
+                            className="size-11 border-orange-200 sm:size-9"
                           >
                             <Star className="size-4" />
                           </Button>
@@ -1645,7 +1645,7 @@ function PropertyEditorCard({
                             size="icon"
                             title="Supprimer cette photo de la fiche et du stockage après sauvegarde"
                             onClick={() => removePhoto(photo)}
-                            className="h-9 border-red-200 text-red-600 hover:bg-red-50"
+                            className="size-11 border-red-200 text-red-600 hover:bg-red-50 sm:size-9"
                           >
                             <Trash2 className="size-4" />
                           </Button>
@@ -1665,11 +1665,11 @@ function PropertyEditorCard({
 
             {feedback ? <p className="rounded-md bg-red-50 p-3 text-sm font-medium text-red-700">{feedback}</p> : null}
             <div className="flex flex-col gap-2 sm:flex-row">
-              <Button type="submit" disabled={saving} className="h-10 bg-orange-500 text-white hover:bg-orange-600">
+              <Button type="submit" disabled={saving} className="h-12 bg-orange-500 text-white hover:bg-orange-600 sm:h-10">
                 <Save className="size-4" />
                 {saving ? "Sauvegarde..." : "Sauvegarder"}
               </Button>
-              <Button type="button" variant="outline" className="h-10 border-orange-200" onClick={resetEditor}>
+              <Button type="button" variant="outline" className="h-12 border-orange-200 sm:h-10" onClick={resetEditor}>
                 Annuler
               </Button>
             </div>
@@ -1832,7 +1832,7 @@ function PropertyManager({
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-2">
           {filteredProperties.map((property) => (
             <PropertyEditorCard
               key={`${property.reference}-${property.updatedAt}`}
@@ -1895,7 +1895,7 @@ function LeadManager({ leads, setLeads, expectedCode, connected }: { leads: Admi
           <CardContent className="grid gap-5">
             <div className="grid gap-2 text-sm text-gray-700 sm:grid-cols-3"><p><strong>Email</strong><br />{lead.email}</p><p><strong>Téléphone</strong><br />{lead.phone}</p><p><strong>Demande</strong><br />{lead.category}</p></div>
             <p className="rounded-md bg-orange-50 p-4 text-sm leading-6 text-gray-700">{lead.message}</p>
-            <div className="grid gap-3 sm:grid-cols-[200px_1fr_auto_auto] sm:items-end">
+            <div className="grid gap-3 lg:grid-cols-[200px_1fr_auto_auto] lg:items-end">
               <div className="grid gap-2"><Label>Statut</Label><Select value={lead.status} onValueChange={(value) => persist(lead, { status: value as LeadStatus })}><SelectTrigger><SelectValue>{(value) => getStatusSelectLabel(value)}</SelectValue></SelectTrigger><SelectContent>{leadStatuses.map((value) => <SelectItem key={value} value={value}>{leadStatusLabels[value]}</SelectItem>)}</SelectContent></Select></div>
               <div className="grid gap-2"><Label htmlFor={`notes-${lead.id}`}>Notes internes</Label><Input id={`notes-${lead.id}`} value={lead.notes} onChange={(event) => setLeads((current) => current.map((item) => item.id === lead.id ? { ...item, notes: event.target.value } : item))} /></div>
               <Button variant="outline" onClick={() => persist(lead, { notes: lead.notes })}><Save className="size-4" />Sauver</Button>
@@ -1983,11 +1983,11 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
   }));
 
   return (
-    <main className="min-h-svh bg-orange-50 px-4 py-8 sm:px-6 lg:px-8">
+    <main className="min-h-dvh bg-orange-50 px-3 py-6 sm:px-6 sm:py-8 lg:px-8">
       <div className="mx-auto max-w-7xl">
         <header className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center"><div><Badge className={connected ? "border-0 bg-emerald-600 text-white" : "border-0 bg-yellow-300 text-[#111111]"}>{connected ? "Supabase connecté" : "Mode local"}</Badge><h1 className="mt-3 text-3xl font-black text-[#111111]">CRM IMMO-DREAMS83</h1><p className="mt-1 text-sm text-gray-600">Prospects, estimations, biens et activité de l&apos;agence.</p></div><Button variant="outline" onClick={() => setUnlocked(false)}><LogOut className="size-4" />Verrouiller</Button></header>
         <Tabs defaultValue="overview" className="gap-6">
-          <div className="no-scrollbar overflow-x-auto"><TabsList className="min-w-max bg-white"><TabsTrigger value="overview"><LayoutDashboard />Vue d&apos;ensemble</TabsTrigger><TabsTrigger value="contacts"><ContactRound />Contacts</TabsTrigger><TabsTrigger value="estimations"><ClipboardCheck />Estimations</TabsTrigger><TabsTrigger value="properties"><Building2 />Biens</TabsTrigger><TabsTrigger value="activities"><ListChecks />Activités</TabsTrigger><TabsTrigger value="statistics"><BarChart3 />Statistiques</TabsTrigger></TabsList></div>
+          <div className="no-scrollbar -mx-3 overflow-x-auto px-3 sm:mx-0 sm:px-0"><TabsList className="min-w-max bg-white"><TabsTrigger value="overview"><LayoutDashboard />Vue d&apos;ensemble</TabsTrigger><TabsTrigger value="contacts"><ContactRound />Contacts</TabsTrigger><TabsTrigger value="estimations"><ClipboardCheck />Estimations</TabsTrigger><TabsTrigger value="properties"><Building2 />Biens</TabsTrigger><TabsTrigger value="activities"><ListChecks />Activités</TabsTrigger><TabsTrigger value="statistics"><BarChart3 />Statistiques</TabsTrigger></TabsList></div>
           <TabsContent value="overview" className="grid gap-6"><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{[{ label: "Contacts", value: metrics.contacts }, { label: "Estimations", value: metrics.estimations }, { label: "Biens en ligne", value: metrics.online }, { label: "Biens à la une", value: metrics.featured }].map((metric) => <Card key={metric.label} className="border-orange-100 bg-white"><CardContent className="p-5"><p className="text-sm text-gray-500">{metric.label}</p><p className="mt-2 text-3xl font-black text-[#111111]">{metric.value}</p></CardContent></Card>)}</div><Card className="border-orange-100 bg-white"><CardHeader><CardTitle>Activité récente</CardTitle></CardHeader><CardContent>{activities.length ? <div className="grid gap-3">{activities.slice(0, 6).map((activity) => <p key={activity.id} className="flex justify-between gap-4 border-b border-orange-100 pb-3 text-sm"><span>{activity.action} · {activity.user_name}</span><span className="text-gray-500">{new Date(activity.created_at).toLocaleString("fr-FR")}</span></p>)}</div> : <p className="text-sm text-gray-600">Aucune activité enregistrée pour le moment.</p>}</CardContent></Card></TabsContent>
           <TabsContent value="contacts">
             <div className="grid gap-5">

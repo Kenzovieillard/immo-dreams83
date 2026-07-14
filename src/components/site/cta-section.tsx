@@ -17,14 +17,14 @@ export function CTASection({
   buttonHref = "/contact",
 }: CTASectionProps) {
   return (
-    <section className="px-4 py-20 sm:px-6 lg:px-8">
+    <section className="px-4 py-14 sm:px-6 sm:py-20 lg:px-8">
       <div className="mx-auto max-w-7xl overflow-hidden rounded-xl bg-[#111111] shadow-2xl shadow-orange-200">
-        <div className="grid gap-8 bg-gradient-to-r from-orange-600/95 via-orange-500/90 to-yellow-300/85 p-8 md:grid-cols-[1fr_auto] md:items-center md:p-12">
+        <div className="grid gap-7 bg-gradient-to-r from-orange-600/95 via-orange-500/90 to-yellow-300/85 p-5 sm:p-8 md:grid-cols-[1fr_auto] md:items-center md:p-12">
           <div>
             <p className="mb-3 inline-flex items-center rounded-lg bg-white/18 px-3 py-1 text-sm font-semibold text-white">
               IMMO-DREAMS83 à vos côtés
             </p>
-            <h2 className="max-w-3xl text-3xl font-black tracking-tight text-white sm:text-4xl">
+            <h2 className="max-w-3xl text-2xl font-black tracking-tight text-white sm:text-4xl">
               {title}
             </h2>
             <p className="mt-4 max-w-2xl text-base leading-7 text-white/90">{subtitle}</p>

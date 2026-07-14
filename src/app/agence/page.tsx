@@ -32,14 +32,14 @@ const process = [
 export default function AgencePage() {
   return (
     <>
-      <section className="bg-[#111111] px-4 py-20 text-white sm:px-6 lg:px-8">
+      <section className="bg-[#111111] px-4 py-12 text-white sm:px-6 sm:py-20 lg:px-8">
         <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[1fr_0.9fr] lg:items-center">
           <div>
             <Badge className="mb-5 border-0 bg-orange-500 text-white">Agence locale</Badge>
-            <h1 className="text-4xl font-black tracking-tight sm:text-6xl">
+            <h1 className="text-3xl font-black tracking-tight sm:text-6xl">
               L&apos;agence IMMO-DREAMS83
             </h1>
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-white/75">
+            <p className="mt-5 max-w-2xl text-base leading-7 text-white/75 sm:mt-6 sm:text-lg sm:leading-8">
               Nous aidons les propriétaires et acquéreurs à vendre, acheter et
               arbitrer leurs projets immobiliers avec confiance dans le Var.
             </p>
@@ -56,7 +56,7 @@ export default function AgencePage() {
         </div>
       </section>
 
-      <section className="px-4 py-20 sm:px-6 lg:px-8">
+      <section className="px-4 py-14 sm:px-6 sm:py-20 lg:px-8">
         <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-2">
           <SectionTitle
             eyebrow="Mission"
@@ -82,7 +82,7 @@ export default function AgencePage() {
         </div>
       </section>
 
-      <section className="bg-orange-50 px-4 py-20 sm:px-6 lg:px-8">
+      <section className="bg-orange-50 px-4 py-14 sm:px-6 sm:py-20 lg:px-8">
         <div className="mx-auto max-w-7xl">
           <SectionTitle
             eyebrow="Valeurs"
@@ -105,7 +105,7 @@ export default function AgencePage() {
         </div>
       </section>
 
-      <section className="px-4 py-20 sm:px-6 lg:px-8">
+      <section className="px-4 py-14 sm:px-6 sm:py-20 lg:px-8">
         <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[0.75fr_1.25fr]">
           <Card className="border-orange-100 bg-[#111111] text-white">
             <CardHeader>

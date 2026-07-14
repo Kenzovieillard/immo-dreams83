@@ -83,15 +83,15 @@ export function PropertyListingBrowser({
   }, [filters, properties]);
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[320px_1fr]">
-      <Card className="h-fit border-orange-100 bg-white shadow-sm">
-        <CardContent className="grid gap-5">
+    <div className="grid gap-6 lg:grid-cols-[320px_1fr] lg:gap-8">
+      <Card className="h-fit border-orange-100 bg-white shadow-sm lg:sticky lg:top-24">
+        <CardContent className="grid gap-5 p-4 sm:p-5">
           <div className="flex items-center gap-2">
             <SlidersHorizontal className="size-5 text-orange-600" aria-hidden="true" />
             <h2 className="text-lg font-black text-[#111111]">Filtres</h2>
           </div>
 
-          <label className="grid gap-2 text-sm font-semibold text-gray-700">
+          <label className="grid gap-2 text-base font-semibold text-gray-700 sm:text-sm">
             Type
             <Select
               value={filters.type}
@@ -102,7 +102,7 @@ export function PropertyListingBrowser({
                 }))
               }
             >
-              <SelectTrigger className="h-10 w-full">
+              <SelectTrigger className="h-12 w-full sm:h-10">
                 <span className="flex flex-1 text-left text-gray-900">
                   {filters.type === "all" ? "Tous les biens" : propertyTypeLabels[filters.type]}
                 </span>
@@ -117,7 +117,7 @@ export function PropertyListingBrowser({
             </Select>
           </label>
 
-          <label className="grid gap-2 text-sm font-semibold text-gray-700">
+          <label className="grid gap-2 text-base font-semibold text-gray-700 sm:text-sm">
             Ville
             <Select
               value={filters.city}
@@ -125,7 +125,7 @@ export function PropertyListingBrowser({
                 setFilters((current) => ({ ...current, city: value ?? "Toutes" }))
               }
             >
-              <SelectTrigger className="h-10 w-full">
+              <SelectTrigger className="h-12 w-full sm:h-10">
                 <span className="flex flex-1 text-left text-gray-900">
                   {filters.city}
                 </span>
@@ -140,7 +140,7 @@ export function PropertyListingBrowser({
             </Select>
           </label>
 
-          <label className="grid gap-2 text-sm font-semibold text-gray-700">
+          <label className="grid gap-2 text-base font-semibold text-gray-700 sm:text-sm">
             Budget maximum
             <Input
               inputMode="numeric"
@@ -152,7 +152,7 @@ export function PropertyListingBrowser({
             />
           </label>
 
-          <label className="grid gap-2 text-sm font-semibold text-gray-700">
+          <label className="grid gap-2 text-base font-semibold text-gray-700 sm:text-sm">
             Surface minimum
             <Input
               inputMode="numeric"
@@ -164,7 +164,7 @@ export function PropertyListingBrowser({
             />
           </label>
 
-          <label className="grid gap-2 text-sm font-semibold text-gray-700">
+          <label className="grid gap-2 text-base font-semibold text-gray-700 sm:text-sm">
             Nombre de pièces minimum
             <Input
               inputMode="numeric"
@@ -179,7 +179,7 @@ export function PropertyListingBrowser({
           <Button
             type="button"
             variant="outline"
-            className="h-10 border-orange-200"
+            className="h-12 border-orange-200 sm:h-10"
             onClick={() => setFilters(defaultFilters)}
           >
             Réinitialiser
@@ -197,7 +197,7 @@ export function PropertyListingBrowser({
         </div>
 
         {filteredProperties.length > 0 ? (
-          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
             {filteredProperties.map((property) => (
               <PropertyCard key={property.id} property={property} />
             ))}

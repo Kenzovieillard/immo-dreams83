@@ -90,7 +90,7 @@ export function ContactForm() {
   return (
     <form
       onSubmit={handleSubmit}
-      className="grid gap-5 rounded-xl border border-orange-100 bg-white p-6 shadow-xl shadow-orange-100/60"
+      className="grid gap-5 rounded-xl border border-orange-100 bg-white p-4 shadow-xl shadow-orange-100/60 sm:p-6"
     >
       {result ? (
         <div
@@ -129,7 +129,7 @@ export function ContactForm() {
         ) : null}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-5 sm:grid-cols-2">
         <div className="grid gap-2">
           <Label htmlFor="contact-email">Email</Label>
           <Input
@@ -160,7 +160,7 @@ export function ContactForm() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-5 sm:grid-cols-2">
         <div className="grid gap-2">
           <Label>Type de demande</Label>
           <Select
@@ -168,7 +168,7 @@ export function ContactForm() {
             value={form.requestType}
             onValueChange={(value) => updateField("requestType", value ?? "")}
           >
-            <SelectTrigger className="h-10 w-full" disabled={disabled}>
+            <SelectTrigger className="h-12 w-full sm:h-10" disabled={disabled}>
               <SelectValue placeholder="Sélectionner" />
             </SelectTrigger>
             <SelectContent>

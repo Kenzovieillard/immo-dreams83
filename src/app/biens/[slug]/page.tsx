@@ -90,7 +90,7 @@ export default async function PropertyPage({ params }: PropertyPageProps) {
     <>
       <StructuredData data={[getPropertySchema(property), breadcrumbs]} />
 
-      <section className="bg-[#111111] px-4 pb-12 pt-8 text-white sm:px-6 lg:px-8">
+      <section className="bg-[#111111] px-4 pb-10 pt-6 text-white sm:px-6 sm:pb-12 sm:pt-8 lg:px-8">
         <div className="mx-auto max-w-7xl">
           <nav aria-label="Fil d'Ariane" className="flex flex-wrap items-center gap-2 text-sm text-white/60">
             <Link href="/" className="hover:text-orange-300">Accueil</Link>
@@ -100,35 +100,35 @@ export default async function PropertyPage({ params }: PropertyPageProps) {
             <span className="text-white">{property.city}</span>
           </nav>
 
-          <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_360px] lg:items-end">
+          <div className="mt-7 grid gap-7 lg:grid-cols-[1fr_360px] lg:items-end">
             <div>
               <div className="flex flex-wrap gap-2">
                 <Badge className={cn("border-0", propertyStatusBadgeClasses[property.status])}>{propertyStatusLabels[property.status]}</Badge>
                 <Badge variant="outline" className="border-white/20 text-white">{propertyTypeLabels[property.type]}</Badge>
                 <Badge variant="outline" className="border-white/20 font-mono text-white">Réf. {property.reference}</Badge>
               </div>
-              <h1 className="mt-5 max-w-4xl text-4xl font-black tracking-tight sm:text-5xl">{property.title}</h1>
-              <p className="mt-4 flex items-center gap-2 text-lg text-white/70"><MapPin className="size-5 text-orange-300" />{property.city} ({property.postalCode})</p>
+              <h1 className="mt-5 max-w-4xl text-3xl font-black tracking-tight sm:text-5xl">{property.title}</h1>
+              <p className="mt-4 flex items-center gap-2 text-base text-white/70 sm:text-lg"><MapPin className="size-5 text-orange-300" />{property.city} ({property.postalCode})</p>
             </div>
             <div>
               <p className="text-sm font-bold uppercase text-white/55">Prix de vente</p>
-              <p className="mt-2 text-4xl font-black text-orange-300">{formatPrice(property.price)}</p>
+              <p className="mt-2 text-3xl font-black text-orange-300 sm:text-4xl">{formatPrice(property.price)}</p>
               <p className="mt-2 text-sm text-white/60">Honoraires inclus selon les conditions du mandat.</p>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="bg-orange-50 px-4 py-10 sm:px-6 lg:px-8">
+      <section className="bg-orange-50 px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
         <div className="mx-auto max-w-7xl"><PropertyGallery photos={property.photos} title={property.title} /></div>
       </section>
 
-      <section className="px-4 py-16 sm:px-6 lg:px-8">
+      <section className="px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
         <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[1fr_380px]">
           <div className="grid gap-8">
             <div>
               <p className="text-sm font-bold uppercase text-orange-600">L&apos;essentiel</p>
-              <h2 className="mt-2 text-3xl font-black text-[#111111]">Les points clés du bien</h2>
+              <h2 className="mt-2 text-2xl font-black text-[#111111] sm:text-3xl">Les points clés du bien</h2>
               <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
                 {facts.map((fact) => (
                   <div key={fact.label} className="rounded-lg border border-orange-100 bg-orange-50 p-4">
@@ -143,7 +143,7 @@ export default async function PropertyPage({ params }: PropertyPageProps) {
             <Separator className="bg-orange-100" />
 
             <div>
-              <h2 className="text-3xl font-black text-[#111111]">Description</h2>
+              <h2 className="text-2xl font-black text-[#111111] sm:text-3xl">Description</h2>
               <p className="mt-5 text-base leading-8 text-gray-700">{property.descriptionLong}</p>
             </div>
 
@@ -160,7 +160,7 @@ export default async function PropertyPage({ params }: PropertyPageProps) {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <Card className="border-orange-100 bg-[#111111] text-white">
-                <CardHeader><CardTitle className="flex items-center gap-2 text-xl"><Leaf className="size-5 text-orange-300" />Performance énergétique</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="flex items-center gap-2 text-lg sm:text-xl"><Leaf className="size-5 text-orange-300" />Performance énergétique</CardTitle></CardHeader>
                 <CardContent className="grid gap-4">
                   <div className="flex items-center justify-between gap-4"><span className="text-white/60">DPE</span><strong className="text-orange-300">{property.energyClass}</strong></div>
                   <div className="flex items-center justify-between gap-4"><span className="text-white/60">GES</span><strong className="text-orange-300">{property.climateClass}</strong></div>
@@ -207,13 +207,13 @@ export default async function PropertyPage({ params }: PropertyPageProps) {
       </section>
 
       {similarProperties.length > 0 ? (
-        <section className="bg-orange-50 px-4 py-16 sm:px-6 lg:px-8">
+        <section className="bg-orange-50 px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
           <div className="mx-auto max-w-7xl">
             <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
               <div><p className="text-sm font-bold uppercase text-orange-600">Biens similaires</p><h2 className="mt-2 text-3xl font-black text-[#111111]">Continuer votre recherche</h2></div>
               <Link href="/a-vendre" className={buttonVariants({ variant: "outline", className: "border-orange-200 bg-white text-orange-700" })}>Voir tous les biens <ArrowRight className="size-4" /></Link>
             </div>
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">{similarProperties.map((item) => <PropertyCard key={item.id} property={item} />)}</div>
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{similarProperties.map((item) => <PropertyCard key={item.id} property={item} />)}</div>
           </div>
         </section>
       ) : null}

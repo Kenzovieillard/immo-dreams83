@@ -19,17 +19,17 @@ export function Navbar() {
   const pathname = usePathname();
 
   return (
-    <header className="sticky top-0 z-40 border-b border-orange-100/80 bg-white/92 backdrop-blur-xl">
-      <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-40 border-b border-orange-100/80 bg-white/95 backdrop-blur-xl">
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:h-20 sm:px-6 lg:px-8">
         <Link href="/" className="flex items-center gap-3" aria-label="Accueil IMMO-DREAMS83">
-          <span className="flex size-10 items-center justify-center rounded-lg bg-[#111111] text-orange-400 shadow-sm">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-[#111111] text-orange-400 shadow-sm">
             <Home className="size-5" aria-hidden="true" />
           </span>
           <span className="leading-tight">
-            <span className="block text-base font-black tracking-[0.08em] text-[#111111]">
+            <span className="block text-sm font-black tracking-[0.08em] text-[#111111] sm:text-base">
               IMMO-DREAMS83
             </span>
-            <span className="block text-xs font-medium uppercase tracking-[0.18em] text-orange-600">
+            <span className="block text-[11px] font-medium uppercase tracking-[0.18em] text-orange-600 sm:text-xs">
               Solliès-Pont
             </span>
           </span>
@@ -80,7 +80,7 @@ export function Navbar() {
           >
             <Menu className="size-5" aria-hidden="true" />
           </SheetTrigger>
-          <SheetContent className="bg-white" side="right">
+          <SheetContent className="w-[min(92vw,24rem)] bg-white" side="right">
             <SheetHeader>
               <SheetTitle>IMMO-DREAMS83</SheetTitle>
               <SheetDescription>Agence immobilière à Solliès-Pont</SheetDescription>
@@ -90,7 +90,7 @@ export function Navbar() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className="rounded-lg px-3 py-3 text-base font-semibold text-gray-800 transition hover:bg-orange-50 hover:text-orange-700"
+                  className="rounded-lg px-3 py-3.5 text-base font-semibold text-gray-800 transition hover:bg-orange-50 hover:text-orange-700"
                 >
                   {link.label}
                 </Link>

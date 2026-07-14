@@ -45,7 +45,7 @@ export function PropertyLeadForm({ title, reference, city }: { title: string; re
         <Label htmlFor="property-name">Nom complet</Label>
         <Input id="property-name" required value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} />
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
         <div className="grid gap-2">
           <Label htmlFor="property-email">Email</Label>
           <Input id="property-email" type="email" required value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
@@ -59,7 +59,7 @@ export function PropertyLeadForm({ title, reference, city }: { title: string; re
         <Label htmlFor="property-message">Message</Label>
         <Textarea id="property-message" required rows={4} value={form.message} onChange={(event) => setForm({ ...form, message: event.target.value })} />
       </div>
-      <Button disabled={loading} className="h-11 bg-orange-500 text-white hover:bg-orange-600">
+      <Button disabled={loading} className="h-12 bg-orange-500 text-white hover:bg-orange-600">
         {loading ? <LoaderCircle className="size-4 animate-spin" /> : <Send className="size-4" />}
         {loading ? "Envoi..." : "Demander des informations"}
       </Button>

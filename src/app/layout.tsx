@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Footer } from "@/components/site/footer";
 import { Navbar } from "@/components/site/navbar";
 import { siteUrl } from "@/components/site/site-config";
@@ -33,10 +33,17 @@ export const metadata: Metadata = {
   twitter: { card: "summary_large_image", title: "IMMO-DREAMS83", description: "L'immobilier local dans le Var." },
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#f97316",
+};
+
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="fr">
-      <body className="min-h-svh bg-background">
+      <body className="min-h-dvh bg-background">
         <StructuredData data={agencySchema} />
         <Navbar />
         <main>{children}</main>

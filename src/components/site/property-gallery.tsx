@@ -36,10 +36,10 @@ export function PropertyGallery({ photos, title }: { photos: string[]; title: st
         </Badge>
         {count > 1 ? (
           <>
-            <Button aria-label="Photo précédente" size="icon" variant="secondary" onClick={() => move(-1)} className="absolute left-3 top-1/2 -translate-y-1/2 bg-white/90 shadow-lg hover:bg-white">
+            <Button aria-label="Photo précédente" size="icon" variant="secondary" onClick={() => move(-1)} className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/90 shadow-lg hover:bg-white sm:left-3">
               <ChevronLeft className="size-5" />
             </Button>
-            <Button aria-label="Photo suivante" size="icon" variant="secondary" onClick={() => move(1)} className="absolute right-3 top-1/2 -translate-y-1/2 bg-white/90 shadow-lg hover:bg-white">
+            <Button aria-label="Photo suivante" size="icon" variant="secondary" onClick={() => move(1)} className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/90 shadow-lg hover:bg-white sm:right-3">
               <ChevronRight className="size-5" />
             </Button>
           </>
@@ -54,7 +54,7 @@ export function PropertyGallery({ photos, title }: { photos: string[]; title: st
             aria-current={activeIndex === index}
             onClick={() => setActiveIndex(index)}
             className={cn(
-              "relative aspect-[4/3] w-28 shrink-0 overflow-hidden rounded-md border-2 bg-orange-50 transition sm:w-36",
+              "relative aspect-[4/3] w-24 shrink-0 overflow-hidden rounded-md border-2 bg-orange-50 transition sm:w-36",
               activeIndex === index ? "border-orange-500" : "border-transparent opacity-70 hover:opacity-100"
             )}
           >

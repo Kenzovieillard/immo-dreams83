@@ -34,22 +34,22 @@ const reassuranceItems = [
 export default function ContactPage() {
   return (
     <>
-      <section className="bg-[#111111] px-4 py-20 text-white sm:px-6 lg:px-8">
+      <section className="bg-[#111111] px-4 py-12 text-white sm:px-6 sm:py-20 lg:px-8">
         <div className="mx-auto max-w-7xl">
           <Badge className="mb-5 border-0 bg-orange-500 text-white">
             Contact agence
           </Badge>
-          <h1 className="max-w-4xl text-4xl font-black tracking-tight sm:text-6xl">
+          <h1 className="max-w-4xl text-3xl font-black tracking-tight sm:text-6xl">
             Contactez IMMO-DREAMS83
           </h1>
-          <p className="mt-6 max-w-2xl text-lg leading-8 text-white/76">
+          <p className="mt-5 max-w-2xl text-base leading-7 text-white/76 sm:mt-6 sm:text-lg sm:leading-8">
             Un projet de vente, d&apos;achat ou d&apos;estimation dans le Var ? Parlons-en
             simplement.
           </p>
         </div>
       </section>
 
-      <section className="bg-orange-50 px-4 py-14 sm:px-6 lg:px-8">
+      <section className="bg-orange-50 px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
         <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[1.1fr_0.9fr]">
           <ContactForm />
 
@@ -106,7 +106,7 @@ export default function ContactPage() {
         </div>
       </section>
 
-      <section className="px-4 py-16 sm:px-6 lg:px-8">
+      <section className="px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
         <div className="mx-auto max-w-7xl">
           <SectionTitle
             eyebrow="Votre demande"

@@ -36,16 +36,16 @@ const steps = [
 export default function EstimationPage() {
   return (
     <>
-      <section className="bg-[#111111] px-4 py-20 text-white sm:px-6 lg:px-8">
+      <section className="bg-[#111111] px-4 py-12 text-white sm:px-6 sm:py-20 lg:px-8">
         <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[1fr_0.9fr] lg:items-center">
           <div>
             <Badge className="mb-5 border-0 bg-orange-500 text-white">
               Estimation immobilière
             </Badge>
-            <h1 className="text-4xl font-black tracking-tight sm:text-6xl">
+            <h1 className="text-3xl font-black tracking-tight sm:text-6xl">
               Faites estimer votre bien immobilier
             </h1>
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-white/75">
+            <p className="mt-5 max-w-2xl text-base leading-7 text-white/75 sm:mt-6 sm:text-lg sm:leading-8">
               Recevez une estimation claire, locale et réaliste de votre maison,
               appartement, terrain ou immeuble dans le Var.
             </p>
@@ -65,7 +65,7 @@ export default function EstimationPage() {
         </div>
       </section>
 
-      <section className="px-4 py-20 sm:px-6 lg:px-8">
+      <section className="px-4 py-14 sm:px-6 sm:py-20 lg:px-8">
         <div className="mx-auto max-w-7xl">
           <SectionTitle
             eyebrow="Méthode"

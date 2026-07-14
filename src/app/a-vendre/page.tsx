@@ -34,7 +34,7 @@ export default async function AVendrePage({ searchParams }: AVendrePageProps) {
 
   return (
     <>
-      <section className="bg-orange-50 px-4 py-16 sm:px-6 lg:px-8">
+      <section className="bg-orange-50 px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
         <div className="mx-auto max-w-7xl">
           <SectionTitle
             eyebrow="Nos biens à vendre"
@@ -44,7 +44,7 @@ export default async function AVendrePage({ searchParams }: AVendrePageProps) {
         </div>
       </section>
 
-      <section className="px-4 py-12 sm:px-6 lg:px-8">
+      <section className="px-4 py-10 sm:px-6 sm:py-12 lg:px-8">
         <div className="mx-auto max-w-7xl">
           <PropertyListingBrowser
             properties={properties}
