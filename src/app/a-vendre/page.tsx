@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { PropertyListingBrowser } from "@/components/site/property-listing-browser";
 import { SectionTitle } from "@/components/site/section-title";
 import { PropertyType } from "@/data/properties";
+import { getAvailablePublicProperties } from "@/lib/public-properties";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Biens à vendre dans le Var | IMMO-DREAMS83",
@@ -27,6 +30,7 @@ function normalizeType(type?: string): "all" | PropertyType | undefined {
 
 export default async function AVendrePage({ searchParams }: AVendrePageProps) {
   const params = await searchParams;
+  const properties = await getAvailablePublicProperties();
 
   return (
     <>
@@ -43,6 +47,7 @@ export default async function AVendrePage({ searchParams }: AVendrePageProps) {
       <section className="px-4 py-12 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl">
           <PropertyListingBrowser
+            properties={properties}
             initialFilters={{
               type: normalizeType(params.type),
               city: params.city || undefined,

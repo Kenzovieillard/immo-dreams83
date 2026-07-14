@@ -10,17 +10,20 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import {
   Property,
   PropertyType,
-  availableProperties,
-  propertyCities,
-  propertyTypeFilters,
   propertyTypeLabels,
 } from "@/data/properties";
 import { PropertyCard } from "./property-card";
+
+const propertyTypeFilters: Array<"all" | PropertyType> = [
+  "all",
+  "apartment",
+  "house",
+  "land",
+];
 
 type Filters = {
   type: "all" | PropertyType;
@@ -39,6 +42,7 @@ const defaultFilters: Filters = {
 };
 
 type PropertyListingBrowserProps = {
+  properties: Property[];
   initialFilters?: Partial<Filters>;
 };
 
@@ -50,8 +54,13 @@ function matchNumber(value: string, propertyValue: number | null, mode: "max" | 
 }
 
 export function PropertyListingBrowser({
+  properties,
   initialFilters,
 }: PropertyListingBrowserProps) {
+  const propertyCities = useMemo(
+    () => ["Toutes", ...Array.from(new Set(properties.map((property) => property.city)))],
+    [properties]
+  );
   const sanitizedInitialFilters = Object.fromEntries(
     Object.entries(initialFilters ?? {}).filter(([, value]) => value !== undefined)
   ) as Partial<Filters>;
@@ -62,7 +71,7 @@ export function PropertyListingBrowser({
   });
 
   const filteredProperties = useMemo(() => {
-    return availableProperties.filter((property: Property) => {
+    return properties.filter((property: Property) => {
       const matchType = filters.type === "all" || property.type === filters.type;
       const matchCity = filters.city === "Toutes" || property.city === filters.city;
       const matchBudget = matchNumber(filters.budget, property.price, "max");
@@ -71,7 +80,7 @@ export function PropertyListingBrowser({
 
       return matchType && matchCity && matchBudget && matchSurface && matchRooms;
     });
-  }, [filters]);
+  }, [filters, properties]);
 
   return (
     <div className="grid gap-8 lg:grid-cols-[320px_1fr]">
@@ -94,7 +103,9 @@ export function PropertyListingBrowser({
               }
             >
               <SelectTrigger className="h-10 w-full">
-                <SelectValue placeholder="Tous les types" />
+                <span className="flex flex-1 text-left text-gray-900">
+                  {filters.type === "all" ? "Tous les biens" : propertyTypeLabels[filters.type]}
+                </span>
               </SelectTrigger>
               <SelectContent>
                 {propertyTypeFilters.map((type) => (
@@ -115,7 +126,9 @@ export function PropertyListingBrowser({
               }
             >
               <SelectTrigger className="h-10 w-full">
-                <SelectValue placeholder="Toutes les villes" />
+                <span className="flex flex-1 text-left text-gray-900">
+                  {filters.city}
+                </span>
               </SelectTrigger>
               <SelectContent>
                 {propertyCities.map((city) => (

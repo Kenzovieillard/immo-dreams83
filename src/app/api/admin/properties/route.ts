@@ -149,6 +149,10 @@ function mapPropertyRow(row: PropertyRow): Property {
 }
 
 function validatePropertyPayload(payload: unknown) {
+  const reference = getStringField(payload, "reference");
+  const mandateNumber = getStringField(payload, "mandateNumber");
+  const slug = getStringField(payload, "slug");
+  const sourceUrl = getStringField(payload, "sourceUrl");
   const title = getStringField(payload, "title");
   const type = getStringField(payload, "type");
   const status = getStringField(payload, "status");
@@ -165,6 +169,7 @@ function validatePropertyPayload(payload: unknown) {
   const descriptionShort = getStringField(payload, "descriptionShort");
   const descriptionLong = getStringField(payload, "descriptionLong");
   const featuresText = getStringField(payload, "featuresText");
+  const landOptions = getStringArrayField(payload, "landOptions");
   const photoUrls = getStringArrayField(payload, "photoUrls");
   const featured = Boolean(
     payload && typeof payload === "object" && (payload as Record<string, unknown>).featured
@@ -195,6 +200,10 @@ function validatePropertyPayload(payload: unknown) {
   return {
     data: {
       title,
+      reference,
+      mandateNumber,
+      slug,
+      sourceUrl,
       type: type as PropertyType,
       status: status as PropertyStatus,
       city,
@@ -209,11 +218,42 @@ function validatePropertyPayload(payload: unknown) {
       climateClass,
       descriptionShort,
       descriptionLong,
-      features: splitMultilineList(featuresText),
+      features: Array.from(new Set([...splitMultilineList(featuresText), ...landOptions])),
       photos: photoUrls,
       featured,
     },
     fieldErrors,
+  };
+}
+
+function buildPropertyRecord(data: ReturnType<typeof validatePropertyPayload>["data"], reference: string, slug: string) {
+  const isLand = data.type === "land";
+
+  return {
+    reference,
+    mandate_number: data.mandateNumber || reference,
+    slug,
+    title: data.title,
+    type: data.type,
+    transaction_type: "sale",
+    status: data.status,
+    city: data.city,
+    postal_code: data.postalCode,
+    price: toRequiredNumber(data.price),
+    fees_included: true,
+    surface: toRequiredNumber(data.surface),
+    land_surface: isLand ? toRequiredNumber(data.surface) : toNullableNumber(data.landSurface),
+    rooms: isLand ? null : toNullableNumber(data.rooms),
+    bedrooms: isLand ? null : toNullableNumber(data.bedrooms),
+    bathrooms: isLand ? null : toNullableNumber(data.bathrooms),
+    energy_class: isLand ? "Non soumis" : formatEnergyDiagnostic(data.energyClass),
+    climate_class: isLand ? "Non soumis" : formatClimateDiagnostic(data.climateClass),
+    description_short: data.descriptionShort,
+    description_long: data.descriptionLong || data.descriptionShort,
+    features: data.features,
+    photos: data.photos,
+    featured: data.featured,
+    source_url: data.sourceUrl || null,
   };
 }
 
@@ -277,36 +317,10 @@ export async function POST(request: NextRequest) {
     ...((existingProperties ?? []) as Array<{ reference: string }>).map((property) => property.reference),
   ]);
   const slug = `${slugify(data.title)}-${slugify(data.city)}-${data.postalCode}-ref-${reference}`;
-  const isLand = data.type === "land";
 
   const { data: property, error } = await supabase
     .from("properties")
-    .insert({
-      reference,
-      mandate_number: reference,
-      slug,
-      title: data.title,
-      type: data.type,
-      transaction_type: "sale",
-      status: data.status,
-      city: data.city,
-      postal_code: data.postalCode,
-      price: toRequiredNumber(data.price),
-      fees_included: true,
-      surface: toRequiredNumber(data.surface),
-      land_surface: isLand ? toRequiredNumber(data.surface) : toNullableNumber(data.landSurface),
-      rooms: isLand ? null : toNullableNumber(data.rooms),
-      bedrooms: isLand ? null : toNullableNumber(data.bedrooms),
-      bathrooms: isLand ? null : toNullableNumber(data.bathrooms),
-      energy_class: isLand ? "Non soumis" : formatEnergyDiagnostic(data.energyClass),
-      climate_class: isLand ? "Non soumis" : formatClimateDiagnostic(data.climateClass),
-      description_short: data.descriptionShort,
-      description_long: data.descriptionLong || data.descriptionShort,
-      features: data.features,
-      photos: data.photos,
-      featured: data.featured,
-      source_url: null,
-    })
+    .insert(buildPropertyRecord(data, reference, slug))
     .select("*")
     .single();
 
@@ -325,6 +339,57 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     success: true,
     message: `Bien créé avec la référence ${reference}.`,
+    property: mapPropertyRow(property as PropertyRow),
+  });
+}
+
+export async function PATCH(request: NextRequest) {
+  if (!isAuthorized(request)) {
+    return NextResponse.json({ success: false, message: "Accès refusé." }, { status: 401 });
+  }
+
+  const payload = await request.json().catch(() => null);
+  const { data, fieldErrors } = validatePropertyPayload(payload);
+
+  if (!hasRequiredValue(data.reference)) {
+    fieldErrors.reference = "La référence du bien est obligatoire pour modifier un bien.";
+  }
+
+  if (Object.keys(fieldErrors).length > 0) {
+    return NextResponse.json(
+      { success: false, message: "Certains champs doivent être corrigés.", fieldErrors },
+      { status: 400 }
+    );
+  }
+
+  const supabase = getSupabaseAdminClient();
+  if (!supabase) {
+    return NextResponse.json({ success: false, message: "Supabase serveur n'est pas configuré." }, { status: 503 });
+  }
+
+  const reference = data.reference;
+  const slug = data.slug || `${slugify(data.title)}-${slugify(data.city)}-${data.postalCode}-ref-${reference}`;
+  const { data: property, error } = await supabase
+    .from("properties")
+    .upsert(buildPropertyRecord(data, reference, slug), { onConflict: "reference" })
+    .select("*")
+    .single();
+
+  if (error) {
+    console.error("[IMMO-DREAMS83] Admin property update failed", error.message);
+    return NextResponse.json({ success: false, message: "Le bien n'a pas pu être mis à jour." }, { status: 500 });
+  }
+
+  await supabase.from("activities").insert({
+    entity_type: "property",
+    entity_id: property.id,
+    action: `Bien mis à jour : référence ${reference}`,
+    user_name: "Administration locale",
+  });
+
+  return NextResponse.json({
+    success: true,
+    message: `Bien ${reference} mis à jour.`,
     property: mapPropertyRow(property as PropertyRow),
   });
 }

@@ -4,11 +4,12 @@ import { PropertyCard } from "@/components/site/property-card";
 import { SectionTitle } from "@/components/site/section-title";
 import {
   PropertyType,
-  availableProperties,
   propertyTypeLabels,
 } from "@/data/properties";
+import { getAvailablePublicProperties } from "@/lib/public-properties";
 
 const categories: PropertyType[] = ["apartment", "house", "land"];
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Biens immobiliers Var | IMMO-DREAMS83",
@@ -16,7 +17,9 @@ export const metadata: Metadata = {
     "Catalogue IMMO-DREAMS83 : appartements, maisons et terrains à vendre dans le Var, à Solliès-Pont, Toulon, Hyères, Cuers et Carqueiranne.",
 };
 
-export default function BiensPage() {
+export default async function BiensPage() {
+  const availableProperties = await getAvailablePublicProperties();
+
   return (
     <>
       <section className="bg-orange-50 px-4 py-16 sm:px-6 lg:px-8">

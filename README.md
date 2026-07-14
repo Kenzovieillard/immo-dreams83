@@ -10,7 +10,9 @@ Plateforme immobilière responsive de l'agence IMMO-DREAMS83, située à Solliè
 - formulaires Contact et Estimation reliés à des routes API ;
 - préparation Supabase pour prospects, estimations, biens et activité ;
 - mini-CRM local sur `/admin` avec pipeline, notes, archivage, inventaire biens et création de biens ;
-- création de biens avec référence automatique, upload photo Supabase et aide DPE/GES ;
+- création et édition rapide de biens avec référence automatique, upload photo Supabase et aide DPE/GES ;
+- pilotage de la disponibilité et de la mise en avant des biens depuis le CRM ;
+- options terrain sélectionnables pour qualifier bornage, constructibilité, viabilisation, servitudes, accès, risques et étude de sol ;
 - mentions légales, confidentialité, cookies, sitemap, robots et données structurées.
 
 ## Stack
@@ -53,7 +55,7 @@ La clé `SUPABASE_SERVICE_ROLE_KEY` reste strictement côté serveur. Elle perme
 2. Entrer la valeur de `NEXT_PUBLIC_ADMIN_LOCAL_CODE`.
 3. Consulter les contacts, estimations, biens, activités et statistiques.
 4. Modifier un statut, ajouter une note ou archiver un prospect.
-5. Créer un bien avec ses photos, ses informations commerciales et son diagnostic DPE/GES.
+5. Créer ou modifier un bien avec ses photos, son prix affiché honoraires inclus, son statut et sa mise en avant.
 
 Sans Supabase, l'interface affiche le mode local et conserve les changements uniquement pendant la session courante.
 
@@ -76,10 +78,10 @@ npm run build
 - la protection de `/admin` est temporaire et ne remplace pas une authentification ;
 - aucun fournisseur d'email n'est activé ;
 - le catalogue initial reste versionné dans `src/data/properties.ts` ;
-- l'édition complète et la suppression des biens ne sont pas encore disponibles dans le CRM ;
+- la suppression des biens n'est pas encore disponible dans le CRM ;
 - la carte présente une localisation indicative ;
 - l'aide DPE/GES du CRM ne remplace pas le diagnostic officiel fourni par un diagnostiqueur certifié.
 
 ## Prochaine amélioration
 
-La V3 devra ajouter une authentification avec rôles, l'édition/suppression des biens, l'envoi d'emails transactionnels et les flux de multidiffusion vers les portails immobiliers.
+La V3 devra ajouter une authentification avec rôles, la suppression contrôlée des biens, l'envoi d'emails transactionnels et les flux de multidiffusion vers les portails immobiliers.

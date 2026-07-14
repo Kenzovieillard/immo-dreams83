@@ -16,7 +16,9 @@ import { PropertySearch } from "@/components/site/property-search";
 import { SectionTitle } from "@/components/site/section-title";
 import { ServiceCard } from "@/components/site/service-card";
 import { StatsSection } from "@/components/site/stats-section";
-import { featuredProperties } from "@/data/properties";
+import { getFeaturedPublicProperties } from "@/lib/public-properties";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Agence immobilière Solliès-Pont",
@@ -24,7 +26,9 @@ export const metadata: Metadata = {
     "IMMO-DREAMS83 accompagne vos projets immobiliers dans le Var : maison à vendre, appartement à vendre à Toulon, terrain à vendre et estimation immobilière.",
 };
 
-export default function Home() {
+export default async function Home() {
+  const featuredProperties = await getFeaturedPublicProperties();
+
   return (
     <>
       <section className="relative overflow-hidden bg-[#111111]">
@@ -84,32 +88,34 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="px-4 py-20 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-7xl">
-          <div className="mb-10 flex flex-col justify-between gap-6 md:flex-row md:items-end">
-            <SectionTitle
-              eyebrow="À la vente"
-              title="Une sélection de biens dans le Var"
-              description="Découvrez des appartements, maisons et terrains choisis pour leur emplacement, leur potentiel et leur cohérence avec le marché local."
-            />
-            <Link
-              href="/a-vendre"
-              className={buttonVariants({
-                variant: "outline",
-                className: "h-11 border-orange-200 text-orange-700 hover:bg-orange-50",
-              })}
-            >
-              Voir toute la sélection
-              <ArrowRight className="size-4" aria-hidden="true" />
-            </Link>
+      {featuredProperties.length > 0 ? (
+        <section className="px-4 py-20 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-7xl">
+            <div className="mb-10 flex flex-col justify-between gap-6 md:flex-row md:items-end">
+              <SectionTitle
+                eyebrow="À la vente"
+                title="Une sélection de biens dans le Var"
+                description="Découvrez des appartements, maisons et terrains choisis pour leur emplacement, leur potentiel et leur cohérence avec le marché local."
+              />
+              <Link
+                href="/a-vendre"
+                className={buttonVariants({
+                  variant: "outline",
+                  className: "h-11 border-orange-200 text-orange-700 hover:bg-orange-50",
+                })}
+              >
+                Voir toute la sélection
+                <ArrowRight className="size-4" aria-hidden="true" />
+              </Link>
+            </div>
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {featuredProperties.slice(0, 6).map((property, index) => (
+                <PropertyCard key={property.id} property={property} priority={index < 3} />
+              ))}
+            </div>
           </div>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {featuredProperties.slice(0, 6).map((property, index) => (
-              <PropertyCard key={property.id} property={property} priority={index < 3} />
-            ))}
-          </div>
-        </div>
-      </section>
+        </section>
+      ) : null}
 
       <StatsSection />
 

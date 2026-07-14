@@ -13,9 +13,11 @@ import {
   ImagePlus,
   ListChecks,
   LogOut,
+  Pencil,
   Plus,
   Save,
   Search,
+  X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,6 +47,7 @@ import {
   getClimateAssessment,
   getEnergyAssessment,
   getPropertyDpePosition,
+  parseDiagnosticValue,
 } from "@/lib/dpe";
 import {
   getPropertyInventoryMetrics,
@@ -58,13 +61,49 @@ import type { Activity, ContactLead, EstimationLead, LeadStatus } from "@/types/
 const contactRequestTypes = ["Achat", "Vente", "Estimation", "Terrain", "Autre"] as const;
 const propertyTypes = ["apartment", "house", "land"] as const satisfies PropertyType[];
 const propertyStatuses = ["available", "under_offer", "sold"] as const satisfies PropertyStatus[];
-const landSaleChecklist = [
-  "Surface cadastrale, limites et bornage à confirmer",
-  "Constructibilité à vérifier avec le PLU ou certificat d'urbanisme",
-  "Viabilisation et accès aux réseaux à préciser",
-  "Servitudes, accès, zone de risques et contraintes éventuelles",
-  "Étude de sol à prévoir selon le secteur et le projet",
+const landSaleOptions = [
+  {
+    label: "Surface cadastrale et bornage",
+    description: "Limites, références cadastrales et bornes à confirmer.",
+  },
+  {
+    label: "Constructibilité / PLU / CU",
+    description: "Constructibilité à vérifier avec le PLU ou certificat d'urbanisme.",
+  },
+  {
+    label: "Viabilisation réseaux",
+    description: "Eau, électricité, télécoms et raccordements à préciser.",
+  },
+  {
+    label: "Étude de sol",
+    description: "À prévoir selon le secteur, le sol et le projet.",
+  },
+  {
+    label: "Servitudes",
+    description: "Passage, réseaux, vue ou contraintes privées à identifier.",
+  },
+  {
+    label: "Accès véhicule",
+    description: "Accès direct, chemin, voie publique ou servitude d'accès.",
+  },
+  {
+    label: "Zone de risques",
+    description: "Inondation, incendie, argile, bruit ou autre contrainte éventuelle.",
+  },
+  {
+    label: "Libre constructeur",
+    description: "Information utile si aucun constructeur n'est imposé.",
+  },
+  {
+    label: "Assainissement",
+    description: "Tout-à-l'égout, fosse ou raccordement à confirmer.",
+  },
+  {
+    label: "Lotissement / permis d'aménager",
+    description: "Règlement de lotissement ou autorisation à vérifier si concerné.",
+  },
 ];
+const landSaleOptionLabels = landSaleOptions.map((option) => option.label);
 
 type AdminLead = {
   id: string;
@@ -116,6 +155,7 @@ type PropertyFormState = {
   descriptionShort: string;
   descriptionLong: string;
   featuresText: string;
+  landOptions: string[];
   featured: boolean;
 };
 
@@ -136,6 +176,7 @@ const emptyPropertyForm: PropertyFormState = {
   descriptionShort: "",
   descriptionLong: "",
   featuresText: "",
+  landOptions: [],
   featured: false,
 };
 
@@ -161,6 +202,21 @@ function parseMultilineValues(value: string) {
     .split(/\r?\n/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function uniqueValues(values: string[]) {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function getPropertyFeatureList(form: PropertyFormState) {
+  return uniqueValues([
+    ...parseMultilineValues(form.featuresText),
+    ...(form.type === "land" ? form.landOptions : []),
+  ]);
+}
+
+function getPropertyFeaturesText(form: PropertyFormState) {
+  return getPropertyFeatureList(form).join("\n");
 }
 
 function mergeProperties(staticItems: Property[], remoteItems: Property[]) {
@@ -202,6 +258,77 @@ function formatFileSize(size: number) {
   return `${(size / 1024 / 1024).toFixed(1)} Mo`;
 }
 
+function getNumericDiagnosticInput(value: string) {
+  const parsed = parseDiagnosticValue(value);
+  return parsed === null ? "" : String(parsed);
+}
+
+function propertyToForm(property: Property): PropertyFormState {
+  const landOptions = property.features.filter((feature) => landSaleOptionLabels.includes(feature));
+  const manualFeatures = property.features.filter((feature) => !landSaleOptionLabels.includes(feature));
+
+  return {
+    title: property.title,
+    type: property.type,
+    status: property.status,
+    city: property.city,
+    postalCode: property.postalCode,
+    price: String(property.price || ""),
+    surface: String(property.surface || ""),
+    landSurface: property.landSurface ? String(property.landSurface) : "",
+    rooms: property.rooms ? String(property.rooms) : "",
+    bedrooms: property.bedrooms ? String(property.bedrooms) : "",
+    bathrooms: property.bathrooms ? String(property.bathrooms) : "",
+    energyClass: property.type === "land" ? "" : getNumericDiagnosticInput(property.energyClass),
+    climateClass: property.type === "land" ? "" : getNumericDiagnosticInput(property.climateClass),
+    descriptionShort: property.descriptionShort,
+    descriptionLong: property.descriptionLong,
+    featuresText: manualFeatures.join("\n"),
+    landOptions,
+    featured: property.featured,
+  };
+}
+
+function buildPropertyPayload(property: Property, form: PropertyFormState, photoUrls = property.photos) {
+  return {
+    reference: property.reference,
+    mandateNumber: property.mandateNumber,
+    slug: property.slug,
+    sourceUrl: property.sourceUrl,
+    ...form,
+    featuresText: getPropertyFeaturesText(form),
+    photoUrls,
+  };
+}
+
+function buildUpdatedProperty(property: Property, form: PropertyFormState, photoUrls = property.photos): Property {
+  const now = new Date().toISOString();
+  const isLand = form.type === "land";
+
+  return {
+    ...property,
+    title: form.title.trim(),
+    type: form.type,
+    status: form.status,
+    city: form.city.trim(),
+    postalCode: form.postalCode.trim(),
+    price: toNumberOrNull(form.price) ?? property.price,
+    surface: toNumberOrNull(form.surface) ?? property.surface,
+    landSurface: isLand ? toNumberOrNull(form.surface) : toNumberOrNull(form.landSurface),
+    rooms: isLand ? null : toNumberOrNull(form.rooms),
+    bedrooms: isLand ? null : toNumberOrNull(form.bedrooms),
+    bathrooms: isLand ? null : toNumberOrNull(form.bathrooms),
+    energyClass: isLand ? "Non soumis" : formatEnergyDiagnostic(form.energyClass),
+    climateClass: isLand ? "Non soumis" : formatClimateDiagnostic(form.climateClass),
+    descriptionShort: form.descriptionShort.trim(),
+    descriptionLong: form.descriptionLong.trim() || form.descriptionShort.trim(),
+    features: getPropertyFeatureList(form),
+    photos: photoUrls,
+    featured: form.featured,
+    updatedAt: now,
+  };
+}
+
 function buildLocalProperty(form: PropertyFormState, currentProperties: Property[], photoUrls: string[]): Property {
   const now = new Date().toISOString();
   const reference = getNextLocalReference(currentProperties);
@@ -232,7 +359,7 @@ function buildLocalProperty(form: PropertyFormState, currentProperties: Property
     climateClass: isLand ? "Non soumis" : formatClimateDiagnostic(form.climateClass),
     descriptionShort: form.descriptionShort.trim(),
     descriptionLong: form.descriptionLong.trim() || form.descriptionShort.trim(),
-    features: parseMultilineValues(form.featuresText),
+    features: getPropertyFeatureList(form),
     photos: photoUrls,
     featured: form.featured,
     sourceUrl: "",
@@ -517,7 +644,18 @@ function CreatePropertyCard({
             energyClass: "",
             climateClass: "",
           }
-        : {}),
+        : {
+            landOptions: [],
+          }),
+    }));
+  }
+
+  function toggleLandOption(option: string) {
+    setForm((current) => ({
+      ...current,
+      landOptions: current.landOptions.includes(option)
+        ? current.landOptions.filter((item) => item !== option)
+        : [...current.landOptions, option],
     }));
   }
 
@@ -615,7 +753,7 @@ function CreatePropertyCard({
     const response = await fetch("/api/admin/properties", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-admin-code": expectedCode },
-      body: JSON.stringify({ ...form, photoUrls }),
+      body: JSON.stringify({ ...form, featuresText: getPropertyFeaturesText(form), photoUrls }),
     }).catch(() => null);
     const payload = response
       ? ((await response.json().catch(() => null)) as {
@@ -674,7 +812,9 @@ function CreatePropertyCard({
                 onValueChange={(value) => updatePropertyType(value as PropertyType)}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue />
+                  <span className="flex flex-1 text-left text-gray-900">
+                    {propertyTypeLabels[form.type]}
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
                   {propertyTypes.map((type) => (
@@ -692,7 +832,9 @@ function CreatePropertyCard({
                 onValueChange={(value) => updateField("status", value as PropertyStatus)}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue />
+                  <span className="flex flex-1 text-left text-gray-900">
+                    {propertyStatusLabels[form.status]}
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
                   {propertyStatuses.map((status) => (
@@ -722,7 +864,7 @@ function CreatePropertyCard({
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="property-price">Prix FAI</Label>
+              <Label htmlFor="property-price">Prix affiché honoraires inclus</Label>
               <Input
                 id="property-price"
                 inputMode="numeric"
@@ -730,6 +872,9 @@ function CreatePropertyCard({
                 onChange={(event) => updateField("price", event.target.value)}
                 placeholder="450000"
               />
+              <p className="text-xs leading-5 text-gray-500">
+                Anciennement “Prix FAI” : frais d&apos;agence inclus dans le prix affiché.
+              </p>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="property-surface">
@@ -915,11 +1060,33 @@ function CreatePropertyCard({
                 </div>
               </div>
               <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                {landSaleChecklist.map((item) => (
-                  <div key={item} className="flex gap-2 rounded-lg border border-orange-100 bg-white p-3 text-sm text-gray-700">
-                    <ListChecks className="mt-0.5 size-4 shrink-0 text-orange-500" />
-                    <span>{item}</span>
-                  </div>
+                {landSaleOptions.map((option) => (
+                  <button
+                    key={option.label}
+                    type="button"
+                    onClick={() => toggleLandOption(option.label)}
+                    className={cn(
+                      "flex gap-2 rounded-lg border p-3 text-left text-sm transition",
+                      form.landOptions.includes(option.label)
+                        ? "border-orange-300 bg-white text-[#111111] shadow-sm"
+                        : "border-orange-100 bg-white/75 text-gray-700 hover:border-orange-200 hover:bg-white"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded border text-xs font-black",
+                        form.landOptions.includes(option.label)
+                          ? "border-orange-500 bg-orange-500 text-white"
+                          : "border-orange-200 text-transparent"
+                      )}
+                    >
+                      ✓
+                    </span>
+                    <span>
+                      <strong className="block">{option.label}</strong>
+                      <span className="mt-1 block text-xs leading-5 text-gray-500">{option.description}</span>
+                    </span>
+                  </button>
                 ))}
               </div>
             </div>
@@ -1032,6 +1199,330 @@ function CreatePropertyCard({
   );
 }
 
+function PropertyEditorCard({
+  property,
+  expectedCode,
+  connected,
+  onPersist,
+}: {
+  property: Property;
+  expectedCode: string;
+  connected: boolean;
+  onPersist: (property: Property) => Promise<boolean>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState<PropertyFormState>(() => propertyToForm(property));
+  const [selectedPhotos, setSelectedPhotos] = useState<File[]>([]);
+  const [photoInputKey, setPhotoInputKey] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const isLand = form.type === "land";
+
+  function updateField(field: keyof PropertyFormState, value: string | boolean) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function updatePropertyType(value: PropertyType) {
+    setForm((current) => ({
+      ...current,
+      type: value,
+      ...(value === "land"
+        ? {
+            landSurface: "",
+            rooms: "",
+            bedrooms: "",
+            bathrooms: "",
+            energyClass: "",
+            climateClass: "",
+          }
+        : {
+            landOptions: [],
+          }),
+    }));
+  }
+
+  function toggleLandOption(option: string) {
+    setForm((current) => ({
+      ...current,
+      landOptions: current.landOptions.includes(option)
+        ? current.landOptions.filter((item) => item !== option)
+        : [...current.landOptions, option],
+    }));
+  }
+
+  function resetEditor() {
+    setForm(propertyToForm(property));
+    setSelectedPhotos([]);
+    setPhotoInputKey((current) => current + 1);
+    setFeedback(null);
+    setEditing(false);
+  }
+
+  async function uploadAdditionalPhotos() {
+    if (selectedPhotos.length === 0) return property.photos;
+
+    if (!connected) {
+      setFeedback("Le stockage Supabase doit être connecté pour ajouter des photos.");
+      return null;
+    }
+
+    const uploadBody = new FormData();
+    selectedPhotos.forEach((file) => uploadBody.append("photos", file));
+    const response = await fetch("/api/admin/property-photos", {
+      method: "POST",
+      headers: { "x-admin-code": expectedCode },
+      body: uploadBody,
+    }).catch(() => null);
+    const payload = response
+      ? ((await response.json().catch(() => null)) as {
+          message?: string;
+          photos?: UploadedPropertyPhoto[];
+        } | null)
+      : null;
+
+    if (!response?.ok || !payload?.photos) {
+      setFeedback(payload?.message ?? "Les nouvelles photos n'ont pas pu être envoyées.");
+      return null;
+    }
+
+    return [...property.photos, ...payload.photos.map((photo) => photo.url)];
+  }
+
+  async function saveEditor(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setFeedback(null);
+
+    if (!form.title.trim() || !form.city.trim() || !form.postalCode.trim() || !form.price.trim() || !form.surface.trim()) {
+      setFeedback("Titre, ville, code postal, prix et surface sont obligatoires.");
+      return;
+    }
+
+    setSaving(true);
+    const photoUrls = await uploadAdditionalPhotos();
+    if (!photoUrls) {
+      setSaving(false);
+      return;
+    }
+
+    const updatedProperty = buildUpdatedProperty(property, form, photoUrls);
+    const saved = await onPersist(updatedProperty);
+    setSaving(false);
+
+    if (saved) {
+      setSelectedPhotos([]);
+      setPhotoInputKey((current) => current + 1);
+      setEditing(false);
+    }
+  }
+
+  async function quickUpdate(updates: Partial<Pick<Property, "status" | "featured">>) {
+    setFeedback(null);
+    const nextProperty = { ...property, ...updates, updatedAt: new Date().toISOString() };
+    await onPersist(nextProperty);
+  }
+
+  return (
+    <Card className="border-orange-100 bg-white">
+      <CardContent className="grid gap-4 p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="font-mono text-xs text-gray-500">Réf. {property.reference} · Mandat {property.mandateNumber}</p>
+            <p className="mt-1 font-bold text-[#111111]">{property.title}</p>
+            <p className="mt-1 text-sm text-gray-600">{property.city} · {formatNumber(property.surface)} m² · {propertyTypeLabels[property.type]}</p>
+          </div>
+          <Badge className="border-0 bg-orange-100 text-orange-800">{propertyStatusLabels[property.status]}</Badge>
+        </div>
+
+        <div className="grid gap-2 text-sm text-gray-700 sm:grid-cols-4">
+          <p><strong>Prix</strong><br />{formatPrice(property.price)}</p>
+          <p><strong>Pièces</strong><br />{property.rooms ?? "Non renseigné"}</p>
+          <p><strong>Photos</strong><br />{property.photos.length}</p>
+          <p><strong>Mise en avant</strong><br />{property.featured ? "Oui" : "Non"}</p>
+        </div>
+
+        <div className="grid gap-3 rounded-lg border border-orange-100 bg-orange-50 p-3 sm:grid-cols-[1fr_auto] sm:items-end">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid gap-1.5">
+              <Label>Disponibilité</Label>
+              <Select
+                value={property.status}
+                onValueChange={(value) => void quickUpdate({ status: value as PropertyStatus })}
+              >
+                <SelectTrigger className="h-10 w-full">
+                  <span className="flex flex-1 text-left text-gray-900">
+                    {propertyStatusLabels[property.status]}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  {propertyStatuses.map((status) => (
+                    <SelectItem key={status} value={status}>
+                      {propertyStatusLabels[status]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <label className="flex items-center gap-3 rounded-lg border border-orange-100 bg-white px-3 py-2 text-sm font-semibold text-[#111111]">
+              <input
+                type="checkbox"
+                checked={property.featured}
+                onChange={(event) => void quickUpdate({ featured: event.target.checked })}
+                className="size-4 accent-orange-500"
+              />
+              Afficher à la une
+            </label>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 border-orange-200 bg-white"
+            onClick={() => {
+              setForm(propertyToForm(property));
+              setEditing((current) => !current);
+            }}
+          >
+            {editing ? <X className="size-4" /> : <Pencil className="size-4" />}
+            {editing ? "Fermer" : "Modifier"}
+          </Button>
+        </div>
+
+        {editing ? (
+          <form onSubmit={(event) => void saveEditor(event)} className="grid gap-4 rounded-xl border border-orange-100 bg-white p-4">
+            <div className="grid gap-4 lg:grid-cols-3">
+              <div className="grid gap-2 lg:col-span-2">
+                <Label>Titre</Label>
+                <Input value={form.title} onChange={(event) => updateField("title", event.target.value)} />
+              </div>
+              <div className="grid gap-2">
+                <Label>Type</Label>
+                <Select value={form.type} onValueChange={(value) => updatePropertyType(value as PropertyType)}>
+                  <SelectTrigger className="h-10 w-full">
+                    <span className="flex flex-1 text-left text-gray-900">
+                      {propertyTypeLabels[form.type]}
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {propertyTypes.map((type) => (
+                      <SelectItem key={type} value={type}>{propertyTypeLabels[type]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label>Ville</Label>
+                <Input value={form.city} onChange={(event) => updateField("city", event.target.value)} />
+              </div>
+              <div className="grid gap-2">
+                <Label>Code postal</Label>
+                <Input value={form.postalCode} onChange={(event) => updateField("postalCode", event.target.value)} />
+              </div>
+              <div className="grid gap-2">
+                <Label>Prix affiché honoraires inclus</Label>
+                <Input inputMode="numeric" value={form.price} onChange={(event) => updateField("price", event.target.value)} />
+              </div>
+              <div className="grid gap-2">
+                <Label>{isLand ? "Surface du terrain" : "Surface habitable"}</Label>
+                <Input inputMode="decimal" value={form.surface} onChange={(event) => updateField("surface", event.target.value)} />
+              </div>
+              {!isLand ? (
+                <>
+                  <div className="grid gap-2">
+                    <Label>Pièces</Label>
+                    <Input inputMode="numeric" value={form.rooms} onChange={(event) => updateField("rooms", event.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Chambres</Label>
+                    <Input inputMode="numeric" value={form.bedrooms} onChange={(event) => updateField("bedrooms", event.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Salles d&apos;eau</Label>
+                    <Input inputMode="numeric" value={form.bathrooms} onChange={(event) => updateField("bathrooms", event.target.value)} />
+                  </div>
+                </>
+              ) : null}
+            </div>
+
+            {isLand ? (
+              <div className="grid gap-2 rounded-lg border border-orange-100 bg-orange-50 p-3 sm:grid-cols-2">
+                {landSaleOptions.map((option) => (
+                  <button
+                    key={option.label}
+                    type="button"
+                    onClick={() => toggleLandOption(option.label)}
+                    className={cn(
+                      "rounded-md border p-3 text-left text-sm transition",
+                      form.landOptions.includes(option.label)
+                        ? "border-orange-300 bg-white text-[#111111]"
+                        : "border-orange-100 bg-white/70 text-gray-700"
+                    )}
+                  >
+                    <strong>{option.label}</strong>
+                    <span className="mt-1 block text-xs leading-5 text-gray-500">{option.description}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="grid gap-2">
+                <Label>Description courte</Label>
+                <Textarea value={form.descriptionShort} onChange={(event) => updateField("descriptionShort", event.target.value)} />
+              </div>
+              <div className="grid gap-2">
+                <Label>Description complète</Label>
+                <Textarea value={form.descriptionLong} onChange={(event) => updateField("descriptionLong", event.target.value)} />
+              </div>
+              <div className="grid gap-2">
+                <Label>Atouts libres</Label>
+                <Textarea value={form.featuresText} onChange={(event) => updateField("featuresText", event.target.value)} />
+              </div>
+              <div className="grid gap-2">
+                <Label>Ajouter des photos</Label>
+                <Input
+                  key={photoInputKey}
+                  type="file"
+                  multiple
+                  accept="image/jpeg,image/png,image/webp,image/avif"
+                  onChange={(event) => setSelectedPhotos(Array.from(event.target.files ?? []))}
+                  className="h-auto cursor-pointer py-2"
+                />
+                <p className="text-xs text-gray-500">
+                  Les nouvelles photos seront ajoutées aux {property.photos.length} photo(s) existante(s).
+                </p>
+              </div>
+            </div>
+
+            {feedback ? <p className="rounded-md bg-red-50 p-3 text-sm font-medium text-red-700">{feedback}</p> : null}
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button type="submit" disabled={saving} className="h-10 bg-orange-500 text-white hover:bg-orange-600">
+                <Save className="size-4" />
+                {saving ? "Sauvegarde..." : "Sauvegarder"}
+              </Button>
+              <Button type="button" variant="outline" className="h-10 border-orange-200" onClick={resetEditor}>
+                Annuler
+              </Button>
+            </div>
+          </form>
+        ) : null}
+
+        {property.photos.length > 0 ? (
+          <div className="flex items-center gap-2 rounded-md bg-orange-50 p-3 text-xs text-gray-700">
+            <ImagePlus className="size-4 text-orange-600" />
+            Photo principale : {property.photos[0]}
+          </div>
+        ) : null}
+        {property.sourceUrl ? (
+          <a href={property.sourceUrl} target="_blank" rel="noreferrer" className="text-sm font-semibold text-orange-700 hover:text-orange-900">
+            Voir l&apos;annonce source
+          </a>
+        ) : (
+          <p className="text-sm font-semibold text-orange-700">Bien créé dans le CRM</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function PropertyManager({
   properties,
   setProperties,
@@ -1044,6 +1535,7 @@ function PropertyManager({
   connected: boolean;
 }) {
   const [search, setSearch] = useState("");
+  const [feedback, setFeedback] = useState<string | null>(null);
   const propertyInventoryMetrics = useMemo(() => getPropertyInventoryMetrics(properties), [properties]);
   const propertyStatusBreakdown = useMemo(() => getPropertyStatusBreakdown(properties), [properties]);
   const propertyTypeBreakdown = useMemo(() => getPropertyTypeBreakdown(properties), [properties]);
@@ -1062,6 +1554,35 @@ function PropertyManager({
 
     return haystack.includes(search.toLowerCase());
   });
+
+  async function persistProperty(property: Property) {
+    if (!connected) {
+      setProperties((current) => mergeProperties(current, [property]));
+      setFeedback("Modification conservée dans cette session locale.");
+      return true;
+    }
+
+    const response = await fetch("/api/admin/properties", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "x-admin-code": expectedCode },
+      body: JSON.stringify(buildPropertyPayload(property, propertyToForm(property), property.photos)),
+    }).catch(() => null);
+    const payload = response
+      ? ((await response.json().catch(() => null)) as {
+          message?: string;
+          property?: Property;
+        } | null)
+      : null;
+
+    if (!response?.ok || !payload?.property) {
+      setFeedback(payload?.message ?? "La modification du bien n'a pas pu être enregistrée.");
+      return false;
+    }
+
+    setProperties((current) => mergeProperties(current, [payload.property!]));
+    setFeedback(payload.message ?? "Bien mis à jour.");
+    return true;
+  }
 
   return (
     <div className="grid gap-6">
@@ -1126,6 +1647,11 @@ function PropertyManager({
           className="pl-9"
         />
       </div>
+      {feedback ? (
+        <p className="rounded-md bg-emerald-50 p-3 text-sm font-medium text-emerald-800">
+          {feedback}
+        </p>
+      ) : null}
       {filteredProperties.length === 0 ? (
         <Card className="border-dashed border-orange-200 bg-white">
           <CardContent className="py-12 text-center">
@@ -1137,37 +1663,13 @@ function PropertyManager({
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {filteredProperties.map((property) => (
-            <Card key={property.id} className="border-orange-100 bg-white">
-              <CardContent className="grid gap-4 p-5">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="font-mono text-xs text-gray-500">Réf. {property.reference} · Mandat {property.mandateNumber}</p>
-                    <p className="mt-1 font-bold text-[#111111]">{property.title}</p>
-                    <p className="mt-1 text-sm text-gray-600">{property.city} · {formatNumber(property.surface)} m² · {propertyTypeLabels[property.type]}</p>
-                  </div>
-                  <Badge className="border-0 bg-orange-100 text-orange-800">{propertyStatusLabels[property.status]}</Badge>
-                </div>
-                <div className="grid gap-2 text-sm text-gray-700 sm:grid-cols-4">
-                  <p><strong>Prix</strong><br />{formatPrice(property.price)}</p>
-                  <p><strong>Pièces</strong><br />{property.rooms ?? "Non renseigné"}</p>
-                  <p><strong>Photos</strong><br />{property.photos.length}</p>
-                  <p><strong>Mise en avant</strong><br />{property.featured ? "Oui" : "Non"}</p>
-                </div>
-                {property.photos.length > 0 ? (
-                  <div className="flex items-center gap-2 rounded-md bg-orange-50 p-3 text-xs text-gray-700">
-                    <ImagePlus className="size-4 text-orange-600" />
-                    Photo principale : {property.photos[0]}
-                  </div>
-                ) : null}
-                {property.sourceUrl ? (
-                  <a href={property.sourceUrl} target="_blank" rel="noreferrer" className="text-sm font-semibold text-orange-700 hover:text-orange-900">
-                    Voir l&apos;annonce source
-                  </a>
-                ) : (
-                  <p className="text-sm font-semibold text-orange-700">Bien créé dans le CRM</p>
-                )}
-              </CardContent>
-            </Card>
+            <PropertyEditorCard
+              key={`${property.reference}-${property.updatedAt}`}
+              property={property}
+              expectedCode={expectedCode}
+              connected={connected}
+              onPersist={persistProperty}
+            />
           ))}
         </div>
       )}

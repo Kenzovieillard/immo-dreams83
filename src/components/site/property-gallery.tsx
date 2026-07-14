@@ -8,8 +8,12 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export function PropertyGallery({ photos, title }: { photos: string[]; title: string }) {
+  const galleryPhotos =
+    photos.length > 0
+      ? photos
+      : ["https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?auto=format&fit=crop&w=1400&q=80"];
   const [activeIndex, setActiveIndex] = useState(0);
-  const count = photos.length;
+  const count = galleryPhotos.length;
 
   function move(direction: number) {
     setActiveIndex((current) => (current + direction + count) % count);
@@ -19,7 +23,7 @@ export function PropertyGallery({ photos, title }: { photos: string[]; title: st
     <div className="grid gap-3">
       <div className="relative aspect-[4/3] overflow-hidden rounded-lg bg-orange-100 shadow-xl shadow-orange-200/40 sm:aspect-[16/10]">
         <Image
-          src={photos[activeIndex]}
+          src={galleryPhotos[activeIndex]}
           alt={`${title} - photo ${activeIndex + 1}`}
           fill
           priority
@@ -42,7 +46,7 @@ export function PropertyGallery({ photos, title }: { photos: string[]; title: st
         ) : null}
       </div>
       <div className="no-scrollbar flex gap-3 overflow-x-auto pb-1">
-        {photos.map((photo, index) => (
+        {galleryPhotos.map((photo, index) => (
           <button
             key={photo}
             type="button"

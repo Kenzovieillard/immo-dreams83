@@ -26,12 +26,15 @@ type PropertyCardProps = {
 
 export function PropertyCard({ property, priority = false }: PropertyCardProps) {
   const detailHref = `/biens/${property.slug}`;
+  const mainPhoto =
+    property.photos[0] ??
+    "https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?auto=format&fit=crop&w=1200&q=80";
 
   return (
     <Card className="group overflow-hidden border-orange-100 bg-white py-0 shadow-sm shadow-orange-100/60 transition duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-orange-200/50">
       <Link href={detailHref} className="relative block aspect-[4/3] overflow-hidden bg-orange-50">
         <Image
-          src={property.photos[0]}
+          src={mainPhoto}
           alt={property.title}
           fill
           priority={priority}

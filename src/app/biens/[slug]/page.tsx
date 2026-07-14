@@ -27,19 +27,18 @@ import { Separator } from "@/components/ui/separator";
 import {
   formatNumber,
   formatPrice,
-  getPropertyBySlug,
-  getSimilarProperties,
   properties,
   propertyStatusBadgeClasses,
   propertyStatusLabels,
   propertyTypeLabels,
 } from "@/data/properties";
+import { getPublicPropertyBySlug, getSimilarPublicProperties } from "@/lib/public-properties";
 import { getBreadcrumbSchema, getPropertySchema } from "@/lib/schema";
 import { cn } from "@/lib/utils";
 
 type PropertyPageProps = { params: Promise<{ slug: string }> };
 
-export const dynamicParams = false;
+export const dynamic = "force-dynamic";
 
 export function generateStaticParams() {
   return properties.map((property) => ({ slug: property.slug }));
@@ -47,7 +46,7 @@ export function generateStaticParams() {
 
 export async function generateMetadata({ params }: PropertyPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const property = getPropertyBySlug(slug);
+  const property = await getPublicPropertyBySlug(slug);
   if (!property) return { title: "Bien introuvable" };
 
   const url = `${siteUrl}/biens/${property.slug}`;
@@ -68,10 +67,10 @@ export async function generateMetadata({ params }: PropertyPageProps): Promise<M
 
 export default async function PropertyPage({ params }: PropertyPageProps) {
   const { slug } = await params;
-  const property = getPropertyBySlug(slug);
+  const property = await getPublicPropertyBySlug(slug);
   if (!property) notFound();
 
-  const similarProperties = getSimilarProperties(property, 3);
+  const similarProperties = await getSimilarPublicProperties(property, 3);
   const pageUrl = `${siteUrl}/biens/${property.slug}`;
   const breadcrumbs = getBreadcrumbSchema([
     { name: "Accueil", url: siteUrl },
@@ -171,9 +170,11 @@ export default async function PropertyPage({ params }: PropertyPageProps) {
                 <CardHeader><CardTitle className="text-xl text-[#111111]">Partager cette annonce</CardTitle></CardHeader>
                 <CardContent className="grid gap-4">
                   <PropertyShare title={property.title} />
-                  <a className="inline-flex items-center gap-2 text-sm font-semibold text-orange-700 hover:underline" href={property.sourceUrl} target="_blank" rel="noreferrer">
-                    Consulter la source officielle <ExternalLink className="size-4" />
-                  </a>
+                  {property.sourceUrl ? (
+                    <a className="inline-flex items-center gap-2 text-sm font-semibold text-orange-700 hover:underline" href={property.sourceUrl} target="_blank" rel="noreferrer">
+                      Consulter la source officielle <ExternalLink className="size-4" />
+                    </a>
+                  ) : null}
                 </CardContent>
               </Card>
             </div>
