@@ -96,7 +96,6 @@ type PropertyFormState = {
   descriptionShort: string;
   descriptionLong: string;
   featuresText: string;
-  photosText: string;
   featured: boolean;
 };
 
@@ -117,8 +116,15 @@ const emptyPropertyForm: PropertyFormState = {
   descriptionShort: "",
   descriptionLong: "",
   featuresText: "",
-  photosText: "",
   featured: false,
+};
+
+type UploadedPropertyPhoto = {
+  url: string;
+  path: string;
+  name: string;
+  size: number;
+  type: string;
 };
 
 function getStatusSelectLabel(value: unknown) {
@@ -171,7 +177,12 @@ function toNumberOrNull(value: string) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function buildLocalProperty(form: PropertyFormState, currentProperties: Property[]): Property {
+function formatFileSize(size: number) {
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} Ko`;
+  return `${(size / 1024 / 1024).toFixed(1)} Mo`;
+}
+
+function buildLocalProperty(form: PropertyFormState, currentProperties: Property[], photoUrls: string[]): Property {
   const now = new Date().toISOString();
   const reference = getNextLocalReference(currentProperties);
   const id =
@@ -201,7 +212,7 @@ function buildLocalProperty(form: PropertyFormState, currentProperties: Property
     descriptionShort: form.descriptionShort.trim(),
     descriptionLong: form.descriptionLong.trim() || form.descriptionShort.trim(),
     features: parseMultilineValues(form.featuresText),
-    photos: parseMultilineValues(form.photosText),
+    photos: photoUrls,
     featured: form.featured,
     sourceUrl: "",
     createdAt: now,
@@ -457,9 +468,11 @@ function CreatePropertyCard({
   connected: boolean;
 }) {
   const [form, setForm] = useState<PropertyFormState>(emptyPropertyForm);
+  const [selectedPhotos, setSelectedPhotos] = useState<File[]>([]);
+  const [uploadedPhotos, setUploadedPhotos] = useState<UploadedPropertyPhoto[]>([]);
+  const [photoInputKey, setPhotoInputKey] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
-  const photoUrls = parseMultilineValues(form.photosText);
   const nextReference = getNextLocalReference(properties);
 
   function updateField(field: keyof PropertyFormState, value: string | boolean) {
@@ -477,6 +490,52 @@ function CreatePropertyCard({
     );
   }
 
+  function updateSelectedPhotos(files: FileList | null) {
+    setSelectedPhotos(Array.from(files ?? []));
+    setUploadedPhotos([]);
+  }
+
+  async function uploadSelectedPhotos() {
+    if (selectedPhotos.length === 0) return uploadedPhotos;
+
+    if (!connected) {
+      setFeedback({
+        type: "error",
+        message: "Le stockage Supabase doit être connecté pour ajouter des photos depuis l'ordinateur.",
+      });
+      return null;
+    }
+
+    setFeedback({ type: "success", message: "Envoi des photos en cours..." });
+    const uploadBody = new FormData();
+    selectedPhotos.forEach((file) => uploadBody.append("photos", file));
+
+    const response = await fetch("/api/admin/property-photos", {
+      method: "POST",
+      headers: { "x-admin-code": expectedCode },
+      body: uploadBody,
+    }).catch(() => null);
+    const payload = response
+      ? ((await response.json().catch(() => null)) as {
+          message?: string;
+          photos?: UploadedPropertyPhoto[];
+        } | null)
+      : null;
+
+    if (!response?.ok || !payload?.photos) {
+      setFeedback({
+        type: "error",
+        message: payload?.message ?? "Les photos n'ont pas pu être envoyées.",
+      });
+      return null;
+    }
+
+    setUploadedPhotos(payload.photos);
+    setSelectedPhotos([]);
+    setPhotoInputKey((current) => current + 1);
+    return payload.photos;
+  }
+
   async function submitProperty(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFeedback(null);
@@ -489,10 +548,21 @@ function CreatePropertyCard({
       return;
     }
 
+    setSubmitting(true);
+    const photos = await uploadSelectedPhotos();
+    if (!photos) {
+      setSubmitting(false);
+      return;
+    }
+    const photoUrls = photos.map((photo) => photo.url);
+
     if (!connected) {
-      const property = buildLocalProperty(form, properties);
+      const property = buildLocalProperty(form, properties, photoUrls);
       setProperties((current) => [property, ...current]);
       setForm(emptyPropertyForm);
+      setUploadedPhotos([]);
+      setPhotoInputKey((current) => current + 1);
+      setSubmitting(false);
       setFeedback({
         type: "success",
         message: `Bien créé dans cette session locale avec la référence ${property.reference}.`,
@@ -500,11 +570,10 @@ function CreatePropertyCard({
       return;
     }
 
-    setSubmitting(true);
     const response = await fetch("/api/admin/properties", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-admin-code": expectedCode },
-      body: JSON.stringify(form),
+      body: JSON.stringify({ ...form, photoUrls }),
     }).catch(() => null);
     const payload = response
       ? ((await response.json().catch(() => null)) as {
@@ -524,6 +593,8 @@ function CreatePropertyCard({
 
     setProperties((current) => mergeProperties(current, [payload.property!]));
     setForm(emptyPropertyForm);
+    setUploadedPhotos([]);
+    setPhotoInputKey((current) => current + 1);
     setFeedback({ type: "success", message: payload.message ?? "Bien créé." });
   }
 
@@ -717,13 +788,44 @@ function CreatePropertyCard({
             </div>
             <div className="grid gap-2">
               <Label htmlFor="property-photos">Photos</Label>
-              <Textarea
+              <Input
+                key={photoInputKey}
                 id="property-photos"
-                value={form.photosText}
-                onChange={(event) => updateField("photosText", event.target.value)}
-                placeholder={"https://exemple.fr/photo-1.jpg\nhttps://exemple.fr/photo-2.jpg"}
+                type="file"
+                multiple
+                accept="image/jpeg,image/png,image/webp,image/avif"
+                onChange={(event) => updateSelectedPhotos(event.target.files)}
+                className="h-auto cursor-pointer py-2"
               />
-              <p className="text-xs text-gray-500">{photoUrls.length} photo(s) prête(s) à être enregistrée(s).</p>
+              <p className="text-xs text-gray-500">
+                JPG, PNG, WebP ou AVIF. Maximum 12 photos, 8 Mo par photo.
+              </p>
+              {selectedPhotos.length > 0 ? (
+                <div className="grid gap-2 rounded-lg border border-orange-100 bg-orange-50 p-3">
+                  <p className="text-xs font-bold uppercase tracking-wide text-orange-700">
+                    {selectedPhotos.length} photo(s) sélectionnée(s)
+                  </p>
+                  {selectedPhotos.map((file) => (
+                    <div key={`${file.name}-${file.size}`} className="flex items-center justify-between gap-3 text-xs text-gray-700">
+                      <span className="truncate">{file.name}</span>
+                      <span className="shrink-0">{formatFileSize(file.size)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {uploadedPhotos.length > 0 ? (
+                <div className="grid gap-2 rounded-lg border border-emerald-100 bg-emerald-50 p-3">
+                  <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">
+                    {uploadedPhotos.length} photo(s) stockée(s)
+                  </p>
+                  {uploadedPhotos.map((photo) => (
+                    <div key={photo.path} className="flex items-center gap-2 text-xs text-emerald-800">
+                      <ImagePlus className="size-3.5" />
+                      <span className="truncate">{photo.name}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
           </div>
           <label className="flex w-fit items-center gap-3 rounded-lg border border-orange-100 bg-orange-50 px-3 py-2 text-sm font-semibold text-[#111111]">

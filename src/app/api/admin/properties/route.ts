@@ -75,6 +75,12 @@ function toStringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
+function getStringArrayField(payload: unknown, field: string) {
+  if (!payload || typeof payload !== "object") return [];
+
+  return toStringArray((payload as Record<string, unknown>)[field]).map((item) => item.trim()).filter(Boolean);
+}
+
 function splitMultilineList(value: string) {
   return value
     .split(/\r?\n/)
@@ -158,7 +164,7 @@ function validatePropertyPayload(payload: unknown) {
   const descriptionShort = getStringField(payload, "descriptionShort");
   const descriptionLong = getStringField(payload, "descriptionLong");
   const featuresText = getStringField(payload, "featuresText");
-  const photosText = getStringField(payload, "photosText");
+  const photoUrls = getStringArrayField(payload, "photoUrls");
   const featured = Boolean(
     payload && typeof payload === "object" && (payload as Record<string, unknown>).featured
   );
@@ -175,9 +181,8 @@ function validatePropertyPayload(payload: unknown) {
     fieldErrors.descriptionShort = "La description courte est obligatoire.";
   }
 
-  const photos = splitMultilineList(photosText);
-  if (photos.some((photo) => !isHttpUrl(photo))) {
-    fieldErrors.photosText = "Chaque photo doit être une URL http ou https valide.";
+  if (photoUrls.some((photo) => !isHttpUrl(photo))) {
+    fieldErrors.photoUrls = "Les photos doivent provenir du module d'upload.";
   }
 
   return {
@@ -198,7 +203,7 @@ function validatePropertyPayload(payload: unknown) {
       descriptionShort,
       descriptionLong,
       features: splitMultilineList(featuresText),
-      photos,
+      photos: photoUrls,
       featured,
     },
     fieldErrors,
