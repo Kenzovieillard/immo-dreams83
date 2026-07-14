@@ -9,8 +9,10 @@ import {
   ContactRound,
   KeyRound,
   LayoutDashboard,
+  ImagePlus,
   ListChecks,
   LogOut,
+  Plus,
   Save,
   Search,
 } from "lucide-react";
@@ -26,6 +28,8 @@ import {
   formatNumber,
   formatPrice,
   type Property,
+  type PropertyStatus,
+  type PropertyType,
   propertyStatusLabels,
   propertyTypeLabels,
 } from "@/data/properties";
@@ -39,6 +43,8 @@ import {
 import type { Activity, ContactLead, EstimationLead, LeadStatus } from "@/types/crm";
 
 const contactRequestTypes = ["Achat", "Vente", "Estimation", "Terrain", "Autre"] as const;
+const propertyTypes = ["apartment", "house", "land"] as const satisfies PropertyType[];
+const propertyStatuses = ["available", "under_offer", "sold"] as const satisfies PropertyStatus[];
 
 type AdminLead = {
   id: string;
@@ -73,6 +79,48 @@ const emptyContactForm: ContactFormState = {
   message: "",
 };
 
+type PropertyFormState = {
+  title: string;
+  type: PropertyType;
+  status: PropertyStatus;
+  city: string;
+  postalCode: string;
+  price: string;
+  surface: string;
+  landSurface: string;
+  rooms: string;
+  bedrooms: string;
+  bathrooms: string;
+  energyClass: string;
+  climateClass: string;
+  descriptionShort: string;
+  descriptionLong: string;
+  featuresText: string;
+  photosText: string;
+  featured: boolean;
+};
+
+const emptyPropertyForm: PropertyFormState = {
+  title: "",
+  type: "house",
+  status: "available",
+  city: "",
+  postalCode: "",
+  price: "",
+  surface: "",
+  landSurface: "",
+  rooms: "",
+  bedrooms: "",
+  bathrooms: "",
+  energyClass: "",
+  climateClass: "",
+  descriptionShort: "",
+  descriptionLong: "",
+  featuresText: "",
+  photosText: "",
+  featured: false,
+};
+
 function getStatusSelectLabel(value: unknown) {
   if (value === "ALL") return "Tous les statuts";
   if (typeof value === "string" && leadStatuses.includes(value as LeadStatus)) {
@@ -80,6 +128,86 @@ function getStatusSelectLabel(value: unknown) {
   }
 
   return "Tous les statuts";
+}
+
+function parseMultilineValues(value: string) {
+  return value
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function mergeProperties(staticItems: Property[], remoteItems: Property[]) {
+  const seen = new Set<string>();
+  return [...remoteItems, ...staticItems].filter((property) => {
+    const key = property.reference || property.id;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function getNextLocalReference(properties: Property[]) {
+  const maxReference = properties.reduce((max, property) => {
+    if (!/^\d+$/.test(property.reference)) return max;
+    return Math.max(max, Number(property.reference));
+  }, 0);
+
+  return String(maxReference + 1).padStart(3, "0");
+}
+
+function slugify(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function toNumberOrNull(value: string) {
+  if (!value.trim()) return null;
+  const parsed = Number(value.replace(",", ".").replace(/\s/g, ""));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function buildLocalProperty(form: PropertyFormState, currentProperties: Property[]): Property {
+  const now = new Date().toISOString();
+  const reference = getNextLocalReference(currentProperties);
+  const id =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `local-property-${Date.now()}`;
+
+  return {
+    id,
+    reference,
+    slug: `${slugify(form.title)}-${slugify(form.city)}-${form.postalCode}-ref-${reference}`,
+    title: form.title.trim(),
+    type: form.type,
+    transactionType: "sale",
+    status: form.status,
+    city: form.city.trim(),
+    postalCode: form.postalCode.trim(),
+    price: toNumberOrNull(form.price) ?? 0,
+    feesIncluded: true,
+    surface: toNumberOrNull(form.surface) ?? 0,
+    landSurface: toNumberOrNull(form.landSurface),
+    rooms: toNumberOrNull(form.rooms),
+    bedrooms: toNumberOrNull(form.bedrooms),
+    bathrooms: toNumberOrNull(form.bathrooms),
+    energyClass: form.energyClass.trim() || "Non renseigné",
+    climateClass: form.climateClass.trim() || "Non renseigné",
+    descriptionShort: form.descriptionShort.trim(),
+    descriptionLong: form.descriptionLong.trim() || form.descriptionShort.trim(),
+    features: parseMultilineValues(form.featuresText),
+    photos: parseMultilineValues(form.photosText),
+    featured: form.featured,
+    sourceUrl: "",
+    createdAt: now,
+    updatedAt: now,
+    mandateNumber: reference,
+  };
 }
 
 type Props = {
@@ -317,6 +445,464 @@ function CreateContactCard({
   );
 }
 
+function CreatePropertyCard({
+  properties,
+  setProperties,
+  expectedCode,
+  connected,
+}: {
+  properties: Property[];
+  setProperties: React.Dispatch<React.SetStateAction<Property[]>>;
+  expectedCode: string;
+  connected: boolean;
+}) {
+  const [form, setForm] = useState<PropertyFormState>(emptyPropertyForm);
+  const [submitting, setSubmitting] = useState(false);
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const photoUrls = parseMultilineValues(form.photosText);
+  const nextReference = getNextLocalReference(properties);
+
+  function updateField(field: keyof PropertyFormState, value: string | boolean) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function hasRequiredFields() {
+    return Boolean(
+      form.title.trim() &&
+        form.city.trim() &&
+        form.postalCode.trim() &&
+        form.price.trim() &&
+        form.surface.trim() &&
+        form.descriptionShort.trim()
+    );
+  }
+
+  async function submitProperty(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setFeedback(null);
+
+    if (!hasRequiredFields()) {
+      setFeedback({
+        type: "error",
+        message: "Titre, ville, code postal, prix, surface et description courte sont obligatoires.",
+      });
+      return;
+    }
+
+    if (!connected) {
+      const property = buildLocalProperty(form, properties);
+      setProperties((current) => [property, ...current]);
+      setForm(emptyPropertyForm);
+      setFeedback({
+        type: "success",
+        message: `Bien créé dans cette session locale avec la référence ${property.reference}.`,
+      });
+      return;
+    }
+
+    setSubmitting(true);
+    const response = await fetch("/api/admin/properties", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-admin-code": expectedCode },
+      body: JSON.stringify(form),
+    }).catch(() => null);
+    const payload = response
+      ? ((await response.json().catch(() => null)) as {
+          message?: string;
+          property?: Property;
+        } | null)
+      : null;
+    setSubmitting(false);
+
+    if (!response?.ok || !payload?.property) {
+      setFeedback({
+        type: "error",
+        message: payload?.message ?? "Le bien n'a pas pu être créé.",
+      });
+      return;
+    }
+
+    setProperties((current) => mergeProperties(current, [payload.property!]));
+    setForm(emptyPropertyForm);
+    setFeedback({ type: "success", message: payload.message ?? "Bien créé." });
+  }
+
+  return (
+    <Card className="border-orange-100 bg-white">
+      <CardHeader>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <CardTitle className="text-lg text-[#111111]">Créer un bien</CardTitle>
+            <p className="mt-1 text-sm leading-6 text-gray-600">
+              La référence sera attribuée automatiquement au moment de l&apos;enregistrement.
+            </p>
+          </div>
+          <Badge className="w-fit border-0 bg-orange-100 text-orange-800">
+            Prochaine réf. {nextReference}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={(event) => void submitProperty(event)} className="grid gap-5">
+          <div className="grid gap-4 lg:grid-cols-3">
+            <div className="grid gap-2 lg:col-span-2">
+              <Label htmlFor="property-title">Titre de l&apos;annonce</Label>
+              <Input
+                id="property-title"
+                value={form.title}
+                onChange={(event) => updateField("title", event.target.value)}
+                placeholder="Maison familiale avec jardin"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Type de bien</Label>
+              <Select
+                value={form.type}
+                onValueChange={(value) => updateField("type", value as PropertyType)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {propertyTypes.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {propertyTypeLabels[type]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Statut</Label>
+              <Select
+                value={form.status}
+                onValueChange={(value) => updateField("status", value as PropertyStatus)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {propertyStatuses.map((status) => (
+                    <SelectItem key={status} value={status}>
+                      {propertyStatusLabels[status]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="property-city">Ville</Label>
+              <Input
+                id="property-city"
+                value={form.city}
+                onChange={(event) => updateField("city", event.target.value)}
+                placeholder="Solliès-Pont"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="property-postal-code">Code postal</Label>
+              <Input
+                id="property-postal-code"
+                value={form.postalCode}
+                onChange={(event) => updateField("postalCode", event.target.value)}
+                placeholder="83210"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="property-price">Prix FAI</Label>
+              <Input
+                id="property-price"
+                inputMode="numeric"
+                value={form.price}
+                onChange={(event) => updateField("price", event.target.value)}
+                placeholder="450000"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="property-surface">Surface habitable</Label>
+              <Input
+                id="property-surface"
+                inputMode="decimal"
+                value={form.surface}
+                onChange={(event) => updateField("surface", event.target.value)}
+                placeholder="120"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="property-land-surface">Surface terrain</Label>
+              <Input
+                id="property-land-surface"
+                inputMode="decimal"
+                value={form.landSurface}
+                onChange={(event) => updateField("landSurface", event.target.value)}
+                placeholder="650"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="property-rooms">Pièces</Label>
+              <Input
+                id="property-rooms"
+                inputMode="numeric"
+                value={form.rooms}
+                onChange={(event) => updateField("rooms", event.target.value)}
+                placeholder="5"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="property-bedrooms">Chambres</Label>
+              <Input
+                id="property-bedrooms"
+                inputMode="numeric"
+                value={form.bedrooms}
+                onChange={(event) => updateField("bedrooms", event.target.value)}
+                placeholder="3"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="property-bathrooms">Salles d&apos;eau</Label>
+              <Input
+                id="property-bathrooms"
+                inputMode="numeric"
+                value={form.bathrooms}
+                onChange={(event) => updateField("bathrooms", event.target.value)}
+                placeholder="2"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="property-energy">Classe énergie</Label>
+              <Input
+                id="property-energy"
+                value={form.energyClass}
+                onChange={(event) => updateField("energyClass", event.target.value)}
+                placeholder="120 kWhEP/m².an"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="property-climate">Classe climat</Label>
+              <Input
+                id="property-climate"
+                value={form.climateClass}
+                onChange={(event) => updateField("climateClass", event.target.value)}
+                placeholder="4 kg eqCO2/m².an"
+              />
+            </div>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="property-description-short">Description courte</Label>
+              <Textarea
+                id="property-description-short"
+                value={form.descriptionShort}
+                onChange={(event) => updateField("descriptionShort", event.target.value)}
+                placeholder="Résumé visible dans les cartes du site."
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="property-description-long">Description complète</Label>
+              <Textarea
+                id="property-description-long"
+                value={form.descriptionLong}
+                onChange={(event) => updateField("descriptionLong", event.target.value)}
+                placeholder="Texte détaillé de présentation du bien."
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="property-features">Atouts du bien</Label>
+              <Textarea
+                id="property-features"
+                value={form.featuresText}
+                onChange={(event) => updateField("featuresText", event.target.value)}
+                placeholder={"Piscine\nTerrasse\nGarage\nVue dégagée"}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="property-photos">Photos</Label>
+              <Textarea
+                id="property-photos"
+                value={form.photosText}
+                onChange={(event) => updateField("photosText", event.target.value)}
+                placeholder={"https://exemple.fr/photo-1.jpg\nhttps://exemple.fr/photo-2.jpg"}
+              />
+              <p className="text-xs text-gray-500">{photoUrls.length} photo(s) prête(s) à être enregistrée(s).</p>
+            </div>
+          </div>
+          <label className="flex w-fit items-center gap-3 rounded-lg border border-orange-100 bg-orange-50 px-3 py-2 text-sm font-semibold text-[#111111]">
+            <input
+              type="checkbox"
+              checked={form.featured}
+              onChange={(event) => updateField("featured", event.target.checked)}
+              className="size-4 accent-orange-500"
+            />
+            Mettre ce bien à la une
+          </label>
+          {feedback ? (
+            <p
+              className={
+                feedback.type === "success"
+                  ? "rounded-md bg-emerald-50 p-3 text-sm font-medium text-emerald-800"
+                  : "rounded-md bg-red-50 p-3 text-sm font-medium text-red-700"
+              }
+            >
+              {feedback.message}
+            </p>
+          ) : null}
+          <Button
+            type="submit"
+            disabled={submitting}
+            className="h-11 w-full bg-orange-500 text-white hover:bg-orange-600 sm:w-fit"
+          >
+            <Plus className="size-4" />
+            {submitting ? "Création..." : "Créer le bien"}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PropertyManager({
+  properties,
+  setProperties,
+  expectedCode,
+  connected,
+}: {
+  properties: Property[];
+  setProperties: React.Dispatch<React.SetStateAction<Property[]>>;
+  expectedCode: string;
+  connected: boolean;
+}) {
+  const [search, setSearch] = useState("");
+  const propertyInventoryMetrics = useMemo(() => getPropertyInventoryMetrics(properties), [properties]);
+  const propertyStatusBreakdown = useMemo(() => getPropertyStatusBreakdown(properties), [properties]);
+  const propertyTypeBreakdown = useMemo(() => getPropertyTypeBreakdown(properties), [properties]);
+  const filteredProperties = properties.filter((property) => {
+    const haystack = [
+      property.reference,
+      property.mandateNumber,
+      property.title,
+      property.city,
+      property.postalCode,
+      propertyTypeLabels[property.type],
+      propertyStatusLabels[property.status],
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    return haystack.includes(search.toLowerCase());
+  });
+
+  return (
+    <div className="grid gap-6">
+      <CreatePropertyCard
+        properties={properties}
+        setProperties={setProperties}
+        expectedCode={expectedCode}
+        connected={connected}
+      />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {propertyInventoryMetrics.map((metric) => (
+          <Card key={metric.label} className="border-orange-100 bg-white">
+            <CardContent className="p-5">
+              <p className="text-sm text-gray-500">{metric.label}</p>
+              <p className="mt-2 text-2xl font-black text-[#111111]">{metric.value}</p>
+              <p className="mt-2 text-xs leading-5 text-gray-500">{metric.description}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <Card className="border-orange-100 bg-white">
+        <CardHeader>
+          <CardTitle>Source catalogue</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-2 text-sm text-gray-700">
+          <p><strong>{propertyImportSource.name}</strong></p>
+          <p>Source actuelle : <span className="font-mono text-xs">catalogue officiel + Supabase properties</span></p>
+          <p>Source cible : {propertyImportSource.futureSource}</p>
+          <p className="text-gray-500">{propertyImportSource.note}</p>
+        </CardContent>
+      </Card>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="border-orange-100 bg-white">
+          <CardHeader><CardTitle>Répartition par statut</CardTitle></CardHeader>
+          <CardContent className="grid gap-3">
+            {propertyStatusBreakdown.map((item) => (
+              <p key={item.key} className="flex items-center justify-between border-b border-orange-100 pb-2 text-sm">
+                <span>{item.label}</span>
+                <strong>{item.count}</strong>
+              </p>
+            ))}
+          </CardContent>
+        </Card>
+        <Card className="border-orange-100 bg-white">
+          <CardHeader><CardTitle>Répartition par type</CardTitle></CardHeader>
+          <CardContent className="grid gap-3">
+            {propertyTypeBreakdown.map((item) => (
+              <p key={item.key} className="flex items-center justify-between border-b border-orange-100 pb-2 text-sm">
+                <span>{item.label}</span>
+                <strong>{item.count}</strong>
+              </p>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+      <div className="relative">
+        <Search className="absolute left-3 top-2.5 size-4 text-gray-400" />
+        <Input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Rechercher un bien par référence, ville, titre ou statut"
+          className="pl-9"
+        />
+      </div>
+      {filteredProperties.length === 0 ? (
+        <Card className="border-dashed border-orange-200 bg-white">
+          <CardContent className="py-12 text-center">
+            <Building2 className="mx-auto size-9 text-orange-500" />
+            <p className="mt-4 font-bold text-[#111111]">Aucun bien trouvé</p>
+            <p className="mt-2 text-sm text-gray-600">Modifiez la recherche ou créez un nouveau bien.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2">
+          {filteredProperties.map((property) => (
+            <Card key={property.id} className="border-orange-100 bg-white">
+              <CardContent className="grid gap-4 p-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="font-mono text-xs text-gray-500">Réf. {property.reference} · Mandat {property.mandateNumber}</p>
+                    <p className="mt-1 font-bold text-[#111111]">{property.title}</p>
+                    <p className="mt-1 text-sm text-gray-600">{property.city} · {formatNumber(property.surface)} m² · {propertyTypeLabels[property.type]}</p>
+                  </div>
+                  <Badge className="border-0 bg-orange-100 text-orange-800">{propertyStatusLabels[property.status]}</Badge>
+                </div>
+                <div className="grid gap-2 text-sm text-gray-700 sm:grid-cols-4">
+                  <p><strong>Prix</strong><br />{formatPrice(property.price)}</p>
+                  <p><strong>Pièces</strong><br />{property.rooms ?? "Non renseigné"}</p>
+                  <p><strong>Photos</strong><br />{property.photos.length}</p>
+                  <p><strong>Mise en avant</strong><br />{property.featured ? "Oui" : "Non"}</p>
+                </div>
+                {property.photos.length > 0 ? (
+                  <div className="flex items-center gap-2 rounded-md bg-orange-50 p-3 text-xs text-gray-700">
+                    <ImagePlus className="size-4 text-orange-600" />
+                    Photo principale : {property.photos[0]}
+                  </div>
+                ) : null}
+                {property.sourceUrl ? (
+                  <a href={property.sourceUrl} target="_blank" rel="noreferrer" className="text-sm font-semibold text-orange-700 hover:text-orange-900">
+                    Voir l&apos;annonce source
+                  </a>
+                ) : (
+                  <p className="text-sm font-semibold text-orange-700">Bien créé dans le CRM</p>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LeadManager({ leads, setLeads, expectedCode, connected }: { leads: AdminLead[]; setLeads: React.Dispatch<React.SetStateAction<AdminLead[]>>; expectedCode: string; connected: boolean }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("ALL");
@@ -385,15 +971,13 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
   const [contactLeads, setContactLeads] = useState(() => normalizeContacts(contacts));
   const [estimationLeads, setEstimationLeads] = useState(() => normalizeEstimations(estimations));
   const [activities, setActivities] = useState(initialActivities);
+  const [propertyItems, setPropertyItems] = useState(properties);
   const metrics = useMemo(() => ({
     contacts: contactLeads.filter((lead) => !lead.archived).length,
     estimations: estimationLeads.filter((lead) => !lead.archived).length,
-    online: properties.filter((property) => property.status !== "sold").length,
-    featured: properties.filter((property) => property.featured).length,
-  }), [contactLeads, estimationLeads, properties]);
-  const propertyInventoryMetrics = useMemo(() => getPropertyInventoryMetrics(properties), [properties]);
-  const propertyStatusBreakdown = useMemo(() => getPropertyStatusBreakdown(properties), [properties]);
-  const propertyTypeBreakdown = useMemo(() => getPropertyTypeBreakdown(properties), [properties]);
+    online: propertyItems.filter((property) => property.status !== "sold").length,
+    featured: propertyItems.filter((property) => property.featured).length,
+  }), [contactLeads, estimationLeads, propertyItems]);
 
   async function unlock() {
     if (code !== expectedCode) {
@@ -404,8 +988,12 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
     setError("");
     if (connected) {
       setLoading(true);
-      const response = await fetch("/api/admin/leads", { headers: { "x-admin-code": code } });
+      const [response, propertiesResponse] = await Promise.all([
+        fetch("/api/admin/leads", { headers: { "x-admin-code": code } }),
+        fetch("/api/admin/properties", { headers: { "x-admin-code": code } }),
+      ]);
       const payload = await response.json().catch(() => null) as { message?: string; contacts?: ContactLead[]; estimations?: EstimationLead[]; activities?: Activity[] } | null;
+      const propertiesPayload = await propertiesResponse.json().catch(() => null) as { properties?: Property[] } | null;
       setLoading(false);
       if (!response.ok) {
         setError(payload?.message ?? "Le CRM n'a pas pu être chargé.");
@@ -414,6 +1002,9 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
       setContactLeads(normalizeContacts(payload?.contacts ?? []));
       setEstimationLeads(normalizeEstimations(payload?.estimations ?? []));
       setActivities(payload?.activities ?? []);
+      if (propertiesResponse.ok) {
+        setPropertyItems(mergeProperties(properties, propertiesPayload?.properties ?? []));
+      }
     }
     setUnlocked(true);
   }
@@ -460,7 +1051,9 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
             </div>
           </TabsContent>
           <TabsContent value="estimations"><LeadManager leads={estimationLeads} setLeads={setEstimationLeads} expectedCode={expectedCode} connected={connected} /></TabsContent>
-          <TabsContent value="properties"><div className="grid gap-6"><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{propertyInventoryMetrics.map((metric) => <Card key={metric.label} className="border-orange-100 bg-white"><CardContent className="p-5"><p className="text-sm text-gray-500">{metric.label}</p><p className="mt-2 text-2xl font-black text-[#111111]">{metric.value}</p><p className="mt-2 text-xs leading-5 text-gray-500">{metric.description}</p></CardContent></Card>)}</div><Card className="border-orange-100 bg-white"><CardHeader><CardTitle>Source catalogue</CardTitle></CardHeader><CardContent className="grid gap-2 text-sm text-gray-700"><p><strong>{propertyImportSource.name}</strong></p><p>Source actuelle : <span className="font-mono text-xs">{propertyImportSource.currentSource}</span></p><p>Source cible : {propertyImportSource.futureSource}</p><p className="text-gray-500">{propertyImportSource.note}</p></CardContent></Card><div className="grid gap-4 lg:grid-cols-2"><Card className="border-orange-100 bg-white"><CardHeader><CardTitle>Répartition par statut</CardTitle></CardHeader><CardContent className="grid gap-3">{propertyStatusBreakdown.map((item) => <p key={item.key} className="flex items-center justify-between border-b border-orange-100 pb-2 text-sm"><span>{item.label}</span><strong>{item.count}</strong></p>)}</CardContent></Card><Card className="border-orange-100 bg-white"><CardHeader><CardTitle>Répartition par type</CardTitle></CardHeader><CardContent className="grid gap-3">{propertyTypeBreakdown.map((item) => <p key={item.key} className="flex items-center justify-between border-b border-orange-100 pb-2 text-sm"><span>{item.label}</span><strong>{item.count}</strong></p>)}</CardContent></Card></div><div className="grid gap-4 md:grid-cols-2">{properties.map((property) => <Card key={property.id} className="border-orange-100 bg-white"><CardContent className="grid gap-4 p-5"><div className="flex items-start justify-between gap-4"><div><p className="font-mono text-xs text-gray-500">Réf. {property.reference} · Mandat {property.mandateNumber}</p><p className="mt-1 font-bold text-[#111111]">{property.title}</p><p className="mt-1 text-sm text-gray-600">{property.city} · {formatNumber(property.surface)} m² · {propertyTypeLabels[property.type]}</p></div><Badge className="border-0 bg-orange-100 text-orange-800">{propertyStatusLabels[property.status]}</Badge></div><div className="grid gap-2 text-sm text-gray-700 sm:grid-cols-3"><p><strong>Prix</strong><br />{formatPrice(property.price)}</p><p><strong>Pièces</strong><br />{property.rooms ?? "Non renseigné"}</p><p><strong>Photos</strong><br />{property.photos.length}</p></div><a href={property.sourceUrl} target="_blank" rel="noreferrer" className="text-sm font-semibold text-orange-700 hover:text-orange-900">Voir l&apos;annonce source</a></CardContent></Card>)}</div></div></TabsContent>
+          <TabsContent value="properties">
+            <PropertyManager properties={propertyItems} setProperties={setPropertyItems} expectedCode={expectedCode} connected={connected} />
+          </TabsContent>
           <TabsContent value="activities"><Card className="border-orange-100 bg-white"><CardContent className="grid gap-3 p-6">{activities.length ? activities.map((activity) => <div key={activity.id} className="border-b border-orange-100 pb-3"><p className="font-semibold text-[#111111]">{activity.action}</p><p className="mt-1 text-xs text-gray-500">{activity.entity_type} · {activity.user_name} · {new Date(activity.created_at).toLocaleString("fr-FR")}</p></div>) : <p className="text-sm text-gray-600">Aucune activité enregistrée.</p>}</CardContent></Card></TabsContent>
           <TabsContent value="statistics"><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">{pipeline.map((item) => <Card key={item.label} className="border-orange-100 bg-white"><CardContent className="p-5"><p className="text-sm text-gray-500">{item.label}</p><p className="mt-2 text-3xl font-black text-orange-600">{item.count}</p><p className="mt-2 text-xs leading-5 text-gray-500">{leadStatusDescriptions[item.key]}</p></CardContent></Card>)}</div></TabsContent>
         </Tabs>
