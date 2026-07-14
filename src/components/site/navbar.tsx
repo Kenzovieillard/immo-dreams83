@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Menu } from "lucide-react";
@@ -17,6 +18,9 @@ import { navLinks } from "./site-config";
 
 export function Navbar() {
   const pathname = usePathname();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const closeMobileMenu = () => setMobileMenuOpen(false);
 
   return (
     <header className="sticky top-0 z-40 border-b border-orange-100/80 bg-white/95 backdrop-blur-xl">
@@ -67,7 +71,7 @@ export function Navbar() {
           </Link>
         </div>
 
-        <Sheet>
+        <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
           <SheetTrigger
             render={
               <Button
@@ -90,6 +94,7 @@ export function Navbar() {
                 <Link
                   key={link.href}
                   href={link.href}
+                  onClick={closeMobileMenu}
                   className="rounded-lg px-3 py-3.5 text-base font-semibold text-gray-800 transition hover:bg-orange-50 hover:text-orange-700"
                 >
                   {link.label}
@@ -99,6 +104,7 @@ export function Navbar() {
             <div className="p-4">
               <Link
                 href="/estimation"
+                onClick={closeMobileMenu}
                 className={buttonVariants({
                   className: "h-11 w-full bg-orange-500 text-white hover:bg-orange-600",
                 })}
