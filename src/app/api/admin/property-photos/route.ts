@@ -14,9 +14,43 @@ type UploadedPhoto = {
   type: string;
 };
 
+function getDeleteUrls(payload: unknown) {
+  if (!payload || typeof payload !== "object" || !("urls" in payload)) return [];
+
+  const urls = (payload as { urls?: unknown }).urls;
+  if (!Array.isArray(urls)) return [];
+
+  return urls
+    .filter((url): url is string => typeof url === "string")
+    .map((url) => url.trim())
+    .filter(Boolean);
+}
+
 function isAuthorized(request: NextRequest) {
   const expectedCode = process.env.NEXT_PUBLIC_ADMIN_LOCAL_CODE;
   return Boolean(expectedCode && request.headers.get("x-admin-code") === expectedCode);
+}
+
+function getStoragePathFromPublicUrl(photoUrl: string) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!supabaseUrl) return null;
+
+  try {
+    const expectedUrl = new URL(supabaseUrl);
+    const publicUrl = new URL(photoUrl);
+    const publicPathPrefix = `/storage/v1/object/public/${bucketName}/`;
+
+    if (publicUrl.hostname !== expectedUrl.hostname) return null;
+    if (!publicUrl.pathname.startsWith(publicPathPrefix)) return null;
+
+    const storagePath = decodeURIComponent(publicUrl.pathname.slice(publicPathPrefix.length));
+    if (!storagePath || storagePath.startsWith("/") || storagePath.includes("..")) return null;
+    if (!storagePath.startsWith("properties/")) return null;
+
+    return storagePath;
+  } catch {
+    return null;
+  }
 }
 
 function getFileExtension(file: File) {
@@ -131,5 +165,61 @@ export async function POST(request: NextRequest) {
     success: true,
     message: `${uploadedPhotos.length} photo(s) ajoutée(s).`,
     photos: uploadedPhotos,
+  });
+}
+
+export async function DELETE(request: NextRequest) {
+  if (!isAuthorized(request)) {
+    return NextResponse.json({ success: false, message: "Accès refusé." }, { status: 401 });
+  }
+
+  const supabase = getSupabaseAdminClient();
+  if (!supabase) {
+    return NextResponse.json({ success: false, message: "Supabase serveur n'est pas configuré." }, { status: 503 });
+  }
+
+  const payload = await request.json().catch(() => null);
+  const urls = getDeleteUrls(payload);
+
+  if (urls.length === 0) {
+    return NextResponse.json(
+      { success: false, message: "Aucune photo à supprimer." },
+      { status: 400 }
+    );
+  }
+
+  const paths = Array.from(
+    new Set(
+      urls
+        .map((url) => getStoragePathFromPublicUrl(url))
+        .filter((path): path is string => Boolean(path))
+    )
+  );
+  const ignoredCount = urls.length - paths.length;
+
+  if (paths.length === 0) {
+    return NextResponse.json({
+      success: true,
+      message: "Aucune photo Supabase du site n'a été supprimée.",
+      deletedCount: 0,
+      ignoredCount,
+    });
+  }
+
+  const { data, error } = await supabase.storage.from(bucketName).remove(paths);
+
+  if (error) {
+    console.error("[IMMO-DREAMS83] Property photo delete failed", error.message);
+    return NextResponse.json(
+      { success: false, message: "Les photos supprimées de la fiche n'ont pas pu être retirées du stockage." },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json({
+    success: true,
+    message: `${data?.length ?? paths.length} photo(s) supprimée(s) du stockage Supabase.`,
+    deletedCount: data?.length ?? paths.length,
+    ignoredCount,
   });
 }

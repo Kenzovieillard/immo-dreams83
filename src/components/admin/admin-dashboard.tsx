@@ -1218,6 +1218,7 @@ function PropertyEditorCard({
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<PropertyFormState>(() => propertyToForm(property));
   const [photoOrder, setPhotoOrder] = useState<string[]>(() => property.photos);
+  const [removedPhotoUrls, setRemovedPhotoUrls] = useState<string[]>([]);
   const [selectedPhotos, setSelectedPhotos] = useState<File[]>([]);
   const [photoInputKey, setPhotoInputKey] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -1259,6 +1260,7 @@ function PropertyEditorCard({
   function resetEditor() {
     setForm(propertyToForm(property));
     setPhotoOrder(property.photos);
+    setRemovedPhotoUrls([]);
     setSelectedPhotos([]);
     setPhotoInputKey((current) => current + 1);
     setFeedback(null);
@@ -1289,6 +1291,9 @@ function PropertyEditorCard({
 
   function removePhoto(photoUrl: string) {
     setPhotoOrder((current) => current.filter((photo) => photo !== photoUrl));
+    setRemovedPhotoUrls((current) => (
+      current.includes(photoUrl) ? current : [...current, photoUrl]
+    ));
   }
 
   async function uploadAdditionalPhotos() {
@@ -1321,6 +1326,30 @@ function PropertyEditorCard({
     return [...photoOrder, ...payload.photos.map((photo) => photo.url)];
   }
 
+  async function deleteRemovedPhotos(savedPhotoUrls: string[]) {
+    const urlsToDelete = Array.from(
+      new Set(removedPhotoUrls.filter((photoUrl) => !savedPhotoUrls.includes(photoUrl)))
+    );
+
+    if (urlsToDelete.length === 0 || !connected) return true;
+
+    const response = await fetch("/api/admin/property-photos", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json", "x-admin-code": expectedCode },
+      body: JSON.stringify({ urls: urlsToDelete }),
+    }).catch(() => null);
+    const payload = response
+      ? ((await response.json().catch(() => null)) as { message?: string } | null)
+      : null;
+
+    if (!response?.ok) {
+      setFeedback(payload?.message ?? "Le bien est enregistré, mais les photos supprimées n'ont pas pu être retirées du stockage.");
+      return false;
+    }
+
+    return true;
+  }
+
   async function saveEditor(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFeedback(null);
@@ -1339,13 +1368,21 @@ function PropertyEditorCard({
 
     const updatedProperty = buildUpdatedProperty(property, form, photoUrls);
     const saved = await onPersist(updatedProperty);
+
+    if (!saved) {
+      setSaving(false);
+      return;
+    }
+
+    const deletedFromStorage = await deleteRemovedPhotos(photoUrls);
     setSaving(false);
 
-    if (saved) {
-      setSelectedPhotos([]);
-      setPhotoInputKey((current) => current + 1);
-      setEditing(false);
-    }
+    if (!deletedFromStorage) return;
+
+    setRemovedPhotoUrls([]);
+    setSelectedPhotos([]);
+    setPhotoInputKey((current) => current + 1);
+    setEditing(false);
   }
 
   async function quickUpdate(updates: Partial<Pick<Property, "status" | "featured">>) {
@@ -1412,6 +1449,7 @@ function PropertyEditorCard({
             onClick={() => {
               setForm(propertyToForm(property));
               setPhotoOrder(property.photos);
+              setRemovedPhotoUrls([]);
               setEditing((current) => !current);
             }}
           >
@@ -1539,6 +1577,12 @@ function PropertyEditorCard({
                 </Badge>
               </div>
 
+              {removedPhotoUrls.length > 0 ? (
+                <p className="rounded-md border border-red-100 bg-red-50 p-3 text-xs font-medium text-red-700">
+                  {removedPhotoUrls.length} photo(s) en attente de suppression définitive après sauvegarde.
+                </p>
+              ) : null}
+
               {photoOrder.length > 0 ? (
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   {photoOrder.map((photo, index) => (
@@ -1599,7 +1643,7 @@ function PropertyEditorCard({
                             type="button"
                             variant="outline"
                             size="icon"
-                            title="Supprimer cette photo"
+                            title="Supprimer cette photo de la fiche et du stockage après sauvegarde"
                             onClick={() => removePhoto(photo)}
                             className="h-9 border-red-200 text-red-600 hover:bg-red-50"
                           >
