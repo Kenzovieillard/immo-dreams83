@@ -2,35 +2,63 @@
 
 ## Source
 
-Les biens publics de la V2.5 proviennent des annonces officielles IMMO-DREAMS83 et sont actuellement versionnés dans `src/data/properties.ts`.
+Le catalogue public V2.5 est compose de deux sources :
 
-## Inventaire importé
+1. les biens officiels initiaux versionnes dans `src/data/properties.ts` ;
+2. les biens crees ou modifies depuis le CRM et stockes dans Supabase.
 
-| Référence | Type | Ville | Statut | Prix |
+Les biens Supabase sont fusionnes avec le catalogue initial pour alimenter le site public.
+
+## Inventaire initial importe
+
+| Reference | Type | Ville | Statut | Prix |
 | --- | --- | --- | --- | --- |
-| 099 | Maison | Carqueiranne | Disponible | 1 595 000 € |
-| 67 | Maison | Toulon | Disponible | 830 000 € |
-| 101 | Maison | Hyères | Sous offre | 379 000 € |
-| 091 | Terrain | Pierrefeu-du-Var | Sous offre | 309 000 € |
-| 093bis | Appartement | Solliès-Pont | Sous offre | 298 000 € |
-| 066 | Terrain | Solliès-Pont | Disponible | 273 000 € |
-| 103 | Appartement | Hyères | Disponible | 249 000 € |
-| 102 | Appartement | Hyères | Disponible | 209 000 € |
-| 098 | Appartement | Cuers | Sous offre | 170 000 € |
-| 72 | Appartement | Toulon | Disponible | 167 000 € |
-| 71 | Appartement | Toulon | Disponible | 144 000 € |
-| 73 | Appartement | Toulon | Disponible | 79 000 € |
+| 099 | Maison | Carqueiranne | Disponible | 1 595 000 EUR |
+| 67 | Maison | Toulon | Disponible | 830 000 EUR |
+| 101 | Maison | Hyeres | Sous offre | 379 000 EUR |
+| 091 | Terrain | Pierrefeu-du-Var | Sous offre | 309 000 EUR |
+| 093bis | Appartement | Sollies-Pont | Sous offre | 298 000 EUR |
+| 066 | Terrain | Sollies-Pont | Disponible | 273 000 EUR |
+| 103 | Appartement | Hyeres | Disponible | 249 000 EUR |
+| 102 | Appartement | Hyeres | Disponible | 209 000 EUR |
+| 098 | Appartement | Cuers | Sous offre | 170 000 EUR |
+| 72 | Appartement | Toulon | Disponible | 167 000 EUR |
+| 71 | Appartement | Toulon | Disponible | 144 000 EUR |
+| 73 | Appartement | Toulon | Disponible | 79 000 EUR |
 
-## Migration Supabase prévue
+## Champs couverts par Supabase
 
-La table `properties` du fichier `supabase/schema.sql` est alignée avec le modèle TypeScript :
+La table `properties` couvre :
 
-- références et mandats ;
-- type, statut et transaction ;
-- prix, surfaces et pièces ;
-- diagnostics énergie/climat ;
-- descriptions, photos et caractéristiques ;
-- URL source officielle.
+- reference et numero de mandat ;
+- slug public ;
+- titre ;
+- type de bien : appartement, maison, terrain ;
+- statut : disponible, sous offre, vendu ;
+- ville et code postal ;
+- prix affiche honoraires inclus ;
+- surface habitable ou surface terrain ;
+- pieces, chambres et salles d'eau ;
+- DPE/GES ou mention "Non soumis" pour les terrains ;
+- descriptions courte et complete ;
+- atouts et options terrain ;
+- photos ;
+- mise en avant ;
+- URL source si le bien vient d'une annonce existante.
 
-La V3 pourra remplacer la source `src/data/properties.ts` par Supabase, puis ajouter l'édition des biens, l'upload photo et les exports portails.
+## Gestion depuis le CRM
 
+Le CRM permet maintenant :
+
+- de creer un nouveau bien avec reference automatique ;
+- de modifier un bien deja existant ;
+- d'ajouter des photos depuis l'ordinateur ;
+- de reordonner la galerie ;
+- de choisir la photo principale ;
+- de supprimer du Storage les photos retirees ;
+- de passer un bien en disponible, sous offre ou vendu ;
+- de le mettre ou retirer de la une.
+
+## Limite V2.5
+
+Les biens initiaux restent dans `src/data/properties.ts`. La V3 devra faire de Supabase la source unique du catalogue, avec import/export et historique complet.

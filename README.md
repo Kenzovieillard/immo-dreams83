@@ -1,27 +1,31 @@
 # IMMO-DREAMS83
 
-Plateforme immobilière responsive de l'agence IMMO-DREAMS83, située à Solliès-Pont et spécialisée dans la vente et l'estimation de maisons, appartements et terrains dans le Var.
+Plateforme immobiliere responsive de l'agence IMMO-DREAMS83, situee a Sollies-Pont et specialisee dans la vente, l'achat et l'estimation de maisons, appartements et terrains dans le Var.
 
-## Fonctionnalités V2.5
+## Fonctionnalites V2.5
 
-- site vitrine premium avec pages Accueil, Agence, À vendre, Estimation, Biens et Contact ;
-- catalogue de 12 biens issus des annonces officielles de l'agence ;
+- site vitrine premium avec pages Accueil, Agence, A vendre, Estimation, Biens et Contact ;
+- catalogue public de biens officiels, complete par les biens crees dans Supabase ;
 - fiches dynamiques avec galerie, diagnostics, partage, formulaire et biens similaires ;
-- formulaires Contact et Estimation reliés à des routes API ;
-- préparation Supabase pour prospects, estimations, biens et activité ;
-- mini-CRM local sur `/admin` avec pipeline, notes, archivage, inventaire biens et création de biens ;
-- création et édition rapide de biens avec référence automatique, upload photo Supabase et aide DPE/GES ;
-- gestion de galerie photo : choix de la photo principale, réordonnancement et suppression des photos Supabase retirées de la fiche ;
-- pilotage de la disponibilité et de la mise en avant des biens depuis le CRM ;
-- options terrain sélectionnables pour qualifier bornage, constructibilité, viabilisation, servitudes, accès, risques et étude de sol ;
-- mentions légales, confidentialité, cookies, sitemap, robots et données structurées.
+- formulaires Contact et Estimation relies aux routes API et a Supabase ;
+- mini-CRM sur `/admin` avec contacts, estimations, biens, activites et statistiques ;
+- creation manuelle de contacts depuis le CRM ;
+- creation et edition de biens avec reference automatique ;
+- upload photo depuis fichiers locaux vers Supabase Storage ;
+- gestion de galerie photo : photo principale, reordonnancement et suppression Storage des photos retirees ;
+- pilotage de la disponibilite des biens : disponible, sous offre, vendu ;
+- mise a la une des biens depuis le CRM ;
+- aide DPE/GES par saisie numerique, avec formatage automatique ;
+- mode terrain avec informations specifiques : bornage, constructibilite, viabilisation, acces, servitudes, risques et etude de sol ;
+- correctifs responsive mobile, dont la prevention du zoom Safari sur les champs ;
+- mentions legales, confidentialite, cookies, sitemap, robots et donnees structurees.
 
 ## Stack
 
-- Next.js App Router et TypeScript strict ;
+- Next.js App Router et TypeScript ;
 - Tailwind CSS et shadcn/ui ;
-- Supabase pour les prospects, l'activité et la future gestion des biens ;
-- Vercel pour l'hébergement.
+- Supabase pour les prospects, estimations, biens, activites et photos ;
+- Vercel pour l'hebergement.
 
 ## Lancer le projet
 
@@ -34,9 +38,13 @@ Ouvrir ensuite `http://127.0.0.1:3000`.
 
 ## Configuration Supabase
 
-1. Créer un projet Supabase.
+1. Creer un projet Supabase.
 2. Copier `.env.example` vers `.env.local`.
-3. Renseigner les variables suivantes sans commiter `.env.local` :
+3. Renseigner les variables sans commiter `.env.local`.
+4. Executer `supabase/schema.sql` dans l'editeur SQL Supabase.
+5. Verifier que les tables `contacts`, `estimations`, `properties`, `activities` et le bucket `property-photos` existent.
+
+Variables attendues :
 
 ```text
 NEXT_PUBLIC_SITE_URL=
@@ -44,30 +52,33 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 NEXT_PUBLIC_ADMIN_LOCAL_CODE=
+CONTACT_RECEIVER_EMAIL=
+EMAIL_FROM=
+EMAIL_API_KEY=
 ```
 
-4. Exécuter le fichier `supabase/schema.sql` dans l'éditeur SQL Supabase.
-
-La clé `SUPABASE_SERVICE_ROLE_KEY` reste strictement côté serveur. Elle permet au CRM de lire et modifier les prospects malgré les règles de sécurité RLS.
+La cle `SUPABASE_SERVICE_ROLE_KEY` reste strictement cote serveur. Elle permet au CRM de lire et modifier les prospects, biens et photos malgre les regles RLS.
 
 ## Comment utiliser le CRM
 
 1. Ouvrir `/admin`.
 2. Entrer la valeur de `NEXT_PUBLIC_ADMIN_LOCAL_CODE`.
-3. Consulter les contacts, estimations, biens, activités et statistiques.
+3. Consulter les contacts, estimations, biens, activites et statistiques.
 4. Modifier un statut, ajouter une note ou archiver un prospect.
-5. Créer ou modifier un bien avec ses photos, son prix affiché honoraires inclus, son statut et sa mise en avant.
+5. Creer un contact manuel si une demande arrive par telephone ou en agence.
+6. Creer ou modifier un bien avec prix FAI, statut, photos, DPE/GES, options terrain et mise en avant.
+7. Verifier ensuite le rendu public sur Accueil, Biens et la fiche detail.
 
 Sans Supabase, l'interface affiche le mode local et conserve les changements uniquement pendant la session courante.
-
-Si `NEXT_PUBLIC_ADMIN_LOCAL_CODE` n'est pas configuré, l'administration reste verrouillée et affiche un état de configuration requise.
 
 ## Documentation V2.5
 
 - Setup technique : `docs/V2_5_SETUP.md`
-- Inventaire des annonces importées : `docs/PROPERTY_IMPORTS.md`
+- Recette mobile et CRM : `docs/V2_5_RECETTE.md`
+- Inventaire des annonces importees : `docs/PROPERTY_IMPORTS.md`
+- Objectifs V3 : `docs/V3.md`
 
-## Vérifications
+## Verifications
 
 ```bash
 npm run lint
@@ -77,12 +88,13 @@ npm run build
 ## Limites actuelles
 
 - la protection de `/admin` est temporaire et ne remplace pas une authentification ;
-- aucun fournisseur d'email n'est activé ;
-- le catalogue initial reste versionné dans `src/data/properties.ts` ;
-- la suppression des biens n'est pas encore disponible dans le CRM ;
-- la carte présente une localisation indicative ;
-- l'aide DPE/GES du CRM ne remplace pas le diagnostic officiel fourni par un diagnostiqueur certifié.
+- aucun fournisseur email reel n'est active ;
+- le catalogue initial reste versionne dans `src/data/properties.ts`, meme si les nouveaux biens viennent de Supabase ;
+- la suppression definitive d'un bien complet n'est pas encore disponible dans le CRM ;
+- la suppression photo est definitive, sans corbeille temporaire ;
+- la carte presente une localisation indicative ;
+- l'aide DPE/GES ne remplace pas le diagnostic officiel fourni par un diagnostiqueur certifie.
 
-## Prochaine amélioration
+## Prochaine amelioration
 
-La V3 devra ajouter une authentification avec rôles, la suppression contrôlée des biens, l'envoi d'emails transactionnels et les flux de multidiffusion vers les portails immobiliers.
+La V3 devra transformer ce socle en vrai outil d'exploitation : authentification, roles, suppression controlee des biens, emails transactionnels, rappels commerciaux, corbeille et preparation des flux de multidiffusion.

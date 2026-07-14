@@ -2,42 +2,95 @@
 
 ## Objectif
 
-Préparer une base propre pour exploiter les demandes clients, les estimations et le catalogue de biens officiels depuis Supabase, sans ajouter encore d'authentification complète ni de back-office d'édition.
+La V2.5 sert a rendre le site exploitable au quotidien avec un premier CRM : demandes clients, estimations, biens, photos, statuts et mise en avant. Elle reste volontairement simple : pas encore d'authentification complete, pas encore de suppression definitive des biens et pas encore d'envoi email reel.
 
-## Données officielles
+## Architecture actuelle
 
-- Informations agence : `src/components/site/site-config.ts`
-- Catalogue public : `src/data/properties.ts`
-- Fondations de pilotage biens : `src/lib/property-management.ts`
-- Statuts CRM partagés : `src/lib/crm.ts`
+- Site public : `src/app`
+- Composants publics : `src/components/site`
+- Formulaires : `src/components/forms`
+- CRM : `src/components/admin/admin-dashboard.tsx`
+- Routes API CRM : `src/app/api/admin`
+- Routes API publiques : `src/app/api/contact` et `src/app/api/estimation`
+- Donnees initiales des biens : `src/data/properties.ts`
+- Schema Supabase : `supabase/schema.sql`
+
+## Donnees agence
+
+- Configuration agence : `src/components/site/site-config.ts`
+- SEO et donnees structurees : `src/app/layout.tsx`, `src/lib/schema.ts`
+- Pages legales : `src/app/mentions-legales`, `src/app/legal/privacy-policy`, `src/app/legal/cookies`
 
 ## Supabase
 
-1. Créer un projet Supabase.
+1. Creer ou ouvrir le projet Supabase.
 2. Copier `.env.example` vers `.env.local`.
-3. Remplir les variables Supabase sans commiter `.env.local`.
-4. Exécuter `supabase/schema.sql` dans l'éditeur SQL Supabase.
-5. Vérifier que les tables `contacts`, `estimations`, `properties` et `activities` existent.
+3. Remplir les variables Supabase et le code CRM local.
+4. Executer `supabase/schema.sql` dans l'editeur SQL Supabase.
+5. Verifier les tables :
+   - `contacts`
+   - `estimations`
+   - `properties`
+   - `activities`
+6. Verifier le bucket Storage :
+   - `property-photos`
 
-## CRM temporaire
+Le script SQL est concu pour etre relance : il utilise `create table if not exists`, `add column if not exists`, des index idempotents et des politiques RLS remplacees proprement.
+
+## Variables attendues
+
+```text
+NEXT_PUBLIC_SITE_URL=https://immo-dreams83.vercel.app
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+NEXT_PUBLIC_ADMIN_LOCAL_CODE=
+CONTACT_RECEIVER_EMAIL=
+EMAIL_FROM=
+EMAIL_API_KEY=
+```
+
+Important : `SUPABASE_SERVICE_ROLE_KEY` ne doit jamais etre exposee cote client. Elle est utilisee uniquement dans les routes API serveur.
+
+## CRM V2.5
 
 Le CRM est disponible sur `/admin`.
 
-- `NEXT_PUBLIC_ADMIN_LOCAL_CODE` sert uniquement de verrou temporaire.
-- Les vraies règles de sécurité devront passer par une authentification V3.
-- Les routes API utilisent `SUPABASE_SERVICE_ROLE_KEY` côté serveur pour lire et mettre à jour les prospects.
+Il permet de :
+
+- consulter les contacts et estimations ;
+- creer un contact manuel ;
+- changer les statuts des leads ;
+- ajouter des notes internes ;
+- archiver un prospect ;
+- voir l'activite recente ;
+- creer un bien ;
+- modifier un bien existant ;
+- uploader des photos depuis un fichier local ;
+- reordonner les photos ;
+- choisir la photo principale ;
+- supprimer du Storage les photos retirees ;
+- changer le statut d'un bien ;
+- mettre ou retirer un bien de la selection a la une.
+
+## Prix FAI
+
+Dans le CRM, le champ "Prix affiche honoraires inclus" correspond au prix public affiche sur le site. C'est le prix de vente presente au visiteur, honoraires d'agence inclus. Il ne correspond pas aux frais de notaire.
 
 ## Limites actuelles
 
-- Les biens sont encore versionnés dans `src/data/properties.ts`.
-- L'édition des biens depuis `/admin` n'est pas encore active.
-- L'envoi email est préparé mais aucun fournisseur n'est branché.
-- Le verrou CRM local ne remplace pas une authentification sécurisée.
+- La protection de `/admin` repose encore sur un code local.
+- Les roles utilisateurs ne sont pas encore disponibles.
+- L'envoi email est prepare mais aucun fournisseur n'est branche.
+- La suppression complete d'un bien n'est pas encore exposee dans le CRM.
+- La suppression photo est definitive, sans corbeille temporaire.
+- Les biens initiaux restent versionnes dans `src/data/properties.ts`.
 
-## Tests
+## Verifications
 
 ```bash
 npm run lint
 npm run build
 ```
 
+Pour la validation fonctionnelle, utiliser `docs/V2_5_RECETTE.md`.
