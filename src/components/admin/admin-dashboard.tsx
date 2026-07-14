@@ -7,6 +7,7 @@ import {
   Building2,
   ClipboardCheck,
   ContactRound,
+  Info,
   KeyRound,
   LayoutDashboard,
   ImagePlus,
@@ -35,16 +36,35 @@ import {
 } from "@/data/properties";
 import { leadStatusDescriptions, leadStatusLabels, leadStatuses } from "@/lib/crm";
 import {
+  climateUnit,
+  dpeBadgeClasses,
+  dpeLetters,
+  energyUnit,
+  formatClimateDiagnostic,
+  formatEnergyDiagnostic,
+  getClimateAssessment,
+  getEnergyAssessment,
+  getPropertyDpePosition,
+} from "@/lib/dpe";
+import {
   getPropertyInventoryMetrics,
   getPropertyStatusBreakdown,
   getPropertyTypeBreakdown,
   propertyImportSource,
 } from "@/lib/property-management";
+import { cn } from "@/lib/utils";
 import type { Activity, ContactLead, EstimationLead, LeadStatus } from "@/types/crm";
 
 const contactRequestTypes = ["Achat", "Vente", "Estimation", "Terrain", "Autre"] as const;
 const propertyTypes = ["apartment", "house", "land"] as const satisfies PropertyType[];
 const propertyStatuses = ["available", "under_offer", "sold"] as const satisfies PropertyStatus[];
+const landSaleChecklist = [
+  "Surface cadastrale, limites et bornage à confirmer",
+  "Constructibilité à vérifier avec le PLU ou certificat d'urbanisme",
+  "Viabilisation et accès aux réseaux à préciser",
+  "Servitudes, accès, zone de risques et contraintes éventuelles",
+  "Étude de sol à prévoir selon le secteur et le projet",
+];
 
 type AdminLead = {
   id: string;
@@ -185,6 +205,7 @@ function formatFileSize(size: number) {
 function buildLocalProperty(form: PropertyFormState, currentProperties: Property[], photoUrls: string[]): Property {
   const now = new Date().toISOString();
   const reference = getNextLocalReference(currentProperties);
+  const isLand = form.type === "land";
   const id =
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
@@ -203,12 +224,12 @@ function buildLocalProperty(form: PropertyFormState, currentProperties: Property
     price: toNumberOrNull(form.price) ?? 0,
     feesIncluded: true,
     surface: toNumberOrNull(form.surface) ?? 0,
-    landSurface: toNumberOrNull(form.landSurface),
-    rooms: toNumberOrNull(form.rooms),
-    bedrooms: toNumberOrNull(form.bedrooms),
-    bathrooms: toNumberOrNull(form.bathrooms),
-    energyClass: form.energyClass.trim() || "Non renseigné",
-    climateClass: form.climateClass.trim() || "Non renseigné",
+    landSurface: isLand ? toNumberOrNull(form.surface) : toNumberOrNull(form.landSurface),
+    rooms: isLand ? null : toNumberOrNull(form.rooms),
+    bedrooms: isLand ? null : toNumberOrNull(form.bedrooms),
+    bathrooms: isLand ? null : toNumberOrNull(form.bathrooms),
+    energyClass: isLand ? "Non soumis" : formatEnergyDiagnostic(form.energyClass),
+    climateClass: isLand ? "Non soumis" : formatClimateDiagnostic(form.climateClass),
     descriptionShort: form.descriptionShort.trim(),
     descriptionLong: form.descriptionLong.trim() || form.descriptionShort.trim(),
     features: parseMultilineValues(form.featuresText),
@@ -474,9 +495,30 @@ function CreatePropertyCard({
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const nextReference = getNextLocalReference(properties);
+  const isLand = form.type === "land";
+  const energyAssessment = isLand ? null : getEnergyAssessment(form.energyClass);
+  const climateAssessment = isLand ? null : getClimateAssessment(form.climateClass);
+  const dpePosition = isLand ? null : getPropertyDpePosition(form.energyClass, form.climateClass);
 
   function updateField(field: keyof PropertyFormState, value: string | boolean) {
     setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function updatePropertyType(value: PropertyType) {
+    setForm((current) => ({
+      ...current,
+      type: value,
+      ...(value === "land"
+        ? {
+            landSurface: "",
+            rooms: "",
+            bedrooms: "",
+            bathrooms: "",
+            energyClass: "",
+            climateClass: "",
+          }
+        : {}),
+    }));
   }
 
   function hasRequiredFields() {
@@ -629,7 +671,7 @@ function CreatePropertyCard({
               <Label>Type de bien</Label>
               <Select
                 value={form.type}
-                onValueChange={(value) => updateField("type", value as PropertyType)}
+                onValueChange={(value) => updatePropertyType(value as PropertyType)}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue />
@@ -690,74 +732,198 @@ function CreatePropertyCard({
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="property-surface">Surface habitable</Label>
+              <Label htmlFor="property-surface">
+                {isLand ? "Surface du terrain" : "Surface habitable"}
+              </Label>
               <Input
                 id="property-surface"
                 inputMode="decimal"
                 value={form.surface}
                 onChange={(event) => updateField("surface", event.target.value)}
-                placeholder="120"
+                placeholder={isLand ? "650" : "120"}
               />
+              <p className="text-xs text-gray-500">
+                {isLand ? "Surface du terrain en m²." : "Surface habitable en m²."}
+              </p>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="property-land-surface">Surface terrain</Label>
-              <Input
-                id="property-land-surface"
-                inputMode="decimal"
-                value={form.landSurface}
-                onChange={(event) => updateField("landSurface", event.target.value)}
-                placeholder="650"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="property-rooms">Pièces</Label>
-              <Input
-                id="property-rooms"
-                inputMode="numeric"
-                value={form.rooms}
-                onChange={(event) => updateField("rooms", event.target.value)}
-                placeholder="5"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="property-bedrooms">Chambres</Label>
-              <Input
-                id="property-bedrooms"
-                inputMode="numeric"
-                value={form.bedrooms}
-                onChange={(event) => updateField("bedrooms", event.target.value)}
-                placeholder="3"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="property-bathrooms">Salles d&apos;eau</Label>
-              <Input
-                id="property-bathrooms"
-                inputMode="numeric"
-                value={form.bathrooms}
-                onChange={(event) => updateField("bathrooms", event.target.value)}
-                placeholder="2"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="property-energy">Classe énergie</Label>
-              <Input
-                id="property-energy"
-                value={form.energyClass}
-                onChange={(event) => updateField("energyClass", event.target.value)}
-                placeholder="120 kWhEP/m².an"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="property-climate">Classe climat</Label>
-              <Input
-                id="property-climate"
-                value={form.climateClass}
-                onChange={(event) => updateField("climateClass", event.target.value)}
-                placeholder="4 kg eqCO2/m².an"
-              />
-            </div>
+            {!isLand ? (
+              <>
+                <div className="grid gap-2">
+                  <Label htmlFor="property-land-surface">Surface terrain</Label>
+                  <Input
+                    id="property-land-surface"
+                    inputMode="decimal"
+                    value={form.landSurface}
+                    onChange={(event) => updateField("landSurface", event.target.value)}
+                    placeholder="650"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="property-rooms">Pièces</Label>
+                  <Input
+                    id="property-rooms"
+                    inputMode="numeric"
+                    value={form.rooms}
+                    onChange={(event) => updateField("rooms", event.target.value)}
+                    placeholder="5"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="property-bedrooms">Chambres</Label>
+                  <Input
+                    id="property-bedrooms"
+                    inputMode="numeric"
+                    value={form.bedrooms}
+                    onChange={(event) => updateField("bedrooms", event.target.value)}
+                    placeholder="3"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="property-bathrooms">Salles d&apos;eau</Label>
+                  <Input
+                    id="property-bathrooms"
+                    inputMode="numeric"
+                    value={form.bathrooms}
+                    onChange={(event) => updateField("bathrooms", event.target.value)}
+                    placeholder="2"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="property-energy">Consommation énergie</Label>
+                  <div className="relative">
+                    <Input
+                      id="property-energy"
+                      inputMode="decimal"
+                      value={form.energyClass}
+                      onChange={(event) => updateField("energyClass", event.target.value)}
+                      placeholder="120"
+                      className="pr-32"
+                    />
+                    <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[11px] font-semibold text-gray-500 sm:text-xs">
+                      {energyUnit}
+                    </span>
+                  </div>
+                  {energyAssessment ? (
+                    <p className="text-xs font-medium text-gray-600">
+                      Classe {energyAssessment.letter} · tranche {energyAssessment.range} {energyAssessment.unit}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-500">Entrez uniquement le nombre du diagnostic.</p>
+                  )}
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="property-climate">Émissions climat</Label>
+                  <div className="relative">
+                    <Input
+                      id="property-climate"
+                      inputMode="decimal"
+                      value={form.climateClass}
+                      onChange={(event) => updateField("climateClass", event.target.value)}
+                      placeholder="4"
+                      className="pr-36"
+                    />
+                    <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[11px] font-semibold text-gray-500 sm:text-xs">
+                      {climateUnit}
+                    </span>
+                  </div>
+                  {climateAssessment ? (
+                    <p className="text-xs font-medium text-gray-600">
+                      Classe {climateAssessment.letter} · tranche {climateAssessment.range} {climateAssessment.unit}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-500">Entrez uniquement le nombre du diagnostic GES.</p>
+                  )}
+                </div>
+              </>
+            ) : null}
           </div>
+          {!isLand ? (
+            <div className="grid gap-4 rounded-xl border border-orange-100 bg-orange-50/60 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-sm font-bold text-[#111111]">Baromètre DPE automatique</p>
+                  <p className="mt-1 text-sm leading-6 text-gray-600">
+                    La position retenue correspond au résultat le plus défavorable entre énergie et climat.
+                  </p>
+                </div>
+                {dpePosition ? (
+                  <Badge className={cn("w-fit border-0 px-3 py-1 text-sm", dpeBadgeClasses[dpePosition.letter])}>
+                    Classe {dpePosition.letter}
+                  </Badge>
+                ) : (
+                  <Badge className="w-fit border border-orange-100 bg-white text-gray-700">
+                    En attente de saisie
+                  </Badge>
+                )}
+              </div>
+              <div className="grid grid-cols-7 gap-1">
+                {dpeLetters.map((letter) => {
+                  const isActive = dpePosition?.letter === letter;
+
+                  return (
+                    <div
+                      key={letter}
+                      className={cn(
+                        "rounded-md px-2 py-2 text-center text-xs font-black shadow-sm ring-offset-2 transition",
+                        dpeBadgeClasses[letter],
+                        isActive ? "scale-105 ring-2 ring-orange-500" : "opacity-70"
+                      )}
+                    >
+                      {letter}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-lg border border-orange-100 bg-white p-3">
+                  <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
+                    Énergie
+                  </p>
+                  {energyAssessment ? (
+                    <p className="mt-1 text-sm font-semibold text-[#111111]">
+                      {energyAssessment.value} {energyAssessment.unit} · classe {energyAssessment.letter}
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-sm text-gray-600">Valeur énergie non renseignée.</p>
+                  )}
+                </div>
+                <div className="rounded-lg border border-orange-100 bg-white p-3">
+                  <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
+                    Climat
+                  </p>
+                  {climateAssessment ? (
+                    <p className="mt-1 text-sm font-semibold text-[#111111]">
+                      {climateAssessment.value} {climateAssessment.unit} · classe {climateAssessment.letter}
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-sm text-gray-600">Valeur climat non renseignée.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-orange-100 bg-orange-50/70 p-4">
+              <div className="flex items-start gap-3">
+                <span className="mt-0.5 rounded-lg bg-white p-2 text-orange-600">
+                  <Info className="size-5" />
+                </span>
+                <div>
+                  <p className="text-sm font-bold text-[#111111]">Mode terrain sélectionné</p>
+                  <p className="mt-1 text-sm leading-6 text-gray-600">
+                    Le DPE n&apos;est pas demandé ici. La fiche met plutôt l&apos;accent sur les informations utiles à la vente d&apos;un terrain.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                {landSaleChecklist.map((item) => (
+                  <div key={item} className="flex gap-2 rounded-lg border border-orange-100 bg-white p-3 text-sm text-gray-700">
+                    <ListChecks className="mt-0.5 size-4 shrink-0 text-orange-500" />
+                    <span>{item}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor="property-description-short">Description courte</Label>
@@ -783,7 +949,11 @@ function CreatePropertyCard({
                 id="property-features"
                 value={form.featuresText}
                 onChange={(event) => updateField("featuresText", event.target.value)}
-                placeholder={"Piscine\nTerrasse\nGarage\nVue dégagée"}
+                placeholder={
+                  isLand
+                    ? "Terrain constructible\nViabilisation à préciser\nBornage à confirmer\nLibre constructeur"
+                    : "Piscine\nTerrasse\nGarage\nVue dégagée"
+                }
               />
             </div>
             <div className="grid gap-2">

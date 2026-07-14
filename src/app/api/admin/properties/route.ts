@@ -11,6 +11,7 @@ import {
   hasRequiredValue,
   isPositiveNumberLike,
 } from "@/lib/lead-validation";
+import { formatClimateDiagnostic, formatEnergyDiagnostic, parseDiagnosticValue } from "@/lib/dpe";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 
 const propertyTypes = ["apartment", "house", "land"] as const satisfies PropertyType[];
@@ -177,6 +178,12 @@ function validatePropertyPayload(payload: unknown) {
   if (!hasRequiredValue(postalCode)) fieldErrors.postalCode = "Le code postal est obligatoire.";
   if (!isPositiveNumberLike(price)) fieldErrors.price = "Le prix doit être supérieur à 0.";
   if (!isPositiveNumberLike(surface)) fieldErrors.surface = "La surface doit être supérieure à 0.";
+  if (type !== "land" && energyClass && parseDiagnosticValue(energyClass) === null) {
+    fieldErrors.energyClass = "La consommation énergie doit être un nombre.";
+  }
+  if (type !== "land" && climateClass && parseDiagnosticValue(climateClass) === null) {
+    fieldErrors.climateClass = "La classe climat doit être un nombre.";
+  }
   if (!hasRequiredValue(descriptionShort)) {
     fieldErrors.descriptionShort = "La description courte est obligatoire.";
   }
@@ -270,6 +277,7 @@ export async function POST(request: NextRequest) {
     ...((existingProperties ?? []) as Array<{ reference: string }>).map((property) => property.reference),
   ]);
   const slug = `${slugify(data.title)}-${slugify(data.city)}-${data.postalCode}-ref-${reference}`;
+  const isLand = data.type === "land";
 
   const { data: property, error } = await supabase
     .from("properties")
@@ -286,12 +294,12 @@ export async function POST(request: NextRequest) {
       price: toRequiredNumber(data.price),
       fees_included: true,
       surface: toRequiredNumber(data.surface),
-      land_surface: toNullableNumber(data.landSurface),
-      rooms: toNullableNumber(data.rooms),
-      bedrooms: toNullableNumber(data.bedrooms),
-      bathrooms: toNullableNumber(data.bathrooms),
-      energy_class: data.energyClass || "Non renseigné",
-      climate_class: data.climateClass || "Non renseigné",
+      land_surface: isLand ? toRequiredNumber(data.surface) : toNullableNumber(data.landSurface),
+      rooms: isLand ? null : toNullableNumber(data.rooms),
+      bedrooms: isLand ? null : toNullableNumber(data.bedrooms),
+      bathrooms: isLand ? null : toNullableNumber(data.bathrooms),
+      energy_class: isLand ? "Non soumis" : formatEnergyDiagnostic(data.energyClass),
+      climate_class: isLand ? "Non soumis" : formatClimateDiagnostic(data.climateClass),
       description_short: data.descriptionShort,
       description_long: data.descriptionLong || data.descriptionShort,
       features: data.features,
