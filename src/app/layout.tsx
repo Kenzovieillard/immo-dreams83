@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Footer } from "@/components/site/footer";
+import { MobileViewportGuard } from "@/components/site/mobile-viewport-guard";
 import { Navbar } from "@/components/site/navbar";
 import { siteUrl } from "@/components/site/site-config";
 import { StructuredData } from "@/components/site/structured-data";
@@ -36,6 +37,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
   viewportFit: "cover",
   themeColor: "#f97316",
 };
@@ -44,6 +47,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="fr">
       <body className="min-h-dvh bg-background">
+        <MobileViewportGuard />
         <StructuredData data={agencySchema} />
         <Navbar />
         <main>{children}</main>
