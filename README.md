@@ -11,6 +11,7 @@ Plateforme immobilière responsive de l'agence IMMO-DREAMS83, située à Solliè
 - préparation Supabase pour prospects, estimations, biens et activité ;
 - mini-CRM local sur `/admin` avec pipeline, notes, archivage, inventaire biens et création de biens ;
 - création et édition rapide de biens avec référence automatique, upload photo Supabase et aide DPE/GES ;
+- gestion de galerie photo : choix de la photo principale, réordonnancement et retrait d'une photo de la fiche ;
 - pilotage de la disponibilité et de la mise en avant des biens depuis le CRM ;
 - options terrain sélectionnables pour qualifier bornage, constructibilité, viabilisation, servitudes, accès, risques et étude de sol ;
 - mentions légales, confidentialité, cookies, sitemap, robots et données structurées.

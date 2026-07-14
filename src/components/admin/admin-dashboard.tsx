@@ -1,8 +1,11 @@
 "use client";
 
+import Image from "next/image";
 import { useMemo, useState } from "react";
 import {
   Archive,
+  ArrowDown,
+  ArrowUp,
   BarChart3,
   Building2,
   ClipboardCheck,
@@ -17,6 +20,8 @@ import {
   Plus,
   Save,
   Search,
+  Star,
+  Trash2,
   X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -1212,6 +1217,7 @@ function PropertyEditorCard({
 }) {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<PropertyFormState>(() => propertyToForm(property));
+  const [photoOrder, setPhotoOrder] = useState<string[]>(() => property.photos);
   const [selectedPhotos, setSelectedPhotos] = useState<File[]>([]);
   const [photoInputKey, setPhotoInputKey] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -1252,14 +1258,41 @@ function PropertyEditorCard({
 
   function resetEditor() {
     setForm(propertyToForm(property));
+    setPhotoOrder(property.photos);
     setSelectedPhotos([]);
     setPhotoInputKey((current) => current + 1);
     setFeedback(null);
     setEditing(false);
   }
 
+  function movePhoto(index: number, direction: -1 | 1) {
+    setPhotoOrder((current) => {
+      const nextIndex = index + direction;
+      if (nextIndex < 0 || nextIndex >= current.length) return current;
+
+      const next = [...current];
+      const [photo] = next.splice(index, 1);
+      next.splice(nextIndex, 0, photo);
+      return next;
+    });
+  }
+
+  function setMainPhoto(index: number) {
+    setPhotoOrder((current) => {
+      if (index <= 0 || index >= current.length) return current;
+
+      const next = [...current];
+      const [photo] = next.splice(index, 1);
+      return [photo, ...next];
+    });
+  }
+
+  function removePhoto(photoUrl: string) {
+    setPhotoOrder((current) => current.filter((photo) => photo !== photoUrl));
+  }
+
   async function uploadAdditionalPhotos() {
-    if (selectedPhotos.length === 0) return property.photos;
+    if (selectedPhotos.length === 0) return photoOrder;
 
     if (!connected) {
       setFeedback("Le stockage Supabase doit être connecté pour ajouter des photos.");
@@ -1285,7 +1318,7 @@ function PropertyEditorCard({
       return null;
     }
 
-    return [...property.photos, ...payload.photos.map((photo) => photo.url)];
+    return [...photoOrder, ...payload.photos.map((photo) => photo.url)];
   }
 
   async function saveEditor(event: React.FormEvent<HTMLFormElement>) {
@@ -1378,6 +1411,7 @@ function PropertyEditorCard({
             className="h-10 border-orange-200 bg-white"
             onClick={() => {
               setForm(propertyToForm(property));
+              setPhotoOrder(property.photos);
               setEditing((current) => !current);
             }}
           >
@@ -1487,9 +1521,102 @@ function PropertyEditorCard({
                   className="h-auto cursor-pointer py-2"
                 />
                 <p className="text-xs text-gray-500">
-                  Les nouvelles photos seront ajoutées aux {property.photos.length} photo(s) existante(s).
+                  Les nouvelles photos seront ajoutées aux {photoOrder.length} photo(s) conservée(s).
                 </p>
               </div>
+            </div>
+
+            <div className="grid gap-3 rounded-xl border border-orange-100 bg-orange-50 p-3">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="text-sm font-bold text-[#111111]">Galerie du bien</p>
+                  <p className="text-xs leading-5 text-gray-600">
+                    La première photo devient automatiquement la photo principale du site.
+                  </p>
+                </div>
+                <Badge className="w-fit border-0 bg-white text-gray-700">
+                  {photoOrder.length} photo(s)
+                </Badge>
+              </div>
+
+              {photoOrder.length > 0 ? (
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {photoOrder.map((photo, index) => (
+                    <div key={photo} className="overflow-hidden rounded-lg border border-orange-100 bg-white">
+                      <div className="relative aspect-[4/3] bg-orange-100">
+                        <Image
+                          src={photo}
+                          alt={`${property.title} - photo ${index + 1}`}
+                          fill
+                          sizes="(min-width: 1280px) 220px, (min-width: 640px) 45vw, 90vw"
+                          className="object-cover"
+                        />
+                        {index === 0 ? (
+                          <Badge className="absolute left-2 top-2 border-0 bg-orange-500 text-white">
+                            Photo principale
+                          </Badge>
+                        ) : null}
+                      </div>
+                      <div className="grid gap-2 p-3">
+                        <p className="truncate font-mono text-[11px] text-gray-500">
+                          Position {index + 1}
+                        </p>
+                        <div className="grid grid-cols-4 gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            disabled={index === 0}
+                            title="Monter la photo"
+                            onClick={() => movePhoto(index, -1)}
+                            className="h-9 border-orange-200"
+                          >
+                            <ArrowUp className="size-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            disabled={index === photoOrder.length - 1}
+                            title="Descendre la photo"
+                            onClick={() => movePhoto(index, 1)}
+                            className="h-9 border-orange-200"
+                          >
+                            <ArrowDown className="size-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            disabled={index === 0}
+                            title="Définir comme photo principale"
+                            onClick={() => setMainPhoto(index)}
+                            className="h-9 border-orange-200"
+                          >
+                            <Star className="size-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            title="Supprimer cette photo"
+                            onClick={() => removePhoto(photo)}
+                            className="h-9 border-red-200 text-red-600 hover:bg-red-50"
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed border-orange-200 bg-white p-6 text-center">
+                  <ImagePlus className="mx-auto size-8 text-orange-500" />
+                  <p className="mt-2 text-sm font-semibold text-[#111111]">Aucune photo conservée</p>
+                  <p className="mt-1 text-xs text-gray-500">Ajoutez au moins une photo pour une fiche plus attractive.</p>
+                </div>
+              )}
             </div>
 
             {feedback ? <p className="rounded-md bg-red-50 p-3 text-sm font-medium text-red-700">{feedback}</p> : null}
