@@ -31,7 +31,7 @@ export function PropertyCard({ property, priority = false }: PropertyCardProps) 
     "https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?auto=format&fit=crop&w=1200&q=80";
 
   return (
-    <Card className="group overflow-hidden border-orange-100 bg-white py-0 shadow-sm shadow-orange-100/60 transition duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-orange-200/50">
+    <Card className="group flex h-full overflow-hidden border-orange-100 bg-white py-0 shadow-sm shadow-orange-100/60 transition duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-orange-200/50">
       <Link href={detailHref} className="relative block aspect-[16/11] overflow-hidden bg-orange-50 sm:aspect-[4/3]">
         <Image
           src={mainPhoto}
@@ -79,7 +79,7 @@ export function PropertyCard({ property, priority = false }: PropertyCardProps) 
         </div>
       </CardHeader>
 
-      <CardContent className="px-4 sm:px-5">
+      <CardContent className="grow px-4 sm:px-5">
         <p className="min-h-14 text-sm leading-6 text-gray-600">
           {property.descriptionShort}
         </p>
@@ -99,7 +99,7 @@ export function PropertyCard({ property, priority = false }: PropertyCardProps) 
         </div>
       </CardContent>
 
-      <CardFooter className="border-orange-100 bg-white p-4">
+      <CardFooter className="mt-auto border-orange-100 bg-white p-4">
         <Link
           href={detailHref}
           className={buttonVariants({

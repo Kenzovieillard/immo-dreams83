@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import {
   Archive,
   ArrowDown,
@@ -41,7 +41,7 @@ import {
   propertyStatusLabels,
   propertyTypeLabels,
 } from "@/data/properties";
-import { leadStatusDescriptions, leadStatusLabels, leadStatuses } from "@/lib/crm";
+import { leadStatusLabels, leadStatuses } from "@/lib/crm";
 import {
   climateUnit,
   dpeBadgeClasses,
@@ -66,6 +66,35 @@ import type { Activity, ContactLead, EstimationLead, LeadStatus } from "@/types/
 const contactRequestTypes = ["Achat", "Vente", "Estimation", "Terrain", "Autre"] as const;
 const propertyTypes = ["apartment", "house", "land"] as const satisfies PropertyType[];
 const propertyStatuses = ["available", "under_offer", "sold"] as const satisfies PropertyStatus[];
+type AdminTab = "overview" | "contacts" | "estimations" | "properties" | "activities" | "statistics";
+type ActivityEntityTypeFilter = "ALL" | "contact" | "estimation" | "property" | "other";
+type ActivityActionFilter = "ALL" | "created" | "updated" | "archived" | "uploaded" | "deleted" | "other";
+type ActivityPeriodFilter = "ALL" | "today" | "last7days" | "last30days";
+
+const activityEntityTypeLabels: Record<ActivityEntityTypeFilter, string> = {
+  ALL: "Tous les types",
+  contact: "Contact",
+  estimation: "Estimation",
+  property: "Bien",
+  other: "Autre",
+};
+
+const activityActionLabels: Record<ActivityActionFilter, string> = {
+  ALL: "Toutes les actions",
+  created: "Création",
+  updated: "Mise à jour",
+  archived: "Archivage",
+  uploaded: "Photo ajoutée",
+  deleted: "Suppression",
+  other: "Autre",
+};
+
+const activityPeriodLabels: Record<ActivityPeriodFilter, string> = {
+  ALL: "Toutes les dates",
+  today: "Aujourd'hui",
+  last7days: "7 derniers jours",
+  last30days: "30 derniers jours",
+};
 const landSaleOptions = [
   {
     label: "Surface cadastrale et bornage",
@@ -372,6 +401,656 @@ function buildLocalProperty(form: PropertyFormState, currentProperties: Property
     updatedAt: now,
     mandateNumber: reference,
   };
+}
+
+function getActiveLeads(leads: AdminLead[]) {
+  return leads.filter((lead) => !lead.archived);
+}
+
+function getAverage(values: number[]) {
+  const cleanValues = values.filter((value) => Number.isFinite(value) && value > 0);
+  if (cleanValues.length === 0) return 0;
+  return cleanValues.reduce((total, value) => total + value, 0) / cleanValues.length;
+}
+
+function formatPercentage(value: number) {
+  if (!Number.isFinite(value)) return "Non calculable";
+  return `${Math.round(value)} %`;
+}
+
+function formatDateTime(value?: string) {
+  if (!value) return "Non renseigné";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Non renseigné";
+  return date.toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
+}
+
+function includesText(value: string, terms: string[]) {
+  const normalized = value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  return terms.some((term) => normalized.includes(term));
+}
+
+function hasMissingDiagnostics(property: Property) {
+  if (property.type === "land") return false;
+  const energy = property.energyClass.trim().toLowerCase();
+  const climate = property.climateClass.trim().toLowerCase();
+
+  return (
+    !energy ||
+    !climate ||
+    energy.includes("non renseign") ||
+    climate.includes("non renseign") ||
+    energy === "-" ||
+    climate === "-"
+  );
+}
+
+function getCityStats(properties: Property[], leads: AdminLead[]) {
+  const propertyMap = new Map<string, { city: string; count: number; totalPrice: number }>();
+  const leadMap = new Map<string, { city: string; count: number }>();
+
+  properties.forEach((property) => {
+    const key = property.city.trim().toLowerCase() || "non renseigné";
+    const current = propertyMap.get(key) ?? { city: property.city || "Non renseignée", count: 0, totalPrice: 0 };
+    current.count += 1;
+    current.totalPrice += property.price;
+    propertyMap.set(key, current);
+  });
+
+  leads.forEach((lead) => {
+    const city = lead.city.replace(/\s*\([^)]*\)/g, "").trim() || "Non renseignée";
+    const key = city.toLowerCase();
+    const current = leadMap.get(key) ?? { city, count: 0 };
+    current.count += 1;
+    leadMap.set(key, current);
+  });
+
+  return {
+    propertiesByCity: Array.from(propertyMap.values())
+      .map((item) => ({
+        ...item,
+        averagePrice: item.count > 0 ? Math.round(item.totalPrice / item.count) : 0,
+      }))
+      .sort((a, b) => b.count - a.count),
+    leadsByCity: Array.from(leadMap.values()).sort((a, b) => b.count - a.count),
+  };
+}
+
+function getActivityActionBucket(action: string): Exclude<ActivityActionFilter, "ALL"> {
+  if (includesText(action, ["supprim", "delete", "deleted"])) return "deleted";
+  if (includesText(action, ["photo", "upload", "ajout"])) return "uploaded";
+  if (includesText(action, ["archive"])) return "archived";
+  if (includesText(action, ["mise", "mis a jour", "statut", "note", "update"])) return "updated";
+  if (includesText(action, ["cree", "creation", "nouvelle", "new"])) return "created";
+  return "other";
+}
+
+function getActivityEntityBucket(entityType: string): ActivityEntityTypeFilter {
+  if (entityType === "contact" || entityType === "estimation" || entityType === "property") {
+    return entityType;
+  }
+
+  return "other";
+}
+
+function isActivityInPeriod(activity: Activity, period: ActivityPeriodFilter) {
+  if (period === "ALL") return true;
+
+  const date = new Date(activity.created_at);
+  if (Number.isNaN(date.getTime())) return false;
+
+  const now = new Date();
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+
+  if (period === "today") return date >= start;
+
+  const days = period === "last7days" ? 7 : 30;
+  const threshold = new Date(now);
+  threshold.setDate(now.getDate() - days);
+  return date >= threshold;
+}
+
+function filterActivities(
+  activities: Activity[],
+  search: string,
+  entityType: ActivityEntityTypeFilter,
+  action: ActivityActionFilter,
+  period: ActivityPeriodFilter
+) {
+  const normalizedSearch = search.trim().toLowerCase();
+
+  return activities.filter((activity) => {
+    const formattedDate = formatDateTime(activity.created_at);
+    const haystack = [
+      activity.action,
+      activity.entity_type,
+      activity.user_name,
+      formattedDate,
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    return (
+      (!normalizedSearch || haystack.includes(normalizedSearch)) &&
+      (entityType === "ALL" || getActivityEntityBucket(activity.entity_type) === entityType) &&
+      (action === "ALL" || getActivityActionBucket(activity.action) === action) &&
+      isActivityInPeriod(activity, period)
+    );
+  });
+}
+
+function buildAdminMetrics(
+  contactLeads: AdminLead[],
+  estimationLeads: AdminLead[],
+  propertyItems: Property[],
+  activities: Activity[]
+) {
+  const activeContacts = getActiveLeads(contactLeads);
+  const activeEstimations = getActiveLeads(estimationLeads);
+  const activeLeads = [...activeContacts, ...activeEstimations];
+  const allLeads = [...contactLeads, ...estimationLeads];
+  const statusCounts = leadStatuses.reduce(
+    (acc, status) => ({
+      ...acc,
+      [status]: activeLeads.filter((lead) => lead.status === status).length,
+    }),
+    {} as Record<LeadStatus, number>
+  );
+  const averagePrice = getAverage(propertyItems.map((property) => property.price));
+  const averageSurface = getAverage(propertyItems.map((property) => property.surface));
+  const averagePricePerSquareMeter = getAverage(
+    propertyItems
+      .filter((property) => property.surface > 0 && property.price > 0)
+      .map((property) => property.price / property.surface)
+  );
+  const cityStats = getCityStats(propertyItems, allLeads);
+  const latestLeads = [...activeLeads].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+  const latestSubmission = [...allLeads].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  )[0];
+  const totalLeads = activeLeads.length;
+  const conversionRate =
+    totalLeads > 0 ? (statusCounts.MANDATE_SIGNED / totalLeads) * 100 : Number.NaN;
+
+  return {
+    totalLeads,
+    contacts: activeContacts.length,
+    estimations: activeEstimations.length,
+    newLeads: statusCounts.NEW,
+    contactedLeads: statusCounts.CONTACTED,
+    appointments: statusCounts.APPOINTMENT,
+    mandateSigned: statusCounts.MANDATE_SIGNED,
+    lostLeads: statusCounts.LOST,
+    conversionRate,
+    totalProperties: propertyItems.length,
+    availableProperties: propertyItems.filter((property) => property.status === "available").length,
+    underOfferProperties: propertyItems.filter((property) => property.status === "under_offer").length,
+    soldProperties: propertyItems.filter((property) => property.status === "sold").length,
+    featuredProperties: propertyItems.filter((property) => property.featured).length,
+    apartments: propertyItems.filter((property) => property.type === "apartment").length,
+    houses: propertyItems.filter((property) => property.type === "house").length,
+    lands: propertyItems.filter((property) => property.type === "land").length,
+    averagePrice,
+    averageSurface,
+    averagePricePerSquareMeter,
+    propertiesWithoutPhotos: propertyItems.filter((property) => property.photos.length === 0).length,
+    propertiesWithoutDiagnostics: propertyItems.filter(hasMissingDiagnostics).length,
+    propertiesNotFeatured: propertyItems.filter((property) => !property.featured).length,
+    latestActivityCount: activities.slice(0, 5).length,
+    latestLeads: latestLeads.slice(0, 5),
+    latestActivities: activities.slice(0, 5),
+    contactSubmissions: contactLeads.length,
+    estimationSubmissions: estimationLeads.length,
+    estimationContactRatio: contactLeads.length > 0 ? estimationLeads.length / contactLeads.length : Number.NaN,
+    latestSubmissionDate: latestSubmission?.createdAt,
+    totalActivities: activities.length,
+    activitiesByEntity: ["contact", "estimation", "property", "other"].map((entity) => ({
+      label: entity === "other" ? "Autre" : activityEntityTypeLabels[entity as ActivityEntityTypeFilter],
+      count: activities.filter((activity) => getActivityEntityBucket(activity.entity_type) === entity).length,
+    })),
+    latestActivityDate: activities[0]?.created_at,
+    ...cityStats,
+  };
+}
+
+type AdminMetrics = ReturnType<typeof buildAdminMetrics>;
+
+function KpiCard({
+  label,
+  value,
+  description,
+  tone = "dark",
+}: {
+  label: string;
+  value: ReactNode;
+  description?: string;
+  tone?: "dark" | "orange";
+}) {
+  return (
+    <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40">
+      <CardContent className="p-5">
+        <p className="text-sm font-semibold text-gray-500">{label}</p>
+        <p className={cn("mt-2 text-3xl font-black", tone === "orange" ? "text-orange-600" : "text-[#111111]")}>
+          {value}
+        </p>
+        {description ? <p className="mt-2 text-xs leading-5 text-gray-500">{description}</p> : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function MiniBar({ value, max }: { value: number; max: number }) {
+  const width = max > 0 ? Math.max(6, Math.min(100, (value / max) * 100)) : 0;
+
+  return (
+    <div className="h-2 overflow-hidden rounded-full bg-orange-100">
+      <div className="h-full rounded-full bg-orange-500" style={{ width: `${width}%` }} />
+    </div>
+  );
+}
+
+function MetricLine({ label, value, max }: { label: string; value: ReactNode; max?: number }) {
+  const numericValue = typeof value === "number" ? value : 0;
+
+  return (
+    <div className="grid gap-2">
+      <div className="flex items-center justify-between gap-4 text-sm">
+        <span className="text-gray-600">{label}</span>
+        <strong className="text-[#111111]">{value}</strong>
+      </div>
+      {typeof max === "number" ? <MiniBar value={numericValue} max={max} /> : null}
+    </div>
+  );
+}
+
+function LeadPreview({ lead }: { lead: AdminLead }) {
+  return (
+    <div className="rounded-xl border border-orange-100 bg-orange-50/70 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="font-bold text-[#111111]">{lead.name}</p>
+          <p className="mt-1 text-xs text-gray-500">{lead.category} · {lead.city}</p>
+        </div>
+        <Badge className="border-0 bg-white text-orange-700">{leadStatusLabels[lead.status]}</Badge>
+      </div>
+      <p className="mt-3 text-xs text-gray-500">{formatDateTime(lead.createdAt)}</p>
+    </div>
+  );
+}
+
+function ActivityPreview({ activity }: { activity: Activity }) {
+  return (
+    <div className="rounded-xl border border-orange-100 bg-orange-50/70 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <p className="font-semibold text-[#111111]">{activity.action}</p>
+        <Badge variant="outline" className="border-orange-200 bg-white text-orange-700">
+          {activity.entity_type}
+        </Badge>
+      </div>
+      <p className="mt-2 text-xs text-gray-500">{activity.user_name} · {formatDateTime(activity.created_at)}</p>
+    </div>
+  );
+}
+
+function DashboardBento({
+  metrics,
+  setActiveTab,
+}: {
+  metrics: AdminMetrics;
+  setActiveTab: React.Dispatch<React.SetStateAction<AdminTab>>;
+}) {
+  const pipelineMax = Math.max(metrics.newLeads, metrics.contactedLeads, metrics.appointments, metrics.mandateSigned, metrics.lostLeads, 1);
+  const propertyMax = Math.max(metrics.availableProperties, metrics.underOfferProperties, metrics.soldProperties, metrics.featuredProperties, 1);
+
+  return (
+    <div className="grid gap-5 lg:grid-cols-12">
+      <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40 lg:col-span-5">
+        <CardHeader>
+          <CardTitle className="text-xl font-black text-[#111111]">Pipeline commercial</CardTitle>
+          <p className="text-sm leading-6 text-gray-600">Lecture rapide des prospects actifs et de leur avancement.</p>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <KpiCard label="Leads actifs" value={metrics.totalLeads} />
+            <KpiCard label="Conversion mandat" value={formatPercentage(metrics.conversionRate)} tone="orange" />
+          </div>
+          <MetricLine label="Nouveaux" value={metrics.newLeads} max={pipelineMax} />
+          <MetricLine label="Contactés" value={metrics.contactedLeads} max={pipelineMax} />
+          <MetricLine label="Rendez-vous" value={metrics.appointments} max={pipelineMax} />
+          <MetricLine label="Mandats signés" value={metrics.mandateSigned} max={pipelineMax} />
+        </CardContent>
+      </Card>
+
+      <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40 lg:col-span-4">
+        <CardHeader>
+          <CardTitle className="text-xl font-black text-[#111111]">Portefeuille de biens</CardTitle>
+          <p className="text-sm leading-6 text-gray-600">Disponibilité, mise en avant et valeur catalogue.</p>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <KpiCard label="Biens" value={metrics.totalProperties} />
+            <KpiCard label="Prix moyen" value={formatPrice(Math.round(metrics.averagePrice))} tone="orange" />
+          </div>
+          <MetricLine label="Disponibles" value={metrics.availableProperties} max={propertyMax} />
+          <MetricLine label="Sous offre" value={metrics.underOfferProperties} max={propertyMax} />
+          <MetricLine label="Vendus" value={metrics.soldProperties} max={propertyMax} />
+          <MetricLine label="À la une" value={metrics.featuredProperties} max={propertyMax} />
+          <p className="rounded-xl bg-orange-50 p-3 text-sm text-gray-700">
+            Surface moyenne : <strong>{Math.round(metrics.averageSurface)} m²</strong>
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40 lg:col-span-3">
+        <CardHeader>
+          <CardTitle className="text-xl font-black text-[#111111]">Actions rapides</CardTitle>
+          <p className="text-sm leading-6 text-gray-600">Accès direct aux vues de travail.</p>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          <Button type="button" variant="outline" className="justify-start border-orange-200" onClick={() => setActiveTab("contacts")}>
+            <ContactRound className="size-4" />Voir contacts
+          </Button>
+          <Button type="button" variant="outline" className="justify-start border-orange-200" onClick={() => setActiveTab("estimations")}>
+            <ClipboardCheck className="size-4" />Voir estimations
+          </Button>
+          <Button type="button" variant="outline" className="justify-start border-orange-200" onClick={() => setActiveTab("properties")}>
+            <Building2 className="size-4" />Gérer les biens
+          </Button>
+          <Button type="button" variant="outline" className="justify-start border-orange-200" onClick={() => setActiveTab("statistics")}>
+            <BarChart3 className="size-4" />Voir statistiques
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40 lg:col-span-6">
+        <CardHeader>
+          <CardTitle className="text-xl font-black text-[#111111]">Dernières demandes</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          {metrics.latestLeads.length ? metrics.latestLeads.map((lead) => <LeadPreview key={`${lead.kind}-${lead.id}`} lead={lead} />) : (
+            <p className="rounded-xl bg-orange-50 p-4 text-sm text-gray-600">Aucune demande active pour le moment.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40 lg:col-span-6">
+        <CardHeader>
+          <CardTitle className="text-xl font-black text-[#111111]">Activité récente</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          {metrics.latestActivities.length ? metrics.latestActivities.map((activity) => <ActivityPreview key={activity.id} activity={activity} />) : (
+            <p className="rounded-xl bg-orange-50 p-4 text-sm text-gray-600">Aucune activité enregistrée pour le moment.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40 lg:col-span-4">
+        <CardHeader>
+          <CardTitle className="text-xl font-black text-[#111111]">Performance du site</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 text-sm">
+          {["Sessions", "Vues", "Pages populaires"].map((label) => (
+            <MetricLine key={label} label={label} value="À connecter" />
+          ))}
+          <MetricLine label="Leads CRM" value={metrics.totalLeads} />
+          <p className="rounded-xl bg-orange-50 p-3 text-xs leading-5 text-gray-600">
+            Connexion GA4 prévue pour une prochaine version.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40 lg:col-span-4">
+        <CardHeader>
+          <CardTitle className="text-xl font-black text-[#111111]">Origine des demandes</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          <MetricLine label="Formulaire contact" value={metrics.contactSubmissions} />
+          <MetricLine label="Formulaire estimation" value={metrics.estimationSubmissions} />
+          <MetricLine label="Appel direct" value="À structurer" />
+          <MetricLine label="Agence" value="À structurer" />
+        </CardContent>
+      </Card>
+
+      <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40 lg:col-span-4">
+        <CardHeader>
+          <CardTitle className="text-xl font-black text-[#111111]">Points à traiter</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          <MetricLine label="Nouveaux leads" value={metrics.newLeads} />
+          <MetricLine label="Biens sans photos" value={metrics.propertiesWithoutPhotos} />
+          <MetricLine label="Biens sans DPE/GES" value={metrics.propertiesWithoutDiagnostics} />
+          <MetricLine label="Biens non mis à la une" value={metrics.propertiesNotFeatured} />
+          <MetricLine label="Multidiffusion portails" value="Non configurée" />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function StatisticsPanel({ metrics }: { metrics: AdminMetrics }) {
+  const leadMax = Math.max(metrics.totalLeads, 1);
+  const propertyMax = Math.max(metrics.totalProperties, 1);
+  const cityMax = Math.max(...metrics.propertiesByCity.map((item) => item.count), 1);
+  const leadCityMax = Math.max(...metrics.leadsByCity.map((item) => item.count), 1);
+  const activityMax = Math.max(...metrics.activitiesByEntity.map((item) => item.count), 1);
+
+  return (
+    <div className="grid gap-5">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard label="Leads actifs" value={metrics.totalLeads} description="Contacts et estimations non archivés." />
+        <KpiCard label="Conversion mandat" value={formatPercentage(metrics.conversionRate)} tone="orange" />
+        <KpiCard label="Prix moyen" value={formatPrice(Math.round(metrics.averagePrice))} />
+        <KpiCard label="Prix moyen / m²" value={metrics.averagePricePerSquareMeter ? `${Math.round(metrics.averagePricePerSquareMeter).toLocaleString("fr-FR")} €/m²` : "Non calculable"} />
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-2">
+        <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40">
+          <CardHeader><CardTitle>Performance leads</CardTitle></CardHeader>
+          <CardContent className="grid gap-4">
+            <MetricLine label="Contacts" value={metrics.contacts} max={leadMax} />
+            <MetricLine label="Estimations" value={metrics.estimations} max={leadMax} />
+            <MetricLine label="Nouveaux" value={metrics.newLeads} max={leadMax} />
+            <MetricLine label="Contactés" value={metrics.contactedLeads} max={leadMax} />
+            <MetricLine label="Rendez-vous" value={metrics.appointments} max={leadMax} />
+            <MetricLine label="Mandats signés" value={metrics.mandateSigned} max={leadMax} />
+            <MetricLine label="Perdus" value={metrics.lostLeads} max={leadMax} />
+          </CardContent>
+        </Card>
+
+        <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40">
+          <CardHeader><CardTitle>Portefeuille de biens</CardTitle></CardHeader>
+          <CardContent className="grid gap-4">
+            <MetricLine label="Disponibles" value={metrics.availableProperties} max={propertyMax} />
+            <MetricLine label="Sous offre" value={metrics.underOfferProperties} max={propertyMax} />
+            <MetricLine label="Vendus" value={metrics.soldProperties} max={propertyMax} />
+            <MetricLine label="À la une" value={metrics.featuredProperties} max={propertyMax} />
+            <MetricLine label="Appartements" value={metrics.apartments} max={propertyMax} />
+            <MetricLine label="Maisons" value={metrics.houses} max={propertyMax} />
+            <MetricLine label="Terrains" value={metrics.lands} max={propertyMax} />
+            <MetricLine label="Surface moyenne" value={`${Math.round(metrics.averageSurface)} m²`} />
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-3">
+        <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40">
+          <CardHeader><CardTitle>Biens par ville</CardTitle></CardHeader>
+          <CardContent className="grid gap-4">
+            {metrics.propertiesByCity.slice(0, 6).map((item) => (
+              <div key={item.city} className="grid gap-2">
+                <MetricLine label={item.city} value={item.count} max={cityMax} />
+                <p className="text-xs text-gray-500">Prix moyen : {formatPrice(item.averagePrice)}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40">
+          <CardHeader><CardTitle>Leads par ville</CardTitle></CardHeader>
+          <CardContent className="grid gap-4">
+            {metrics.leadsByCity.slice(0, 6).map((item) => (
+              <MetricLine key={item.city} label={item.city} value={item.count} max={leadCityMax} />
+            ))}
+            {metrics.leadsByCity.length === 0 ? <p className="text-sm text-gray-600">Aucune ville renseignée.</p> : null}
+          </CardContent>
+        </Card>
+
+        <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40">
+          <CardHeader><CardTitle>Performance formulaires</CardTitle></CardHeader>
+          <CardContent className="grid gap-4">
+            <MetricLine label="Demandes contact" value={metrics.contactSubmissions} />
+            <MetricLine label="Demandes estimation" value={metrics.estimationSubmissions} />
+            <MetricLine label="Ratio estimation/contact" value={Number.isFinite(metrics.estimationContactRatio) ? metrics.estimationContactRatio.toFixed(2) : "Non calculable"} />
+            <MetricLine label="Dernière soumission" value={formatDateTime(metrics.latestSubmissionDate)} />
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-2">
+        <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40">
+          <CardHeader><CardTitle>Statistiques d&apos;activité</CardTitle></CardHeader>
+          <CardContent className="grid gap-4">
+            <MetricLine label="Activités totales" value={metrics.totalActivities} />
+            {metrics.activitiesByEntity.map((item) => (
+              <MetricLine key={item.label} label={item.label} value={item.count} max={activityMax} />
+            ))}
+            <MetricLine label="Dernière activité" value={formatDateTime(metrics.latestActivityDate)} />
+          </CardContent>
+        </Card>
+
+        <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40">
+          <CardHeader>
+            <CardTitle>Statistiques site internet</CardTitle>
+            <p className="text-sm leading-6 text-gray-600">
+              Ces métriques seront alimentées après connexion à GA4 via l&apos;API Google Analytics Data.
+            </p>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            {["Sessions", "Utilisateurs", "Pages vues", "Sources de trafic", "Conversions GA4"].map((label) => (
+              <MetricLine key={label} label={label} value="À connecter" />
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function ActivityPanel({
+  activities,
+  filteredActivities,
+  activitySearch,
+  setActivitySearch,
+  activityEntityType,
+  setActivityEntityType,
+  activityAction,
+  setActivityAction,
+  activityPeriod,
+  setActivityPeriod,
+}: {
+  activities: Activity[];
+  filteredActivities: Activity[];
+  activitySearch: string;
+  setActivitySearch: React.Dispatch<React.SetStateAction<string>>;
+  activityEntityType: ActivityEntityTypeFilter;
+  setActivityEntityType: React.Dispatch<React.SetStateAction<ActivityEntityTypeFilter>>;
+  activityAction: ActivityActionFilter;
+  setActivityAction: React.Dispatch<React.SetStateAction<ActivityActionFilter>>;
+  activityPeriod: ActivityPeriodFilter;
+  setActivityPeriod: React.Dispatch<React.SetStateAction<ActivityPeriodFilter>>;
+}) {
+  return (
+    <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40">
+      <CardHeader>
+        <CardTitle className="text-xl font-black text-[#111111]">Journal d&apos;activité</CardTitle>
+        <p className="text-sm leading-6 text-gray-600">
+          Recherche, filtres et lecture rapide des actions CRM.
+        </p>
+      </CardHeader>
+      <CardContent className="grid gap-5">
+        <div className="grid gap-3 lg:grid-cols-[1fr_180px_180px_180px]">
+          <div className="relative">
+            <Search className="absolute left-3 top-3 size-4 text-gray-400" />
+            <Input
+              value={activitySearch}
+              onChange={(event) => setActivitySearch(event.target.value)}
+              placeholder="Rechercher une action, un type, un utilisateur ou une date"
+              className="pl-9"
+            />
+          </div>
+          <Select value={activityEntityType} onValueChange={(value) => setActivityEntityType((value ?? "ALL") as ActivityEntityTypeFilter)}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {(Object.keys(activityEntityTypeLabels) as ActivityEntityTypeFilter[]).map((value) => (
+                <SelectItem key={value} value={value}>{activityEntityTypeLabels[value]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={activityAction} onValueChange={(value) => setActivityAction((value ?? "ALL") as ActivityActionFilter)}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {(Object.keys(activityActionLabels) as ActivityActionFilter[]).map((value) => (
+                <SelectItem key={value} value={value}>{activityActionLabels[value]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={activityPeriod} onValueChange={(value) => setActivityPeriod((value ?? "ALL") as ActivityPeriodFilter)}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {(Object.keys(activityPeriodLabels) as ActivityPeriodFilter[]).map((value) => (
+                <SelectItem key={value} value={value}>{activityPeriodLabels[value]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge className="border-0 bg-orange-100 text-orange-800">
+            {filteredActivities.length} résultat{filteredActivities.length > 1 ? "s" : ""}
+          </Badge>
+          <span className="text-sm text-gray-500">sur {activities.length} activité{activities.length > 1 ? "s" : ""}</span>
+        </div>
+
+        {filteredActivities.length ? (
+          <div className="grid gap-3">
+            {filteredActivities.map((activity) => (
+              <div key={activity.id} className="rounded-xl border border-orange-100 bg-orange-50/60 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-[#111111]">{activity.action}</p>
+                    <p className="mt-1 text-xs text-gray-500">{activity.user_name} · {formatDateTime(activity.created_at)}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline" className="border-orange-200 bg-white text-orange-700">
+                      {activityEntityTypeLabels[getActivityEntityBucket(activity.entity_type)]}
+                    </Badge>
+                    <Badge variant="outline" className="border-orange-200 bg-white text-gray-700">
+                      {activityActionLabels[getActivityActionBucket(activity.action)]}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <Card className="border-dashed border-orange-200 bg-orange-50/60">
+            <CardContent className="py-12 text-center">
+              <ListChecks className="mx-auto size-9 text-orange-500" />
+              <p className="mt-4 font-bold text-[#111111]">Aucune activité ne correspond à votre recherche.</p>
+              <p className="mt-2 text-sm text-gray-600">Ajustez la recherche, le type, l&apos;action ou la période.</p>
+            </CardContent>
+          </Card>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 type Props = {
@@ -1894,7 +2573,7 @@ function LeadManager({ leads, setLeads, expectedCode, connected }: { leads: Admi
           </CardHeader>
           <CardContent className="grid gap-5">
             <div className="grid gap-2 text-sm text-gray-700 sm:grid-cols-3"><p><strong>Email</strong><br />{lead.email}</p><p><strong>Téléphone</strong><br />{lead.phone}</p><p><strong>Demande</strong><br />{lead.category}</p></div>
-            <p className="rounded-md bg-orange-50 p-4 text-sm leading-6 text-gray-700">{lead.message}</p>
+            <p className="break-words rounded-md bg-orange-50 p-4 text-sm leading-6 text-gray-700">{lead.message}</p>
             <div className="grid gap-3 lg:grid-cols-[200px_1fr_auto_auto] lg:items-end">
               <div className="grid gap-2"><Label>Statut</Label><Select value={lead.status} onValueChange={(value) => persist(lead, { status: value as LeadStatus })}><SelectTrigger><SelectValue>{(value) => getStatusSelectLabel(value)}</SelectValue></SelectTrigger><SelectContent>{leadStatuses.map((value) => <SelectItem key={value} value={value}>{leadStatusLabels[value]}</SelectItem>)}</SelectContent></Select></div>
               <div className="grid gap-2"><Label htmlFor={`notes-${lead.id}`}>Notes internes</Label><Input id={`notes-${lead.id}`} value={lead.notes} onChange={(event) => setLeads((current) => current.map((item) => item.id === lead.id ? { ...item, notes: event.target.value } : item))} /></div>
@@ -1913,16 +2592,23 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<AdminTab>("overview");
   const [contactLeads, setContactLeads] = useState(() => normalizeContacts(contacts));
   const [estimationLeads, setEstimationLeads] = useState(() => normalizeEstimations(estimations));
   const [activities, setActivities] = useState(initialActivities);
   const [propertyItems, setPropertyItems] = useState(properties);
-  const metrics = useMemo(() => ({
-    contacts: contactLeads.filter((lead) => !lead.archived).length,
-    estimations: estimationLeads.filter((lead) => !lead.archived).length,
-    online: propertyItems.filter((property) => property.status !== "sold").length,
-    featured: propertyItems.filter((property) => property.featured).length,
-  }), [contactLeads, estimationLeads, propertyItems]);
+  const [activitySearch, setActivitySearch] = useState("");
+  const [activityEntityType, setActivityEntityType] = useState<ActivityEntityTypeFilter>("ALL");
+  const [activityAction, setActivityAction] = useState<ActivityActionFilter>("ALL");
+  const [activityPeriod, setActivityPeriod] = useState<ActivityPeriodFilter>("ALL");
+  const metrics = useMemo(
+    () => buildAdminMetrics(contactLeads, estimationLeads, propertyItems, activities),
+    [activities, contactLeads, estimationLeads, propertyItems]
+  );
+  const filteredActivities = useMemo(
+    () => filterActivities(activities, activitySearch, activityEntityType, activityAction, activityPeriod),
+    [activities, activityAction, activityEntityType, activityPeriod, activitySearch]
+  );
 
   async function unlock() {
     if (code !== expectedCode) {
@@ -1957,8 +2643,8 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
   if (!expectedCode) {
     return (
       <main className="flex min-h-svh items-center justify-center bg-[#111111] px-4 py-12">
-        <Card className="w-full max-w-lg border-white/10 bg-white text-[#111111] shadow-2xl">
-          <CardHeader><Badge className="w-fit border-0 bg-yellow-300 text-[#111111]">Configuration requise</Badge><KeyRound className="size-8 text-orange-600" /><CardTitle className="text-2xl font-black">CRM à verrouiller</CardTitle><p className="text-sm leading-6 text-gray-600">Définis <span className="font-mono text-xs">NEXT_PUBLIC_ADMIN_LOCAL_CODE</span> dans l&apos;environnement avant d&apos;utiliser l&apos;administration locale.</p></CardHeader>
+        <Card className="w-full max-w-lg min-w-0 border-white/10 bg-white text-[#111111] shadow-2xl">
+          <CardHeader className="min-w-0"><Badge className="w-fit border-0 bg-yellow-300 text-[#111111]">Configuration requise</Badge><KeyRound className="size-8 text-orange-600" /><CardTitle className="text-2xl font-black">CRM à verrouiller</CardTitle><p className="text-sm leading-6 text-gray-600">Définis <span className="break-all font-mono text-xs">NEXT_PUBLIC_ADMIN_LOCAL_CODE</span> dans l&apos;environnement avant d&apos;utiliser l&apos;administration locale.</p></CardHeader>
           <CardContent><p className="rounded-md bg-orange-50 p-4 text-sm leading-6 text-gray-700">Le site public reste disponible. Cette protection temporaire évite d&apos;ouvrir le CRM avec un code par défaut.</p></CardContent>
         </Card>
       </main>
@@ -1976,31 +2662,62 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
     );
   }
 
-  const pipeline = leadStatuses.map((value) => ({
-    key: value,
-    label: leadStatusLabels[value],
-    count: [...contactLeads, ...estimationLeads].filter((lead) => !lead.archived && lead.status === value).length,
-  }));
-
   return (
-    <main className="min-h-dvh bg-orange-50 px-3 py-6 sm:px-6 sm:py-8 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <header className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center"><div><Badge className={connected ? "border-0 bg-emerald-600 text-white" : "border-0 bg-yellow-300 text-[#111111]"}>{connected ? "Supabase connecté" : "Mode local"}</Badge><h1 className="mt-3 text-3xl font-black text-[#111111]">CRM IMMO-DREAMS83</h1><p className="mt-1 text-sm text-gray-600">Prospects, estimations, biens et activité de l&apos;agence.</p></div><Button variant="outline" onClick={() => setUnlocked(false)}><LogOut className="size-4" />Verrouiller</Button></header>
-        <Tabs defaultValue="overview" className="gap-6">
-          <div className="no-scrollbar -mx-3 overflow-x-auto px-3 sm:mx-0 sm:px-0"><TabsList className="min-w-max bg-white"><TabsTrigger value="overview"><LayoutDashboard />Vue d&apos;ensemble</TabsTrigger><TabsTrigger value="contacts"><ContactRound />Contacts</TabsTrigger><TabsTrigger value="estimations"><ClipboardCheck />Estimations</TabsTrigger><TabsTrigger value="properties"><Building2 />Biens</TabsTrigger><TabsTrigger value="activities"><ListChecks />Activités</TabsTrigger><TabsTrigger value="statistics"><BarChart3 />Statistiques</TabsTrigger></TabsList></div>
-          <TabsContent value="overview" className="grid gap-6"><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{[{ label: "Contacts", value: metrics.contacts }, { label: "Estimations", value: metrics.estimations }, { label: "Biens en ligne", value: metrics.online }, { label: "Biens à la une", value: metrics.featured }].map((metric) => <Card key={metric.label} className="border-orange-100 bg-white"><CardContent className="p-5"><p className="text-sm text-gray-500">{metric.label}</p><p className="mt-2 text-3xl font-black text-[#111111]">{metric.value}</p></CardContent></Card>)}</div><Card className="border-orange-100 bg-white"><CardHeader><CardTitle>Activité récente</CardTitle></CardHeader><CardContent>{activities.length ? <div className="grid gap-3">{activities.slice(0, 6).map((activity) => <p key={activity.id} className="flex justify-between gap-4 border-b border-orange-100 pb-3 text-sm"><span>{activity.action} · {activity.user_name}</span><span className="text-gray-500">{new Date(activity.created_at).toLocaleString("fr-FR")}</span></p>)}</div> : <p className="text-sm text-gray-600">Aucune activité enregistrée pour le moment.</p>}</CardContent></Card></TabsContent>
+    <main className="min-h-dvh bg-orange-50 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+      <div className="mx-auto w-full max-w-screen-2xl">
+        <header className="mb-10 flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
+          <div>
+            <Badge className={connected ? "border-0 bg-emerald-600 text-white" : "border-0 bg-yellow-300 text-[#111111]"}>
+              {connected ? "Supabase connecté" : "Mode local"}
+            </Badge>
+            <h1 className="mt-3 text-3xl font-black text-[#111111] sm:text-4xl">CRM IMMO-DREAMS83</h1>
+            <p className="mt-2 text-sm leading-6 text-gray-600">Prospects, estimations, biens, statistiques et activité de l&apos;agence.</p>
+          </div>
+          <Button variant="outline" onClick={() => setUnlocked(false)} className="w-full border-orange-200 bg-white sm:w-auto">
+            <LogOut className="size-4" />Verrouiller
+          </Button>
+        </header>
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as AdminTab)} className="w-full gap-8">
+          <div className="no-scrollbar -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+            <TabsList className="min-w-max justify-start gap-1 bg-white p-1 shadow-sm shadow-orange-100/40 lg:w-full">
+              <TabsTrigger className="flex-none shrink-0 px-4 sm:px-5" value="overview"><LayoutDashboard />Vue d&apos;ensemble</TabsTrigger>
+              <TabsTrigger className="flex-none shrink-0 px-4 sm:px-5" value="contacts"><ContactRound />Contacts</TabsTrigger>
+              <TabsTrigger className="flex-none shrink-0 px-4 sm:px-5" value="estimations"><ClipboardCheck />Estimations</TabsTrigger>
+              <TabsTrigger className="flex-none shrink-0 px-4 sm:px-5" value="properties"><Building2 />Biens</TabsTrigger>
+              <TabsTrigger className="flex-none shrink-0 px-4 sm:px-5" value="activities"><ListChecks />Activités</TabsTrigger>
+              <TabsTrigger className="flex-none shrink-0 px-4 sm:px-5" value="statistics"><BarChart3 />Statistiques</TabsTrigger>
+            </TabsList>
+          </div>
+          <TabsContent value="overview" className="w-full">
+            <DashboardBento metrics={metrics} setActiveTab={setActiveTab} />
+          </TabsContent>
           <TabsContent value="contacts">
             <div className="grid gap-5">
               <CreateContactCard setLeads={setContactLeads} expectedCode={expectedCode} connected={connected} />
               <LeadManager leads={contactLeads} setLeads={setContactLeads} expectedCode={expectedCode} connected={connected} />
             </div>
           </TabsContent>
-          <TabsContent value="estimations"><LeadManager leads={estimationLeads} setLeads={setEstimationLeads} expectedCode={expectedCode} connected={connected} /></TabsContent>
-          <TabsContent value="properties">
+          <TabsContent value="estimations" className="w-full"><LeadManager leads={estimationLeads} setLeads={setEstimationLeads} expectedCode={expectedCode} connected={connected} /></TabsContent>
+          <TabsContent value="properties" className="w-full">
             <PropertyManager properties={propertyItems} setProperties={setPropertyItems} expectedCode={expectedCode} connected={connected} />
           </TabsContent>
-          <TabsContent value="activities"><Card className="border-orange-100 bg-white"><CardContent className="grid gap-3 p-6">{activities.length ? activities.map((activity) => <div key={activity.id} className="border-b border-orange-100 pb-3"><p className="font-semibold text-[#111111]">{activity.action}</p><p className="mt-1 text-xs text-gray-500">{activity.entity_type} · {activity.user_name} · {new Date(activity.created_at).toLocaleString("fr-FR")}</p></div>) : <p className="text-sm text-gray-600">Aucune activité enregistrée.</p>}</CardContent></Card></TabsContent>
-          <TabsContent value="statistics"><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">{pipeline.map((item) => <Card key={item.label} className="border-orange-100 bg-white"><CardContent className="p-5"><p className="text-sm text-gray-500">{item.label}</p><p className="mt-2 text-3xl font-black text-orange-600">{item.count}</p><p className="mt-2 text-xs leading-5 text-gray-500">{leadStatusDescriptions[item.key]}</p></CardContent></Card>)}</div></TabsContent>
+          <TabsContent value="activities" className="w-full">
+            <ActivityPanel
+              activities={activities}
+              filteredActivities={filteredActivities}
+              activitySearch={activitySearch}
+              setActivitySearch={setActivitySearch}
+              activityEntityType={activityEntityType}
+              setActivityEntityType={setActivityEntityType}
+              activityAction={activityAction}
+              setActivityAction={setActivityAction}
+              activityPeriod={activityPeriod}
+              setActivityPeriod={setActivityPeriod}
+            />
+          </TabsContent>
+          <TabsContent value="statistics" className="w-full">
+            <StatisticsPanel metrics={metrics} />
+          </TabsContent>
         </Tabs>
       </div>
     </main>

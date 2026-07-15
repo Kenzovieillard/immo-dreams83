@@ -89,6 +89,10 @@ function mergePropertyCatalog(remoteProperties: Property[]) {
   });
 }
 
+const legacyPropertySlugs: Record<string, string> = {
+  "appartement-t2-lumineux-toulon": "appartement-toulon-83000-ref-72",
+};
+
 export async function getPublicProperties() {
   const supabase = getSupabaseAdminClient();
   if (!supabase) return staticProperties;
@@ -115,7 +119,8 @@ export async function getFeaturedPublicProperties() {
 }
 
 export async function getPublicPropertyBySlug(slug: string) {
-  return (await getPublicProperties()).find((property) => property.slug === slug);
+  const canonicalSlug = legacyPropertySlugs[slug] ?? slug;
+  return (await getPublicProperties()).find((property) => property.slug === canonicalSlug);
 }
 
 export async function getSimilarPublicProperties(property: Property, limit = 3) {

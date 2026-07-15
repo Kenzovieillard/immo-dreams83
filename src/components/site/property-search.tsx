@@ -26,7 +26,7 @@ export function PropertySearch() {
   return (
     <form
       action="/a-vendre"
-      className="grid gap-5 rounded-xl border border-orange-100 bg-white p-4 shadow-2xl shadow-black/15 sm:p-5 md:grid-cols-[1fr_1fr_1fr_1fr_auto] md:items-end"
+      className="grid w-full max-w-full gap-5 rounded-xl border border-orange-100 bg-white p-4 shadow-2xl shadow-black/15 sm:p-5 md:grid-cols-[1fr_1fr_1fr_1fr_auto] md:items-end"
     >
       <div className="md:col-span-5">
         <p className="text-sm font-bold uppercase tracking-[0.18em] text-orange-600">
@@ -37,7 +37,7 @@ export function PropertySearch() {
         </p>
       </div>
 
-      <label className="grid gap-2 text-base font-semibold text-gray-800 sm:text-sm">
+      <label className="grid min-w-0 gap-2 text-base font-semibold text-gray-800 sm:text-sm">
         Type de bien recherché
         <Select
           name="type"
@@ -58,7 +58,7 @@ export function PropertySearch() {
         </Select>
       </label>
 
-      <label className="grid gap-2 text-base font-semibold text-gray-800 sm:text-sm">
+      <label className="grid min-w-0 gap-2 text-base font-semibold text-gray-800 sm:text-sm">
         Ville ou secteur
         <Input
           name="city"
@@ -67,7 +67,7 @@ export function PropertySearch() {
         />
       </label>
 
-      <label className="grid gap-2 text-base font-semibold text-gray-800 sm:text-sm">
+      <label className="grid min-w-0 gap-2 text-base font-semibold text-gray-800 sm:text-sm">
         Budget maximum
         <Input
           name="budget"
@@ -76,7 +76,7 @@ export function PropertySearch() {
         />
       </label>
 
-      <label className="grid gap-2 text-base font-semibold text-gray-800 sm:text-sm">
+      <label className="grid min-w-0 gap-2 text-base font-semibold text-gray-800 sm:text-sm">
         Surface souhaitée
         <Input
           name="surface"
@@ -87,7 +87,7 @@ export function PropertySearch() {
 
       <Button
         type="submit"
-        className="h-12 bg-orange-500 px-6 text-white shadow-lg shadow-orange-200 hover:bg-orange-600"
+        className="h-12 w-full bg-orange-500 px-6 text-white shadow-lg shadow-orange-200 hover:bg-orange-600 md:w-auto"
       >
         <Search className="size-4" aria-hidden="true" />
         Rechercher
