@@ -634,10 +634,10 @@ function KpiCard({
   tone?: "dark" | "orange";
 }) {
   return (
-    <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40">
-      <CardContent className="p-5">
-        <p className="text-sm font-semibold text-gray-500">{label}</p>
-        <p className={cn("mt-2 text-3xl font-black", tone === "orange" ? "text-orange-600" : "text-[#111111]")}>
+    <Card size="sm" className="border-orange-100 bg-white shadow-sm shadow-orange-100/40">
+      <CardContent className="p-4">
+        <p className="text-xs font-semibold leading-5 text-gray-500 sm:text-sm">{label}</p>
+        <p className={cn("mt-2 text-2xl font-black sm:text-3xl", tone === "orange" ? "text-orange-600" : "text-[#111111]")}>
           {value}
         </p>
         {description ? <p className="mt-2 text-xs leading-5 text-gray-500">{description}</p> : null}
@@ -710,14 +710,14 @@ function DashboardBento({
   const propertyMax = Math.max(metrics.availableProperties, metrics.underOfferProperties, metrics.soldProperties, metrics.featuredProperties, 1);
 
   return (
-    <div className="grid gap-5 lg:grid-cols-12">
+    <div className="grid gap-4 sm:gap-5 lg:grid-cols-12">
       <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40 lg:col-span-5">
         <CardHeader>
           <CardTitle className="text-xl font-black text-[#111111]">Pipeline commercial</CardTitle>
           <p className="text-sm leading-6 text-gray-600">Lecture rapide des prospects actifs et de leur avancement.</p>
         </CardHeader>
-        <CardContent className="grid gap-4">
-          <div className="grid gap-3 sm:grid-cols-2">
+        <CardContent className="grid gap-4 px-4 sm:px-5">
+          <div className="grid grid-cols-2 gap-3">
             <KpiCard label="Leads actifs" value={metrics.totalLeads} />
             <KpiCard label="Conversion mandat" value={formatPercentage(metrics.conversionRate)} tone="orange" />
           </div>
@@ -733,8 +733,8 @@ function DashboardBento({
           <CardTitle className="text-xl font-black text-[#111111]">Portefeuille de biens</CardTitle>
           <p className="text-sm leading-6 text-gray-600">Disponibilité, mise en avant et valeur catalogue.</p>
         </CardHeader>
-        <CardContent className="grid gap-4">
-          <div className="grid gap-3 sm:grid-cols-2">
+        <CardContent className="grid gap-4 px-4 sm:px-5">
+          <div className="grid grid-cols-2 gap-3">
             <KpiCard label="Biens" value={metrics.totalProperties} />
             <KpiCard label="Prix moyen" value={formatPrice(Math.round(metrics.averagePrice))} tone="orange" />
           </div>
@@ -2663,9 +2663,9 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
   }
 
   return (
-    <main className="min-h-dvh bg-orange-50 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-      <div className="mx-auto w-full max-w-screen-2xl">
-        <header className="mb-10 flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
+    <main className="min-h-dvh overflow-x-hidden bg-orange-50 px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 sm:py-8 lg:px-8">
+      <div className="mx-auto w-full max-w-screen-2xl min-w-0">
+        <header className="mb-8 flex flex-col justify-between gap-4 sm:mb-10 sm:flex-row sm:items-center">
           <div>
             <Badge className={connected ? "border-0 bg-emerald-600 text-white" : "border-0 bg-yellow-300 text-[#111111]"}>
               {connected ? "Supabase connecté" : "Mode local"}
@@ -2677,15 +2677,15 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
             <LogOut className="size-4" />Verrouiller
           </Button>
         </header>
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as AdminTab)} className="w-full gap-8">
-          <div className="no-scrollbar -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-            <TabsList className="min-w-max justify-start gap-1 bg-white p-1 shadow-sm shadow-orange-100/40 lg:w-full">
-              <TabsTrigger className="flex-none shrink-0 px-4 sm:px-5" value="overview"><LayoutDashboard />Vue d&apos;ensemble</TabsTrigger>
-              <TabsTrigger className="flex-none shrink-0 px-4 sm:px-5" value="contacts"><ContactRound />Contacts</TabsTrigger>
-              <TabsTrigger className="flex-none shrink-0 px-4 sm:px-5" value="estimations"><ClipboardCheck />Estimations</TabsTrigger>
-              <TabsTrigger className="flex-none shrink-0 px-4 sm:px-5" value="properties"><Building2 />Biens</TabsTrigger>
-              <TabsTrigger className="flex-none shrink-0 px-4 sm:px-5" value="activities"><ListChecks />Activités</TabsTrigger>
-              <TabsTrigger className="flex-none shrink-0 px-4 sm:px-5" value="statistics"><BarChart3 />Statistiques</TabsTrigger>
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as AdminTab)} className="w-full min-w-0 gap-6 sm:gap-8">
+          <div className="w-full min-w-0">
+            <TabsList className="!grid h-auto w-full grid-cols-2 gap-1 bg-white p-1 shadow-sm shadow-orange-100/40 sm:grid-cols-3 lg:!inline-flex lg:w-full lg:justify-start">
+              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="overview"><LayoutDashboard />Vue d&apos;ensemble</TabsTrigger>
+              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="contacts"><ContactRound />Contacts</TabsTrigger>
+              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="estimations"><ClipboardCheck />Estimations</TabsTrigger>
+              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="properties"><Building2 />Biens</TabsTrigger>
+              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="activities"><ListChecks />Activités</TabsTrigger>
+              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="statistics"><BarChart3 />Statistiques</TabsTrigger>
             </TabsList>
           </div>
           <TabsContent value="overview" className="w-full">
