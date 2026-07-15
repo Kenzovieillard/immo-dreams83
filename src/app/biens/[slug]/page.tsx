@@ -17,6 +17,7 @@ import {
 import { PropertyLeadForm } from "@/components/forms/property-lead-form";
 import { PropertyCard } from "@/components/site/property-card";
 import { PropertyGallery } from "@/components/site/property-gallery";
+import { GoogleMapEmbed } from "@/components/site/google-map-embed";
 import { PropertyShare } from "@/components/site/property-share";
 import { StructuredData } from "@/components/site/structured-data";
 import { agencyContact, siteUrl } from "@/components/site/site-config";
@@ -107,7 +108,7 @@ export default async function PropertyPage({ params }: PropertyPageProps) {
                 <Badge variant="outline" className="border-white/20 text-white">{propertyTypeLabels[property.type]}</Badge>
                 <Badge variant="outline" className="border-white/20 font-mono text-white">Réf. {property.reference}</Badge>
               </div>
-              <h1 className="mt-5 max-w-4xl text-3xl font-black tracking-tight sm:text-5xl">{property.title}</h1>
+              <h1 className="mt-5 max-w-[20rem] break-words text-[1.85rem] font-black leading-[1.08] tracking-tight sm:max-w-4xl sm:text-5xl">{property.title}</h1>
               <p className="mt-4 flex items-center gap-2 text-base text-white/70 sm:text-lg"><MapPin className="size-5 text-orange-300" />{property.city} ({property.postalCode})</p>
             </div>
             <div>
@@ -179,15 +180,12 @@ export default async function PropertyPage({ params }: PropertyPageProps) {
               </Card>
             </div>
 
-            <div className="min-h-72 rounded-lg border border-orange-200 bg-orange-50 p-6">
-              <div className="flex h-full min-h-60 items-center justify-center border border-dashed border-orange-300 bg-white">
-                <div className="max-w-md text-center">
-                  <MapPin className="mx-auto size-9 text-orange-600" />
-                  <h2 className="mt-4 text-xl font-black text-[#111111]">Localisation indicative</h2>
-                  <p className="mt-2 text-sm leading-6 text-gray-600">{property.city} ({property.postalCode}). L&apos;adresse précise est communiquée par l&apos;agence selon le dossier.</p>
-                </div>
-              </div>
-            </div>
+            <GoogleMapEmbed
+              query={`${property.city} ${property.postalCode} France`}
+              title={`Localisation indicative du bien a ${property.city}`}
+              helperText="Localisation indicative basee sur la commune et le code postal. L'adresse precise est communiquee par l'agence selon le dossier."
+            />
+
           </div>
 
           <aside className="grid h-fit gap-5 lg:sticky lg:top-24">

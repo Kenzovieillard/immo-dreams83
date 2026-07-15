@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { ContactForm } from "@/components/forms/contact-form";
+import { GoogleMapEmbed } from "@/components/site/google-map-embed";
 import { SectionTitle } from "@/components/site/section-title";
 import { agencyContact } from "@/components/site/site-config";
 
@@ -39,10 +40,10 @@ export default function ContactPage() {
           <Badge className="mb-5 border-0 bg-orange-500 text-white">
             Contact agence
           </Badge>
-          <h1 className="max-w-4xl text-3xl font-black tracking-tight sm:text-6xl">
+          <h1 className="max-w-[22rem] break-words text-[2rem] font-black leading-[1.08] tracking-tight sm:max-w-4xl sm:text-6xl">
             Contactez IMMO-DREAMS83
           </h1>
-          <p className="mt-5 max-w-2xl text-base leading-7 text-white/76 sm:mt-6 sm:text-lg sm:leading-8">
+          <p className="mt-5 max-w-[22rem] text-base leading-7 text-white/76 sm:mt-6 sm:max-w-2xl sm:text-lg sm:leading-8">
             Un projet de vente, d&apos;achat ou d&apos;estimation dans le Var ? Parlons-en
             simplement.
           </p>
@@ -88,20 +89,12 @@ export default function ContactPage() {
               </CardContent>
             </Card>
 
-            <div className="overflow-hidden rounded-xl border border-orange-100 bg-white shadow-xl shadow-orange-100/60">
-              <div className="relative min-h-72 bg-[radial-gradient(circle_at_30%_20%,#FACC15_0,#F97316_18%,#FFF7ED_19%,#FFF7ED_100%)] p-8">
-                <div className="absolute inset-6 rounded-lg border border-orange-200/70" />
-                <div className="absolute left-1/2 top-1/2 flex size-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[#111111] text-orange-300 shadow-2xl">
-                  <MapPin className="size-7" aria-hidden="true" />
-                </div>
-                <div className="relative z-10 max-w-xs rounded-lg bg-white/90 p-4 shadow-lg">
-                  <p className="text-sm font-bold text-[#111111]">Solliès-Pont</p>
-                  <p className="mt-1 text-sm leading-6 text-gray-600">
-                    Agence située à Solliès-Pont, au cœur du Var.
-                  </p>
-                </div>
-              </div>
-            </div>
+            <GoogleMapEmbed
+              query="IMMO-DREAMS83, 4 chemin des Bancaous, 83210 Sollies-Pont, France"
+              title="Localisation de l'agence IMMO-DREAMS83"
+              helperText="Agence situee a Sollies-Pont, au coeur du Var."
+            />
+
           </div>
         </div>
       </section>

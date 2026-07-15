@@ -26,8 +26,15 @@ export const metadata: Metadata = {
     "IMMO-DREAMS83 accompagne vos projets immobiliers dans le Var : maison à vendre, appartement à vendre à Toulon, terrain à vendre et estimation immobilière.",
 };
 
+function getFeaturedGridClass(count: number) {
+  if (count === 1) return "mx-auto grid max-w-xl grid-cols-1 gap-6";
+  if (count === 2) return "mx-auto grid max-w-5xl grid-cols-1 gap-6 md:grid-cols-2";
+  return "grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3";
+}
+
 export default async function Home() {
   const featuredProperties = await getFeaturedPublicProperties();
+  const visibleFeaturedProperties = featuredProperties.slice(0, 6);
 
   return (
     <>
@@ -43,18 +50,18 @@ export default async function Home() {
         <div className="absolute inset-0 bg-gradient-to-r from-black/86 via-black/54 to-orange-700/28" />
         <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-white to-transparent" />
 
-        <div className="relative mx-auto flex min-h-[calc(100svh-4rem)] max-w-7xl flex-col justify-center px-4 py-10 sm:min-h-[700px] sm:px-6 sm:py-14 lg:px-8 lg:py-12">
-          <div className="max-w-3xl">
+        <div className="relative mx-auto flex min-h-[calc(100svh-4rem)] w-full max-w-7xl flex-col justify-center overflow-hidden px-4 py-10 sm:min-h-[700px] sm:px-6 sm:py-14 lg:px-8 lg:py-12">
+          <div className="min-w-0 max-w-3xl">
             <Badge className="mb-4 border-0 bg-white/15 px-4 py-2 text-white backdrop-blur">
               Agence immobilière à Solliès-Pont
             </Badge>
             <p className="mb-4 text-base font-semibold text-orange-300 sm:text-lg">
               Votre horizon commence ici.
             </p>
-            <h1 className="text-3xl font-black leading-[1.05] tracking-tight text-white sm:text-5xl lg:text-6xl">
+            <h1 className="max-w-[22rem] text-[2rem] font-black leading-[1.05] tracking-tight text-white sm:max-w-3xl sm:text-5xl lg:text-6xl">
               Trouvez le bien de vos rêves dans le Var
             </h1>
-            <p className="mt-5 max-w-2xl text-base leading-7 text-white/82 sm:text-lg sm:leading-8">
+            <p className="mt-5 max-w-[22rem] text-base leading-7 text-white/82 sm:max-w-2xl sm:text-lg sm:leading-8">
               Maisons, appartements et terrains sélectionnés avec exigence, pour
               construire votre projet immobilier dans le Sud de la France.
             </p>
@@ -63,7 +70,7 @@ export default async function Home() {
                 href="/a-vendre"
                 className={buttonVariants({
                   className:
-                    "h-12 bg-orange-500 px-5 text-white shadow-lg shadow-orange-900/20 hover:bg-orange-600",
+                    "h-12 w-full justify-center bg-orange-500 px-5 text-white shadow-lg shadow-orange-900/20 hover:bg-orange-600 sm:w-auto",
                 })}
               >
                 Voir les biens disponibles
@@ -74,7 +81,7 @@ export default async function Home() {
                 className={buttonVariants({
                   variant: "outline",
                   className:
-                    "h-12 border-white/35 bg-white/10 px-5 text-white backdrop-blur hover:bg-white hover:text-[#111111]",
+                    "h-12 w-full justify-center border-white/35 bg-white/10 px-5 text-white backdrop-blur hover:bg-white hover:text-[#111111] sm:w-auto",
                 })}
               >
                 Faire estimer mon bien
@@ -82,13 +89,13 @@ export default async function Home() {
             </div>
           </div>
 
-          <div className="mt-8 w-full max-w-6xl">
+          <div className="mt-8 w-full max-w-6xl min-w-0">
             <PropertySearch />
           </div>
         </div>
       </section>
 
-      {featuredProperties.length > 0 ? (
+      {visibleFeaturedProperties.length > 0 ? (
         <section className="px-4 py-14 sm:px-6 sm:py-20 lg:px-8">
           <div className="mx-auto max-w-7xl">
             <div className="mb-10 flex flex-col justify-between gap-6 md:flex-row md:items-end">
@@ -108,8 +115,8 @@ export default async function Home() {
                 <ArrowRight className="size-4" aria-hidden="true" />
               </Link>
             </div>
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {featuredProperties.slice(0, 6).map((property, index) => (
+            <div className={getFeaturedGridClass(visibleFeaturedProperties.length)}>
+              {visibleFeaturedProperties.map((property, index) => (
                 <PropertyCard key={property.id} property={property} priority={index < 3} />
               ))}
             </div>

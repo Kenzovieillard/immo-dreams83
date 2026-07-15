@@ -36,10 +36,10 @@ export default function AgencePage() {
         <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[1fr_0.9fr] lg:items-center">
           <div>
             <Badge className="mb-5 border-0 bg-orange-500 text-white">Agence locale</Badge>
-            <h1 className="text-3xl font-black tracking-tight sm:text-6xl">
+            <h1 className="max-w-[22rem] break-words text-[2rem] font-black leading-[1.08] tracking-tight sm:max-w-4xl sm:text-6xl">
               L&apos;agence IMMO-DREAMS83
             </h1>
-            <p className="mt-5 max-w-2xl text-base leading-7 text-white/75 sm:mt-6 sm:text-lg sm:leading-8">
+            <p className="mt-5 max-w-[22rem] text-base leading-7 text-white/75 sm:mt-6 sm:max-w-2xl sm:text-lg sm:leading-8">
               Nous aidons les propriétaires et acquéreurs à vendre, acheter et
               arbitrer leurs projets immobiliers avec confiance dans le Var.
             </p>

@@ -2,7 +2,25 @@
 
 Plateforme immobiliere responsive de l'agence IMMO-DREAMS83, situee a Sollies-Pont et specialisee dans la vente, l'achat et l'estimation de maisons, appartements et terrains dans le Var.
 
-## Fonctionnalites V2.5
+## Version actuelle
+
+V2.6 - CRM Dashboard, Maps & Responsive Polish.
+
+Cette version ameliore le socle V2.5 avec un CRM plus confortable, une page d'accueil plus adaptative, des cartes Google Maps integrees et des statistiques admin plus utiles, sans supprimer les fonctionnalites deja en place.
+
+## Fonctionnalites V2.6
+
+- grille adaptative des biens a la une selon le nombre de biens mis en avant ;
+- cartes de biens avec hauteur plus coherente et CTA aligne ;
+- carte Google Maps sur la page Contact avec l'adresse officielle de l'agence ;
+- carte Google Maps indicative sur les fiches biens avec ville et code postal uniquement ;
+- layout CRM plus large avec navigation par onglets plus lisible sur mobile et desktop ;
+- tableau de bord CRM en style bento ;
+- statistiques CRM, portefeuille, villes, formulaires et activites plus completes ;
+- journal d'activite searchable et filtrable ;
+- emplacement prepare pour de futures statistiques GA4, sans fausses donnees.
+
+## Socle V2.5 deja en place
 
 - site vitrine premium avec pages Accueil, Agence, A vendre, Estimation, Biens et Contact ;
 - catalogue public de biens officiels, complete par les biens crees dans Supabase ;
@@ -71,10 +89,37 @@ La cle `SUPABASE_SERVICE_ROLE_KEY` reste strictement cote serveur. Elle permet a
 
 Sans Supabase, l'interface affiche le mode local et conserve les changements uniquement pendant la session courante.
 
-## Documentation V2.5
+## Routes importantes
+
+- `/`
+- `/agence`
+- `/a-vendre`
+- `/biens`
+- `/biens/[slug]`
+- `/estimation`
+- `/contact`
+- `/admin`
+- `/mentions-legales`
+- `/legal/privacy-policy`
+- `/legal/cookies`
+
+## CRM et administration
+
+`/admin` reste protege par un code local temporaire. Il permet de gerer les contacts, estimations, biens, activites et statistiques. La V2.6 ameliore surtout la lecture operationnelle du CRM ; l'authentification complete avec roles reste prevue pour la V3.
+
+## Cartes et localisation
+
+La page Contact utilise une carte Google Maps iframe basee sur l'adresse officielle de l'agence. Les fiches biens utilisent une localisation indicative basee uniquement sur la ville et le code postal, afin de ne pas exposer d'adresse privee.
+
+## Statistiques
+
+Les statistiques CRM sont calculees a partir des donnees locales ou Supabase deja disponibles. GA4 n'est pas encore connecte : les blocs de trafic web sont volontairement affiches comme a connecter pour une future integration Google Analytics Data API.
+
+## Documentation
 
 - Setup technique : `docs/V2_5_SETUP.md`
 - Recette mobile et CRM : `docs/V2_5_RECETTE.md`
+- Recette V2.6 : `docs/V2_6_RECETTE.md`
 - Inventaire des annonces importees : `docs/PROPERTY_IMPORTS.md`
 - Objectifs V3 : `docs/V3.md`
 
@@ -89,12 +134,15 @@ npm run build
 
 - la protection de `/admin` est temporaire et ne remplace pas une authentification ;
 - aucun fournisseur email reel n'est active ;
+- GA4 n'est pas connecte ;
+- Google Maps utilise des embeds iframe sans cle API ;
 - le catalogue initial reste versionne dans `src/data/properties.ts`, meme si les nouveaux biens viennent de Supabase ;
 - la suppression definitive d'un bien complet n'est pas encore disponible dans le CRM ;
 - la suppression photo est definitive, sans corbeille temporaire ;
 - la carte presente une localisation indicative ;
+- la multidiffusion portails n'est pas encore active ;
 - l'aide DPE/GES ne remplace pas le diagnostic officiel fourni par un diagnostiqueur certifie.
 
 ## Prochaine amelioration
 
-La V3 devra transformer ce socle en vrai outil d'exploitation : authentification, roles, suppression controlee des biens, emails transactionnels, rappels commerciaux, corbeille et preparation des flux de multidiffusion.
+La V3 devra transformer ce socle en vrai outil d'exploitation : authentification, roles et permissions, emails transactionnels, integration GA4, suppression controlee avec corbeille, rappels commerciaux, preparation des flux portails et fondation d'export multidiffusion.
