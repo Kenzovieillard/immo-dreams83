@@ -4,9 +4,23 @@ Plateforme immobiliere responsive de l'agence IMMO-DREAMS83, situee a Sollies-Po
 
 ## Version actuelle
 
-V2.6 - CRM Dashboard, Maps & Responsive Polish.
+V3 foundation - CRM securise, roles admin et migrations Supabase versionnees.
 
-Cette version ameliore le socle V2.5 avec un CRM plus confortable, une page d'accueil plus adaptative, des cartes Google Maps integrees et des statistiques admin plus utiles, sans supprimer les fonctionnalites deja en place.
+Cette version conserve le socle V2.6 et ajoute la premiere fondation V3 : authentification CRM avec Supabase Auth, sessions serveur, roles, audit logs, migrations versionnees, lecture publique des biens via la cle anon et corbeille logique pour les photos retirees.
+
+## Nouveautes V3 foundation
+
+- page `/admin/login` avec connexion Supabase Auth ;
+- protection serveur de `/admin` ;
+- protection des routes `/api/admin/*` par session et permissions ;
+- suppression de l'ancien code public `NEXT_PUBLIC_ADMIN_LOCAL_CODE` ;
+- roles admin prepares : `ADMIN`, `DIRECTOR`, `AGENT`, `ASSISTANT`, `MARKETING`, `READ_ONLY` ;
+- table `profiles` pour relier les utilisateurs Supabase Auth au CRM ;
+- table `audit_logs` pour tracer les actions sensibles ;
+- table `property_versions` pour historiser les modifications de biens ;
+- table `property_photo_trash` pour eviter la suppression definitive immediate des photos ;
+- migration versionnee dans `supabase/migrations` ;
+- lecture publique des biens avec la cle anon et les policies RLS.
 
 ## Fonctionnalites V2.6
 
@@ -69,25 +83,34 @@ NEXT_PUBLIC_SITE_URL=
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
-NEXT_PUBLIC_ADMIN_LOCAL_CODE=
+ADMIN_BOOTSTRAP_EMAILS=
 CONTACT_RECEIVER_EMAIL=
 EMAIL_FROM=
 EMAIL_API_KEY=
 ```
 
-La cle `SUPABASE_SERVICE_ROLE_KEY` reste strictement cote serveur. Elle permet au CRM de lire et modifier les prospects, biens et photos malgre les regles RLS.
+La cle `SUPABASE_SERVICE_ROLE_KEY` reste strictement cote serveur. Elle permet aux routes API admin de lire et modifier les prospects, biens et photos apres verification de session et de role.
+
+`ADMIN_BOOTSTRAP_EMAILS` sert a creer automatiquement le premier profil `ADMIN` lorsqu'un utilisateur Supabase Auth autorise se connecte pour la premiere fois. Exemple :
+
+```text
+ADMIN_BOOTSTRAP_EMAILS=antoine.faridoni@immo-dreams83.fr
+```
 
 ## Comment utiliser le CRM
 
-1. Ouvrir `/admin`.
-2. Entrer la valeur de `NEXT_PUBLIC_ADMIN_LOCAL_CODE`.
-3. Consulter les contacts, estimations, biens, activites et statistiques.
-4. Modifier un statut, ajouter une note ou archiver un prospect.
-5. Creer un contact manuel si une demande arrive par telephone ou en agence.
-6. Creer ou modifier un bien avec prix FAI, statut, photos, DPE/GES, options terrain et mise en avant.
-7. Verifier ensuite le rendu public sur Accueil, Biens et la fiche detail.
+1. Executer `supabase/schema.sql` ou la migration V3 dans Supabase.
+2. Creer un utilisateur dans Supabase Auth.
+3. Ajouter son email dans `ADMIN_BOOTSTRAP_EMAILS`.
+4. Ouvrir `/admin/login`.
+5. Se connecter avec l'email et le mot de passe Supabase Auth.
+6. Consulter les contacts, estimations, biens, activites et statistiques.
+7. Modifier un statut, ajouter une note ou archiver un prospect.
+8. Creer un contact manuel si une demande arrive par telephone ou en agence.
+9. Creer ou modifier un bien avec prix FAI, statut, photos, DPE/GES, options terrain et mise en avant.
+10. Verifier ensuite le rendu public sur Accueil, Biens et la fiche detail.
 
-Sans Supabase, l'interface affiche le mode local et conserve les changements uniquement pendant la session courante.
+Sans Supabase Auth configure, le CRM n'est pas accessible. Le site public reste disponible.
 
 ## Routes importantes
 
@@ -105,7 +128,7 @@ Sans Supabase, l'interface affiche le mode local et conserve les changements uni
 
 ## CRM et administration
 
-`/admin` reste protege par un code local temporaire. Il permet de gerer les contacts, estimations, biens, activites et statistiques. La V2.6 ameliore surtout la lecture operationnelle du CRM ; l'authentification complete avec roles reste prevue pour la V3.
+`/admin` est protege par Supabase Auth. Les appels `/api/admin/*` refusent les requetes sans session CRM active et sans permission suffisante.
 
 ## Cartes et localisation
 
@@ -121,6 +144,8 @@ Les statistiques CRM sont calculees a partir des donnees locales ou Supabase dej
 - Recette mobile et CRM : `docs/V2_5_RECETTE.md`
 - Recette V2.6 : `docs/V2_6_RECETTE.md`
 - Inventaire des annonces importees : `docs/PROPERTY_IMPORTS.md`
+- Design system CRM Bento : `docs/CRM_BENTO_DESIGN_SYSTEM.md`
+- Implementation CRM V3 : `docs/CRM_V3_IMPLEMENTATION.md`
 - Objectifs V3 : `docs/V3.md`
 
 ## Verifications
@@ -132,17 +157,16 @@ npm run build
 
 ## Limites actuelles
 
-- la protection de `/admin` est temporaire et ne remplace pas une authentification ;
 - aucun fournisseur email reel n'est active ;
 - GA4 n'est pas connecte ;
 - Google Maps utilise des embeds iframe sans cle API ;
 - le catalogue initial reste versionne dans `src/data/properties.ts`, meme si les nouveaux biens viennent de Supabase ;
 - la suppression definitive d'un bien complet n'est pas encore disponible dans le CRM ;
-- la suppression photo est definitive, sans corbeille temporaire ;
+- la restauration visuelle des photos en corbeille n'a pas encore d'ecran dedie ;
 - la carte presente une localisation indicative ;
 - la multidiffusion portails n'est pas encore active ;
 - l'aide DPE/GES ne remplace pas le diagnostic officiel fourni par un diagnostiqueur certifie.
 
 ## Prochaine amelioration
 
-La V3 devra transformer ce socle en vrai outil d'exploitation : authentification, roles et permissions, emails transactionnels, integration GA4, suppression controlee avec corbeille, rappels commerciaux, preparation des flux portails et fondation d'export multidiffusion.
+La suite V3 devra brancher les ecrans sur le modele CRM normalise : leads, taches, rappels, mandats, matching acquereurs, emails transactionnels, statistiques GA4 et exports portails.
