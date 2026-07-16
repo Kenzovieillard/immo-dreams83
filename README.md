@@ -4,9 +4,11 @@ Plateforme immobiliere responsive de l'agence IMMO-DREAMS83, situee a Sollies-Po
 
 ## Version actuelle
 
-V3 phase 2 - CRM securise et Supabase source unique des biens.
+V3 phase 3 - CRM securise, Supabase source unique des biens et revue legacy applicative.
 
 Cette version conserve le socle V2.6, ajoute la securite admin V3 et branche le catalogue immobilier public sur Supabase comme source unique via la vue `public_properties`.
+
+La Phase 3 demarre cote applicatif avec un ecran de revue legacy dans `/admin`. Il permet de verifier les rapprochements entre anciennes demandes `contacts` et `estimations`, de journaliser une decision manuelle, puis de migrer les demandes validees vers `leads`. Elle ajoute maintenant un onglet `Pipeline` pour traiter les prospects normalises, assigner un responsable et creer des rappels.
 
 ## Nouveautes V3 foundation
 
@@ -27,6 +29,13 @@ Cette version conserve le socle V2.6, ajoute la securite admin V3 et branche le 
 - historique `property_history` ;
 - photos normalisees dans `property_photos` avec corbeille et restauration technique ;
 - script d'import idempotent des biens statiques historiques.
+- onglet CRM `Revue legacy` pour controler les rapprochements avant migration contacts/leads ;
+- route admin `/api/admin/legacy-review` protegee par session et permission CRM ;
+- journalisation des decisions de revue dans `lead_merge_logs` ;
+- migration controlee des anciennes demandes `contacts` et `estimations` vers `leads`, avec historique de statut et communication initiale.
+- onglet CRM `Pipeline` pour suivre les leads normalises au quotidien ;
+- route admin `/api/admin/pipeline` protegee par session pour statuts, priorites, assignations et rappels ;
+- migration `202607160003_commercial_pipeline_foundation.sql` pour renforcer les taches, rappels et policies de lecture admin.
 
 ## Fonctionnalites V2.6
 
@@ -114,10 +123,11 @@ ADMIN_BOOTSTRAP_EMAILS=antoine.faridoni@immo-dreams83.fr
 4. Ouvrir `/admin/login`.
 5. Se connecter avec l'email et le mot de passe Supabase Auth.
 6. Consulter les contacts, estimations, biens, activites et statistiques.
-7. Modifier un statut, ajouter une note ou archiver un prospect.
-8. Creer un contact manuel si une demande arrive par telephone ou en agence.
-9. Creer ou modifier un bien avec prix FAI, statut, photos, DPE/GES, options terrain et mise en avant.
-10. Verifier ensuite le rendu public sur Accueil, Biens et la fiche detail.
+7. Ouvrir `Pipeline` pour traiter les leads normalises, assigner un agent et creer un rappel.
+8. Modifier un statut, ajouter une note ou archiver un prospect.
+9. Creer un contact manuel si une demande arrive par telephone ou en agence.
+10. Creer ou modifier un bien avec prix FAI, statut, photos, DPE/GES, options terrain et mise en avant.
+11. Verifier ensuite le rendu public sur Accueil, Biens et la fiche detail.
 
 Sans Supabase Auth configure, le CRM n'est pas accessible. Le site public reste disponible.
 
@@ -137,9 +147,9 @@ npm run properties:import
 
 Le script conserve les references et les slugs existants, puis ecrit un rapport JSON dans `reports/`.
 
-## Preparer la Partie 3 CRM commercial
+## Partie 3 CRM commercial
 
-Avant de migrer `contacts` et `estimations` vers le futur modele `contacts` + `leads`, executer le rapport lecture seule :
+Pour auditer `contacts` et `estimations` avant toute action, executer le rapport lecture seule :
 
 ```bash
 npm run crm:legacy-dry-run
@@ -153,9 +163,82 @@ Pour conserver un rapport JSON local ignore par Git :
 npm run crm:legacy-dry-run -- --write-report
 ```
 
+Une revue visuelle est aussi disponible dans le CRM :
+
+1. ouvrir `/admin` avec un compte Supabase Auth autorise ;
+2. aller dans l'onglet `Revue legacy` ;
+3. filtrer les cas par categorie de rapprochement ou statut de revue ;
+4. ajouter une note de revue ;
+5. enregistrer une decision : `Pret pour migration future`, `A revoir manuellement` ou `Ne pas fusionner`.
+
+Important : cet ecran ne migre rien tout seul. Il journalise uniquement la decision dans `lead_merge_logs` et trace l'action dans l'audit admin.
+
+Une fois les cas ambigus arbitres, verifier la migration `contacts/leads` avec :
+
+```bash
+npm run crm:legacy-migrate:dry-run
+```
+
+Ce dry-run connecte Supabase :
+
+- exclut les cas marques `IGNORED` ;
+- bloque les cas `AMBIGU` non arbitres ;
+- detecte les leads legacy deja crees via `source_table` + `source_id` ;
+- produit un rapport JSON local dans `reports/` ;
+- ne modifie aucune donnee.
+
+La migration de garde-fou appliquee sur Supabase le 16/07/2026 est :
+
+```text
+supabase/migrations/202607160002_legacy_lead_import_guardrails.sql
+```
+
+Elle ajoute un index unique partiel pour renforcer la protection contre les doublons si l'import est relance. Verification SQL OK : `leads_source_table_source_id_unique` et `leads_source_table_source_id_idx` existent dans `pg_indexes`.
+
+Execution reelle uniquement apres validation du rapport dry-run :
+
+```bash
+npm run crm:legacy-migrate
+```
+
+### Pipeline quotidien
+
+Le CRM dispose maintenant d'un onglet :
+
+```text
+/admin > Pipeline
+```
+
+Cet onglet lit le modele normalise `leads` et `tasks`.
+
+Il permet de :
+
+- voir les leads actifs ;
+- identifier les rappels du jour et les rappels en retard ;
+- filtrer par statut, agent ou recherche libre ;
+- modifier statut, priorite, assignation et notes ;
+- creer un rappel lie a un lead ;
+- terminer ou rouvrir un rappel.
+
+Route API protegee :
+
+```text
+GET /api/admin/pipeline
+POST /api/admin/pipeline
+PATCH /api/admin/pipeline
+```
+
+Migration a appliquer avant recette complete :
+
+```text
+supabase/migrations/202607160003_commercial_pipeline_foundation.sql
+```
+
+Cette migration est non destructive. Elle ajoute des colonnes de suivi sur `tasks`, des index de lecture et des policies de lecture admin pour `leads`, `tasks`, `communications`, `appointments` et `lead_status_history`.
+
 ## Statut de deblocage avant Partie 3
 
-Statut actuel : **pret a demarrer la Partie 3 en branche dediee**.
+Statut actuel : **Phase 3 applicative migree cote Supabase, validation finale en cours avant suite CRM commercial**.
 
 La Phase 2 Supabase source unique des biens a ete appliquee sur le projet Supabase cible le 16/07/2026 via SQL Editor, car la Supabase CLI n'etait pas authentifiee localement.
 
@@ -175,13 +258,24 @@ Resultat Phase 2 valide :
 - Rapport legacy CRM relance : 10 demandes analysees, 9 `MATCH CERTAIN`, 1 `AMBIGU`, aucune ecriture.
 - `npm run lint` OK.
 - `npm run build` OK.
+- Sur la branche `feature/v3-commercial-crm-foundation`, la migration Phase 3 non destructive a ete appliquee : `lead_sources`, `lead_import_runs`, `lead_merge_logs` et `crm_legacy_lead_candidates` sont disponibles.
+- L'ecran applicatif de revue legacy est disponible dans `/admin` via l'onglet `Revue legacy`.
+- La route `/api/admin/legacy-review` permet de charger la revue et de journaliser une decision sans migration.
+- Le script `npm run crm:legacy-migrate:dry-run` prepare et controle la migration contacts/leads en excluant les cas `IGNORED`.
+- Import reel Phase 3 execute le 16/07/2026 : 9 leads crees, 9 historiques de statut crees, 9 communications initiales creees, 0 contact supplementaire cree, 1 cas legacy ignore.
+- Dry-run post-import OK : 9 leads legacy deja presents, 0 lead a creer, 0 bloqueur.
+- Migration de garde-fou Phase 3 appliquee et verifiee : index unique `leads_source_table_source_id_unique` et index de lecture `leads_source_table_source_id_idx`.
+- Dry-run post-garde-fou OK : 9 leads legacy deja presents, 0 lead a creer, 0 bloqueur.
+- Pipeline commercial applicatif ajoute : statuts, priorites, assignation, rappels et vue quotidienne.
+- Migration pipeline a appliquer : `supabase/migrations/202607160003_commercial_pipeline_foundation.sql`.
 
 Actions restantes avant merge/production :
 
 1. Relire et merger la PR Phase 2.
 2. Rededeployer Vercel depuis `main`.
 3. Faire une recette visuelle authentifiee sur mobile : `/admin`, Contacts, Estimations, Biens, Activites, creation/modification de bien, upload photo.
-4. Traiter le cas legacy `AMBIGU` avant toute migration effective contacts/leads.
+4. Appliquer et valider la migration pipeline `202607160003_commercial_pipeline_foundation.sql`.
+5. Recetter `/admin` > `Pipeline` : changement de statut, assignation, creation de rappel, rappel termine.
 5. Authentifier GitHub CLI si le flux PR doit etre gere depuis le terminal :
 
 ```bash
@@ -217,7 +311,7 @@ Critere de sortie :
 PRET A IMPLEMENTER LA PARTIE 3
 ```
 
-Le depot est maintenant dans cet etat cote migration/import. La Partie 3 doit rester sur sa branche dediee et commencer par le modele contacts/leads, sans mutation destructive des donnees legacy.
+Le depot est maintenant dans cet etat cote migration/import. La Partie 3 reste sur sa branche dediee et commence par le modele contacts/leads, sans mutation destructive des donnees legacy.
 
 ## Routes importantes
 
@@ -253,6 +347,7 @@ Les statistiques CRM sont calculees a partir des donnees locales ou Supabase dej
 - Inventaire des annonces importees : `docs/PROPERTY_IMPORTS.md`
 - Design system CRM Bento : `docs/CRM_BENTO_DESIGN_SYSTEM.md`
 - Implementation CRM V3 : `docs/CRM_V3_IMPLEMENTATION.md`
+- Demarrage CRM commercial V3 : `docs/V3_PHASE_3_CRM_COMMERCIAL.md`
 - Objectifs V3 : `docs/V3.md`
 
 ## Verifications

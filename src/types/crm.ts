@@ -1,5 +1,7 @@
 export type LeadStatus = "NEW" | "CONTACTED" | "APPOINTMENT" | "MANDATE_SIGNED" | "LOST";
 
+export type LeadPriority = "low" | "normal" | "high" | "urgent";
+
 export type ContactLead = {
   id: string;
   created_at: string;
@@ -38,4 +40,58 @@ export type Activity = {
   entity_id: string;
   action: string;
   user_name: string;
+};
+
+export type AdminTeamMember = {
+  id: string;
+  email: string;
+  fullName: string | null;
+  role: string;
+};
+
+export type PipelineLead = {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  title: string;
+  requestType: string;
+  projectType: string;
+  propertyType: string | null;
+  city: string | null;
+  postalCode: string | null;
+  budgetMin: number | null;
+  budgetMax: number | null;
+  desiredSurface: number | null;
+  desiredRooms: number | null;
+  source: string;
+  sourceCode: string | null;
+  status: LeadStatus;
+  priority: LeadPriority;
+  assignedTo: string | null;
+  assignedToName: string | null;
+  contactId: string | null;
+  contactName: string;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  linkedPropertyId: string | null;
+  linkedPropertyTitle: string | null;
+  notes: string | null;
+  archived: boolean;
+};
+
+export type PipelineTask = {
+  id: string;
+  leadId: string | null;
+  assignedTo: string | null;
+  assignedToName: string | null;
+  createdBy: string | null;
+  title: string;
+  description: string | null;
+  dueAt: string | null;
+  completedAt: string | null;
+  completedBy: string | null;
+  priority: LeadPriority;
+  taskType: string;
+  createdAt: string;
+  updatedAt: string;
 };
