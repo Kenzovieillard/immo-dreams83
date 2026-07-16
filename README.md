@@ -4,9 +4,11 @@ Plateforme immobiliere responsive de l'agence IMMO-DREAMS83, situee a Sollies-Po
 
 ## Version actuelle
 
-V3 phase 2 - CRM securise et Supabase source unique des biens.
+V3 phase 3 - CRM securise, Supabase source unique des biens et revue legacy applicative.
 
 Cette version conserve le socle V2.6, ajoute la securite admin V3 et branche le catalogue immobilier public sur Supabase comme source unique via la vue `public_properties`.
+
+La Phase 3 demarre cote applicatif avec un ecran de revue legacy dans `/admin`. Il permet de verifier les rapprochements entre anciennes demandes `contacts` et `estimations`, puis de journaliser une decision manuelle avant toute migration reelle.
 
 ## Nouveautes V3 foundation
 
@@ -27,6 +29,9 @@ Cette version conserve le socle V2.6, ajoute la securite admin V3 et branche le 
 - historique `property_history` ;
 - photos normalisees dans `property_photos` avec corbeille et restauration technique ;
 - script d'import idempotent des biens statiques historiques.
+- onglet CRM `Revue legacy` pour controler les rapprochements avant migration contacts/leads ;
+- route admin `/api/admin/legacy-review` protegee par session et permission CRM ;
+- journalisation des decisions de revue dans `lead_merge_logs`, sans fusion ni migration automatique.
 
 ## Fonctionnalites V2.6
 
@@ -153,6 +158,16 @@ Pour conserver un rapport JSON local ignore par Git :
 npm run crm:legacy-dry-run -- --write-report
 ```
 
+Une revue visuelle est aussi disponible dans le CRM :
+
+1. ouvrir `/admin` avec un compte Supabase Auth autorise ;
+2. aller dans l'onglet `Revue legacy` ;
+3. filtrer les cas par categorie de rapprochement ou statut de revue ;
+4. ajouter une note de revue ;
+5. enregistrer une decision : `Pret pour migration future`, `A revoir manuellement` ou `Ne pas fusionner`.
+
+Important : cet ecran ne lance pas la migration reelle. Il journalise uniquement la decision dans `lead_merge_logs` et trace l'action dans l'audit admin.
+
 ## Statut de deblocage avant Partie 3
 
 Statut actuel : **pret a demarrer la Partie 3 en branche dediee**.
@@ -176,6 +191,8 @@ Resultat Phase 2 valide :
 - `npm run lint` OK.
 - `npm run build` OK.
 - Sur la branche `feature/v3-commercial-crm-foundation`, la migration Phase 3 non destructive a ete appliquee : `lead_sources`, `lead_import_runs`, `lead_merge_logs` et `crm_legacy_lead_candidates` sont disponibles.
+- L'ecran applicatif de revue legacy est disponible dans `/admin` via l'onglet `Revue legacy`.
+- La route `/api/admin/legacy-review` permet de charger la revue et de journaliser une decision sans migration.
 
 Actions restantes avant merge/production :
 

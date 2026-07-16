@@ -60,6 +60,12 @@ import {
   getPropertyDpePosition,
   parseDiagnosticValue,
 } from "@/lib/dpe";
+import type {
+  LegacyCrmReviewSummary,
+  MatchCategory,
+  PlannedAction,
+  SimulatedPayload,
+} from "@/lib/legacy-crm-review";
 import {
   getPropertyInventoryMetrics,
   getPropertyPublicationBreakdown,
@@ -75,10 +81,41 @@ const contactRequestTypes = ["Achat", "Vente", "Estimation", "Terrain", "Autre"]
 const propertyTypes = ["apartment", "house", "land"] as const satisfies PropertyType[];
 const propertyStatuses = ["available", "under_offer", "sold"] as const satisfies PropertyStatus[];
 const propertyPublicationStatuses = ["DRAFT", "PUBLISHED", "UNPUBLISHED", "ARCHIVED"] as const satisfies PropertyPublicationStatus[];
-type AdminTab = "overview" | "contacts" | "estimations" | "properties" | "activities" | "statistics";
+type AdminTab = "overview" | "contacts" | "estimations" | "legacyReview" | "properties" | "activities" | "statistics";
 type ActivityEntityTypeFilter = "ALL" | "contact" | "estimation" | "property" | "other";
 type ActivityActionFilter = "ALL" | "created" | "updated" | "archived" | "uploaded" | "deleted" | "other";
 type ActivityPeriodFilter = "ALL" | "today" | "last7days" | "last30days";
+type LegacyMatchFilter = "ALL" | MatchCategory;
+type LegacyReviewStatusFilter = "ALL" | "PENDING" | "REVIEWED";
+type LegacyReviewDecision = "READY_FOR_MIGRATION" | "MANUAL_REVIEW" | "DO_NOT_MERGE";
+
+type LegacyReviewRecord = {
+  id: string;
+  createdAt: string;
+  decision: LegacyReviewDecision | null;
+  decisionLabel: string;
+  actorEmail: string | null;
+  note: string | null;
+};
+
+type LegacyReviewCandidate = SimulatedPayload & {
+  review: LegacyReviewRecord | null;
+};
+
+type LegacyReviewResponse = {
+  success: boolean;
+  message?: string;
+  generatedAt?: string;
+  summary?: LegacyCrmReviewSummary;
+  candidates?: LegacyReviewCandidate[];
+  reviewSummary?: {
+    reviewed: number;
+    pending: number;
+    readyForMigration: number;
+    manualReview: number;
+    doNotMerge: number;
+  };
+};
 
 const activityEntityTypeLabels: Record<ActivityEntityTypeFilter, string> = {
   ALL: "Tous les types",
@@ -104,6 +141,34 @@ const activityPeriodLabels: Record<ActivityPeriodFilter, string> = {
   last7days: "7 derniers jours",
   last30days: "30 derniers jours",
 };
+
+const legacyMatchCategoryLabels: Record<MatchCategory, string> = {
+  "MATCH CERTAIN": "Match certain",
+  "MATCH PROBABLE": "Match probable",
+  AMBIGU: "Ambigu",
+  "AUCUN MATCH": "Aucun match",
+};
+
+const legacyMatchCategoryClasses: Record<MatchCategory, string> = {
+  "MATCH CERTAIN": "border-0 bg-emerald-100 text-emerald-800",
+  "MATCH PROBABLE": "border-0 bg-yellow-100 text-yellow-800",
+  AMBIGU: "border-0 bg-orange-100 text-orange-800",
+  "AUCUN MATCH": "border-0 bg-gray-100 text-gray-700",
+};
+
+const legacyPlannedActionLabels: Record<PlannedAction, string> = {
+  CREATE_OR_REUSE_CONTACT: "Reutiliser ou creer le contact",
+  CREATE_CONTACT_WITH_LEAD: "Creer contact + demande",
+  MANUAL_REVIEW: "Revue manuelle obligatoire",
+};
+
+const legacyReviewDecisionLabels: Record<LegacyReviewDecision, string> = {
+  READY_FOR_MIGRATION: "Pret pour migration future",
+  MANUAL_REVIEW: "A revoir manuellement",
+  DO_NOT_MERGE: "Ne pas fusionner",
+};
+
+const legacyMatchFilters = ["ALL", "MATCH CERTAIN", "MATCH PROBABLE", "AMBIGU", "AUCUN MATCH"] as const;
 const landSaleOptions = [
   {
     label: "Surface cadastrale et bornage",
@@ -2606,6 +2671,349 @@ function LeadManager({
   );
 }
 
+function getLegacyCandidateKey(candidate: Pick<LegacyReviewCandidate, "legacySource" | "legacyId">) {
+  return `${candidate.legacySource}:${candidate.legacyId}`;
+}
+
+function getLegacySourceLabel(source: LegacyReviewCandidate["legacySource"]) {
+  return source === "contact" ? "Contact legacy" : "Estimation legacy";
+}
+
+function getReviewStatusLabel(status: LegacyReviewStatusFilter) {
+  if (status === "PENDING") return "A traiter";
+  if (status === "REVIEWED") return "Deja revu";
+  return "Tous les cas";
+}
+
+function getMatchFilterLabel(value: LegacyMatchFilter) {
+  if (value === "ALL") return "Tous les rapprochements";
+  return legacyMatchCategoryLabels[value];
+}
+
+function LegacyReviewPanel({ connected }: { connected: boolean }) {
+  const [review, setReview] = useState<LegacyReviewResponse | null>(null);
+  const [loading, setLoading] = useState(connected);
+  const [error, setError] = useState("");
+  const [feedback, setFeedback] = useState("");
+  const [search, setSearch] = useState("");
+  const [matchFilter, setMatchFilter] = useState<LegacyMatchFilter>("ALL");
+  const [reviewStatus, setReviewStatus] = useState<LegacyReviewStatusFilter>("ALL");
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [pendingDecision, setPendingDecision] = useState<string | null>(null);
+
+  async function loadReview() {
+    if (!connected) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    const response = await fetch("/api/admin/legacy-review").catch(() => null);
+    const payload = response
+      ? ((await response.json().catch(() => null)) as LegacyReviewResponse | null)
+      : null;
+
+    setLoading(false);
+
+    if (!response?.ok || !payload?.success) {
+      if (response?.status === 401) window.location.assign("/admin/login");
+      setError(payload?.message ?? "La revue legacy n'a pas pu etre chargee.");
+      return;
+    }
+
+    setReview(payload);
+  }
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void loadReview();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected]);
+
+  const candidates = review?.candidates ?? [];
+  const filteredCandidates = candidates.filter((candidate) => {
+    const haystack = [
+      candidate.futureContact.name,
+      candidate.futureContact.email,
+      candidate.futureContact.phone,
+      candidate.futureContact.city,
+      candidate.futureLead.requestType,
+      candidate.matchCategory,
+      candidate.matchedKeys.join(" "),
+      candidate.review?.decisionLabel,
+      candidate.review?.note,
+    ]
+      .join(" ")
+      .toLowerCase();
+    const query = search.trim().toLowerCase();
+    const matchesSearch = !query || haystack.includes(query);
+    const matchesCategory = matchFilter === "ALL" || candidate.matchCategory === matchFilter;
+    const matchesReview =
+      reviewStatus === "ALL" ||
+      (reviewStatus === "REVIEWED" && Boolean(candidate.review)) ||
+      (reviewStatus === "PENDING" && !candidate.review);
+
+    return matchesSearch && matchesCategory && matchesReview;
+  });
+
+  async function recordDecision(candidate: LegacyReviewCandidate, decision: LegacyReviewDecision) {
+    if (!connected) {
+      setFeedback("La revue legacy necessite Supabase connecte pour journaliser la decision.");
+      return;
+    }
+
+    const key = getLegacyCandidateKey(candidate);
+    setPendingDecision(`${key}:${decision}`);
+    setFeedback("");
+
+    const response = await fetch("/api/admin/legacy-review", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        legacySource: candidate.legacySource,
+        legacyId: candidate.legacyId,
+        decision,
+        note: notes[key] ?? "",
+      }),
+    }).catch(() => null);
+    const payload = response
+      ? ((await response.json().catch(() => null)) as { message?: string } | null)
+      : null;
+
+    setPendingDecision(null);
+
+    if (!response?.ok) {
+      setFeedback(payload?.message ?? "La decision n'a pas pu etre enregistree.");
+      return;
+    }
+
+    setFeedback(payload?.message ?? "Decision enregistree.");
+    await loadReview();
+  }
+
+  if (!connected) {
+    return (
+      <BentoGrid>
+        <BentoCard
+          span="full"
+          variant="warning"
+          title="Revue legacy indisponible en mode local"
+          description="Connectez Supabase et ouvrez une session admin pour analyser les anciennes demandes avant migration."
+        >
+          <BentoEmptyState
+            icon={<Info className="size-5" />}
+            title="Aucune ecriture ne sera faite"
+            description="La revue legacy sert uniquement a preparer une future migration controlee."
+          />
+        </BentoCard>
+      </BentoGrid>
+    );
+  }
+
+  return (
+    <BentoGrid>
+      <BentoCard
+        span="full"
+        variant="highlight"
+        eyebrow="Phase 3"
+        title="Revue et fusion manuelle des contacts legacy"
+        description="Controle humain obligatoire avant de transformer les anciennes tables contacts et estimations en contacts + demandes CRM."
+        action={
+          <Button type="button" variant="outline" className="border-orange-200 bg-white" onClick={() => void loadReview()}>
+            <Search className="size-4" />Rafraichir
+          </Button>
+        }
+      >
+        <div className="rounded-xl border border-orange-200 bg-white p-4 text-sm leading-6 text-gray-700">
+          <p>
+            Ce module journalise uniquement les decisions de revue. Il ne lance aucune migration,
+            ne fusionne aucun contact et ne supprime aucune donnee legacy.
+          </p>
+          {review?.generatedAt ? (
+            <p className="mt-2 text-xs text-gray-500">Derniere analyse : {formatDateTime(review.generatedAt)}</p>
+          ) : null}
+        </div>
+      </BentoCard>
+
+      {review?.summary ? (
+        <>
+          <BentoKpiCard label="Demandes legacy" value={review.summary.submissionsAnalyzed} description="Contacts + estimations lus." span="medium" />
+          <BentoKpiCard label="Ambigus" value={review.summary.byCategory.AMBIGU} description="A arbitrer avant migration." tone="warning" span="medium" />
+          <BentoKpiCard label="Deja revus" value={review.reviewSummary?.reviewed ?? 0} description="Decisions journalisees." tone="success" span="medium" />
+        </>
+      ) : null}
+
+      <BentoCard span="full" title="Filtres de revue" description="Isolez les cas ambigus, deja revus ou encore a traiter.">
+        <div className="grid gap-3 lg:grid-cols-[1fr_240px_220px]">
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 size-4 text-gray-400" />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Rechercher un nom, email, telephone, ville ou cle de match"
+              className="pl-9"
+            />
+          </div>
+          <Select value={matchFilter} onValueChange={(value) => setMatchFilter((value ?? "ALL") as LegacyMatchFilter)}>
+            <SelectTrigger>
+              <SelectValue>{getMatchFilterLabel(matchFilter)}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {legacyMatchFilters.map((value) => (
+                <SelectItem key={value} value={value}>{getMatchFilterLabel(value)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={reviewStatus} onValueChange={(value) => setReviewStatus((value ?? "ALL") as LegacyReviewStatusFilter)}>
+            <SelectTrigger>
+              <SelectValue>{getReviewStatusLabel(reviewStatus)}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Tous les cas</SelectItem>
+              <SelectItem value="PENDING">A traiter</SelectItem>
+              <SelectItem value="REVIEWED">Deja revu</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        {feedback ? <p className="rounded-md bg-orange-50 p-3 text-sm font-medium text-orange-800">{feedback}</p> : null}
+        {error ? <p className="rounded-md bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p> : null}
+      </BentoCard>
+
+      <BentoCard
+        span="full"
+        title="Cas a verifier"
+        description="Chaque decision est conservee comme trace de revue. La migration reelle viendra plus tard."
+      >
+        {loading ? (
+          <p className="rounded-xl border border-orange-100 bg-white p-5 text-sm font-semibold text-orange-800">
+            Chargement de la revue legacy...
+          </p>
+        ) : filteredCandidates.length === 0 ? (
+          <BentoEmptyState
+            icon={<ListChecks className="size-5" />}
+            title="Aucun cas dans cette vue"
+            description="Modifiez les filtres ou relancez la revue legacy."
+            className="py-12"
+          />
+        ) : (
+          <div className="grid gap-4">
+            {filteredCandidates.map((candidate) => {
+              const key = getLegacyCandidateKey(candidate);
+              const noteValue = notes[key] ?? "";
+
+              return (
+                <article key={key} className="rounded-xl border border-orange-100 bg-white p-4 shadow-sm shadow-orange-100/40 sm:p-5">
+                  <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-start">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge className="border-0 bg-orange-50 text-orange-800">{getLegacySourceLabel(candidate.legacySource)}</Badge>
+                        <Badge className={legacyMatchCategoryClasses[candidate.matchCategory]}>
+                          {legacyMatchCategoryLabels[candidate.matchCategory]}
+                        </Badge>
+                        {candidate.review ? (
+                          <Badge className="border-0 bg-emerald-100 text-emerald-800">{candidate.review.decisionLabel}</Badge>
+                        ) : (
+                          <Badge variant="outline" className="border-orange-200 bg-white text-orange-700">A traiter</Badge>
+                        )}
+                      </div>
+                      <h3 className="mt-3 break-words text-xl font-black text-[#111111]">{candidate.futureContact.name}</h3>
+                      <p className="mt-1 text-sm leading-6 text-gray-600">
+                        {candidate.futureLead.requestType} · {candidate.futureContact.city ?? "Ville non renseignee"} · statut futur {leadStatusLabels[candidate.futureLead.status as LeadStatus] ?? candidate.futureLead.status}
+                      </p>
+                    </div>
+                    <p className="text-xs text-gray-500 lg:text-right">ID legacy<br /><span className="font-mono">{candidate.legacyId}</span></p>
+                  </div>
+
+                  <div className="mt-5 grid gap-4 md:grid-cols-3">
+                    <p className="rounded-lg bg-orange-50 p-3 text-sm text-gray-700">
+                      <strong>Email</strong><br />{candidate.futureContact.email ?? "Absent ou invalide"}
+                    </p>
+                    <p className="rounded-lg bg-orange-50 p-3 text-sm text-gray-700">
+                      <strong>Telephone</strong><br />{candidate.futureContact.phone ?? "Absent ou invalide"}
+                    </p>
+                    <p className="rounded-lg bg-orange-50 p-3 text-sm text-gray-700">
+                      <strong>Action simulee</strong><br />{legacyPlannedActionLabels[candidate.plannedAction]}
+                    </p>
+                  </div>
+
+                  <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                    <div className="rounded-lg border border-orange-100 p-4">
+                      <p className="text-sm font-bold text-[#111111]">Cles de rapprochement</p>
+                      {candidate.matchedKeys.length ? (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {candidate.matchedKeys.map((matchedKey) => (
+                            <Badge key={matchedKey} variant="outline" className="border-orange-200 bg-white text-orange-700">
+                              {matchedKey}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mt-2 text-sm text-gray-500">Aucune cle commune detectee.</p>
+                      )}
+                    </div>
+                    <div className="rounded-lg border border-orange-100 p-4">
+                      <p className="text-sm font-bold text-[#111111]">Points d&apos;attention</p>
+                      {candidate.warnings.length ? (
+                        <ul className="mt-2 grid gap-1 text-sm text-gray-600">
+                          {candidate.warnings.map((warning) => (
+                            <li key={warning}>- {warning}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="mt-2 text-sm text-gray-500">Aucune alerte particuliere.</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {candidate.review ? (
+                    <div className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-900">
+                      <p className="font-bold">Derniere decision : {candidate.review.decisionLabel}</p>
+                      <p className="mt-1">Par {candidate.review.actorEmail ?? "admin"} · {formatDateTime(candidate.review.createdAt)}</p>
+                      {candidate.review.note ? <p className="mt-2">{candidate.review.note}</p> : null}
+                    </div>
+                  ) : null}
+
+                  <div className="mt-5 grid gap-3">
+                    <Label htmlFor={`legacy-note-${key}`}>Note de revue</Label>
+                    <Textarea
+                      id={`legacy-note-${key}`}
+                      value={noteValue}
+                      onChange={(event) => setNotes((current) => ({ ...current, [key]: event.target.value }))}
+                      placeholder="Ex. meme personne confirmee par telephone, doublon a ignorer, informations insuffisantes..."
+                    />
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      {(Object.keys(legacyReviewDecisionLabels) as LegacyReviewDecision[]).map((decision) => (
+                        <Button
+                          key={decision}
+                          type="button"
+                          variant={decision === "READY_FOR_MIGRATION" ? "default" : "outline"}
+                          disabled={pendingDecision === `${key}:${decision}`}
+                          className={cn(
+                            "w-full",
+                            decision === "READY_FOR_MIGRATION" ? "bg-orange-500 text-white hover:bg-orange-600" : "border-orange-200 bg-white"
+                          )}
+                          onClick={() => void recordDecision(candidate, decision)}
+                        >
+                          <Save className="size-4" />{legacyReviewDecisionLabels[decision]}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </BentoCard>
+    </BentoGrid>
+  );
+}
+
 export function AdminDashboard({ contacts, estimations, activities: initialActivities, properties, connected, userName, userRole }: Props) {
   const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(connected);
@@ -2714,6 +3122,7 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
               <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="overview"><LayoutDashboard />Vue d&apos;ensemble</TabsTrigger>
               <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="contacts"><ContactRound />Contacts</TabsTrigger>
               <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="estimations"><ClipboardCheck />Estimations</TabsTrigger>
+              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="legacyReview"><ListChecks />Revue legacy</TabsTrigger>
               <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="properties"><Building2 />Biens</TabsTrigger>
               <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="activities"><ListChecks />Activités</TabsTrigger>
               <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="statistics"><BarChart3 />Statistiques</TabsTrigger>
@@ -2744,6 +3153,9 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
                 connected={connected}
               />
             </BentoGrid>
+          </TabsContent>
+          <TabsContent value="legacyReview" className="w-full">
+            <LegacyReviewPanel connected={connected} />
           </TabsContent>
           <TabsContent value="properties" className="w-full">
             <PropertyManager properties={propertyItems} setProperties={setPropertyItems} connected={connected} />

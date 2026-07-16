@@ -24,6 +24,8 @@ Socle Phase 3 valide :
 - colonnes de normalisation disponibles sur `contacts` ;
 - colonnes Phase 3 disponibles sur `leads` ;
 - dry-run legacy relance sans ecriture.
+- ecran applicatif `/admin` > `Revue legacy` ajoute pour traiter les rapprochements avant migration reelle.
+- route protegee `/api/admin/legacy-review` ajoutee pour charger les cas et journaliser les decisions humaines.
 
 ## Recette Mobile/Admin Authentifiee
 
@@ -110,6 +112,54 @@ Decision Phase 3 :
 
 Raison : le cas ambigu est rapproche uniquement par telephone avec une demande legacy archivee. Cette correspondance est insuffisante pour fusionner ou creer un contact canonical sans validation humaine.
 
+## Revue Applicative Legacy
+
+Objectif : permettre une validation humaine avant toute migration reelle.
+
+Ecran :
+
+```text
+/admin
+Onglet : Revue legacy
+```
+
+Fonctionnement :
+
+1. l'ecran charge les anciennes demandes `contacts` et `estimations` ;
+2. il applique la meme logique de rapprochement que `npm run crm:legacy-dry-run` ;
+3. il affiche les categories `MATCH CERTAIN`, `MATCH PROBABLE`, `AMBIGU`, `AUCUN MATCH` ;
+4. il montre les cles de rapprochement : email, telephone, nom + ville ;
+5. il permet d'ajouter une note de revue ;
+6. il journalise une decision dans `lead_merge_logs`.
+
+Decisions possibles :
+
+- `Pret pour migration future` ;
+- `A revoir manuellement` ;
+- `Ne pas fusionner`.
+
+Garanties :
+
+- aucune migration reelle n'est executee ;
+- aucune fusion automatique n'est faite ;
+- aucune donnee legacy n'est supprimee ;
+- les decisions sont tracees dans `lead_merge_logs` ;
+- l'action est historisee dans `activities` et `audit_logs`.
+
+Route API :
+
+```text
+GET /api/admin/legacy-review
+PATCH /api/admin/legacy-review
+```
+
+Permissions :
+
+- lecture : `crm.read` ;
+- decision de revue : `lead.write`.
+
+Le `PATCH` sert uniquement a journaliser une decision de revue. Il ne cree pas de contact canonique, ne cree pas de lead final et ne deplace aucune donnee legacy.
+
 ## Regle de securite
 
 Aucune migration destructive Phase 3 ne doit etre lancee.
@@ -118,4 +168,4 @@ La migration Phase 3 appliquee est non destructive et conserve les anciennes tab
 
 ## Prochaine etape
 
-Relire la PR Phase 2, merger vers `main`, redeployer Vercel, puis commencer la transformation applicative Phase 3 sans migration effective des anciens contacts et estimations tant que le cas `AMBIGU` n'est pas arbitre.
+Faire une recette admin authentifiee de l'onglet `Revue legacy`, traiter le cas `AMBIGU`, puis seulement ensuite preparer la migration reelle vers le modele `contacts` + `leads`.
