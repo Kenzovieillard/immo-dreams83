@@ -95,6 +95,9 @@ import type {
   LeadStatus,
   PipelineLead,
   PipelineTask,
+  TaskEmailReminderStatus,
+  TaskRecurrenceRule,
+  TaskReminderChannel,
 } from "@/types/crm";
 
 const contactRequestTypes = ["Achat", "Vente", "Estimation", "Terrain", "Autre"] as const;
@@ -109,6 +112,24 @@ type ActivityVisibilityFilter = "business" | "all" | "recipe";
 type LegacyMatchFilter = "ALL" | MatchCategory;
 type LegacyReviewStatusFilter = "ALL" | "PENDING" | "REVIEWED";
 type LegacyReviewDecision = "READY_FOR_MIGRATION" | "MANUAL_REVIEW" | "DO_NOT_MERGE";
+
+const taskRecurrenceLabels: Record<TaskRecurrenceRule, string> = {
+  NONE: "Aucune",
+  WEEKLY: "Hebdomadaire",
+  MONTHLY: "Mensuelle",
+};
+
+const taskReminderChannelLabels: Record<TaskReminderChannel, string> = {
+  NONE: "Aucune notification",
+  EMAIL: "Email prepare",
+};
+
+const taskEmailReminderStatusLabels: Record<TaskEmailReminderStatus, string> = {
+  NOT_SCHEDULED: "Non planifie",
+  PENDING: "A envoyer",
+  SENT: "Envoye",
+  FAILED: "Erreur",
+};
 
 type LegacyReviewRecord = {
   id: string;
@@ -350,6 +371,30 @@ function getPrioritySelectLabel(value: unknown) {
   return "Priorite";
 }
 
+function getTaskRecurrenceLabel(value: unknown) {
+  if (value === "WEEKLY" || value === "MONTHLY" || value === "NONE") {
+    return taskRecurrenceLabels[value];
+  }
+
+  return taskRecurrenceLabels.NONE;
+}
+
+function getTaskReminderChannelLabel(value: unknown) {
+  if (value === "EMAIL" || value === "NONE") {
+    return taskReminderChannelLabels[value];
+  }
+
+  return taskReminderChannelLabels.NONE;
+}
+
+function getTaskEmailStatusLabel(value: unknown) {
+  if (value === "PENDING" || value === "SENT" || value === "FAILED" || value === "NOT_SCHEDULED") {
+    return taskEmailReminderStatusLabels[value];
+  }
+
+  return taskEmailReminderStatusLabels.NOT_SCHEDULED;
+}
+
 function getTeamMemberLabel(member?: AdminTeamMember | null) {
   if (!member) return "Non assigne";
   return member.fullName || member.email;
@@ -385,6 +430,27 @@ function isTaskOverdue(task: PipelineTask) {
   return due.getTime() < Date.now();
 }
 
+function getWeekStart(date = new Date()) {
+  const start = new Date(date);
+  const day = (start.getDay() + 6) % 7;
+  start.setDate(start.getDate() - day);
+  start.setHours(0, 0, 0, 0);
+  return start;
+}
+
+function getWeekEnd(date = new Date()) {
+  const end = getWeekStart(date);
+  end.setDate(end.getDate() + 7);
+  return end;
+}
+
+function isTaskDueThisWeek(task: PipelineTask) {
+  if (!task.dueAt || task.completedAt) return false;
+  const due = new Date(task.dueAt);
+  if (Number.isNaN(due.getTime())) return false;
+  return due >= getWeekStart() && due < getWeekEnd();
+}
+
 function getTaskDueTone(task: PipelineTask) {
   if (isTaskOverdue(task)) return "text-red-700";
   if (isTaskDueToday(task)) return "text-orange-700";
@@ -418,6 +484,28 @@ function groupTasksByLead(tasks: PipelineTask[]) {
 
 function getLeadNextOpenTask(tasks: PipelineTask[]) {
   return sortTasksByUrgency(tasks.filter(isOpenTask))[0] ?? null;
+}
+
+function buildWeeklyTaskGroups(tasks: PipelineTask[], leadById: Map<string, PipelineLead>) {
+  const start = getWeekStart();
+  return Array.from({ length: 7 }, (_, index) => {
+    const day = new Date(start);
+    day.setDate(start.getDate() + index);
+    const dayKey = day.toISOString().slice(0, 10);
+
+    return {
+      day,
+      dayKey,
+      tasks: sortTasksByUrgency(
+        tasks.filter((task) => {
+          if (!task.dueAt) return false;
+          const due = new Date(task.dueAt);
+          if (Number.isNaN(due.getTime())) return false;
+          return due.toISOString().slice(0, 10) === dayKey;
+        })
+      ).map((task) => ({ task, lead: task.leadId ? leadById.get(task.leadId) ?? null : null })),
+    };
+  });
 }
 
 type PipelineAgentStat = {
@@ -2820,12 +2908,16 @@ type PipelineTaskDraft = {
   title: string;
   dueAt: string;
   priority: LeadPriority;
+  recurrenceRule: TaskRecurrenceRule;
+  reminderChannel: TaskReminderChannel;
 };
 
 const emptyPipelineTaskDraft: PipelineTaskDraft = {
   title: "",
   dueAt: "",
   priority: "normal",
+  recurrenceRule: "NONE",
+  reminderChannel: "NONE",
 };
 
 function PipelinePanel({
@@ -2860,7 +2952,15 @@ function PipelinePanel({
   const openTasks = tasks.filter(isOpenTask);
   const overdueTasks = sortTasksByUrgency(openTasks.filter(isTaskOverdue));
   const todayTasks = sortTasksByUrgency(openTasks.filter(isTaskDueToday));
+  const weeklyTasks = sortTasksByUrgency(openTasks.filter(isTaskDueThisWeek));
+  const weeklyTaskGroups = buildWeeklyTaskGroups(weeklyTasks, leadsById);
   const todayRemainingTasks = todayTasks.filter((task) => !isTaskOverdue(task));
+  const recurringTasks = sortTasksByUrgency(openTasks.filter((task) => task.recurrenceRule !== "NONE"));
+  const emailPreparedTasks = sortTasksByUrgency(
+    openTasks.filter((task) => task.reminderChannel === "EMAIL" || task.emailReminderEnabled)
+  );
+  const pendingEmailTasks = emailPreparedTasks.filter((task) => task.emailReminderStatus === "PENDING");
+  const failedEmailTasks = emailPreparedTasks.filter((task) => task.emailReminderStatus === "FAILED");
   const unassignedLeads = activeLeads.filter((lead) => !lead.assignedTo);
   const agentStats = buildPipelineAgentStats(activeLeads, openTasks, team);
   const maxAgentWorkload = Math.max(
@@ -2965,6 +3065,8 @@ function PipelinePanel({
         dueAt: draft.dueAt,
         priority: draft.priority,
         assignedTo: lead.assignedTo,
+        recurrenceRule: draft.recurrenceRule,
+        reminderChannel: draft.reminderChannel,
       }),
     }).catch(() => null);
     const payload = response
@@ -3049,6 +3151,18 @@ function PipelinePanel({
                       <p className={cn("mt-2 text-sm font-semibold", getTaskDueTone(task))}>
                         {task.dueAt ? formatDateTime(task.dueAt) : "Sans date"}
                       </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {task.recurrenceRule !== "NONE" ? (
+                          <Badge variant="outline" className="border-orange-200 bg-white text-orange-700">
+                            {getTaskRecurrenceLabel(task.recurrenceRule)}
+                          </Badge>
+                        ) : null}
+                        {task.reminderChannel === "EMAIL" ? (
+                          <Badge variant="outline" className="border-orange-200 bg-white text-orange-700">
+                            Email · {getTaskEmailStatusLabel(task.emailReminderStatus)}
+                          </Badge>
+                        ) : null}
+                      </div>
                     </div>
                     <Badge
                       variant="outline"
@@ -3077,6 +3191,54 @@ function PipelinePanel({
             icon={<CalendarClock className="size-5" />}
             title="Aucun rappel urgent"
             description="Les rappels du jour et en retard apparaitront ici."
+            className="py-10"
+          />
+        )}
+      </BentoCard>
+
+      <BentoCard
+        span="wide"
+        title="Vue hebdomadaire"
+        description="Rappels ouverts de la semaine, du lundi au dimanche."
+      >
+        {weeklyTasks.length ? (
+          <div className="grid gap-3 md:grid-cols-2">
+            {weeklyTaskGroups.map((group) => (
+              <div key={group.dayKey} className="rounded-xl border border-orange-100 bg-white p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-bold text-[#111111]">
+                    {group.day.toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "short" })}
+                  </p>
+                  <Badge variant="outline" className="border-orange-200 bg-white text-orange-700">
+                    {group.tasks.length}
+                  </Badge>
+                </div>
+                {group.tasks.length ? (
+                  <div className="mt-3 grid gap-2">
+                    {group.tasks.slice(0, 3).map(({ task, lead }) => (
+                      <div key={task.id} className="rounded-lg bg-orange-50 p-3 text-sm">
+                        <p className="font-semibold text-[#111111]">{task.title}</p>
+                        <p className="mt-1 text-gray-600">{lead?.contactName ?? "Lead non lie"}</p>
+                        <p className={cn("mt-1 font-semibold", getTaskDueTone(task))}>
+                          {task.dueAt ? formatDateTime(task.dueAt) : "Sans date"}
+                        </p>
+                      </div>
+                    ))}
+                    {group.tasks.length > 3 ? (
+                      <p className="text-xs font-semibold text-orange-700">+ {group.tasks.length - 3} autre(s) rappel(s)</p>
+                    ) : null}
+                  </div>
+                ) : (
+                  <p className="mt-3 text-sm text-gray-500">Aucun rappel.</p>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <BentoEmptyState
+            icon={<CalendarClock className="size-5" />}
+            title="Aucun rappel cette semaine"
+            description="Les rappels planifies sur les sept prochains jours apparaitront ici."
             className="py-10"
           />
         )}
@@ -3116,6 +3278,61 @@ function PipelinePanel({
               ))}
             </SelectContent>
           </Select>
+        </div>
+      </BentoCard>
+
+      <BentoCard span="medium" title="Rappels récurrents" description="Suivi des relances qui devront revenir automatiquement.">
+        {recurringTasks.length ? (
+          <div className="grid gap-3">
+            {recurringTasks.slice(0, 5).map((task) => {
+              const lead = task.leadId ? leadsById.get(task.leadId) : null;
+
+              return (
+                <div key={task.id} className="rounded-xl border border-orange-100 bg-white p-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge className="border-0 bg-orange-100 text-orange-800">{getTaskRecurrenceLabel(task.recurrenceRule)}</Badge>
+                    {task.reminderChannel === "EMAIL" ? (
+                      <Badge variant="outline" className="border-orange-200 bg-white text-orange-700">Email</Badge>
+                    ) : null}
+                  </div>
+                  <p className="mt-3 font-bold text-[#111111]">{task.title}</p>
+                  <p className="mt-1 text-sm text-gray-600">{lead?.contactName ?? "Lead non lie"}</p>
+                  <p className={cn("mt-2 text-sm font-semibold", getTaskDueTone(task))}>
+                    {task.dueAt ? formatDateTime(task.dueAt) : "Sans date"}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <BentoEmptyState
+            icon={<Clock className="size-5" />}
+            title="Aucun rappel récurrent"
+            description="Les relances hebdomadaires ou mensuelles apparaitront ici."
+            className="py-10"
+          />
+        )}
+      </BentoCard>
+
+      <BentoCard span="medium" title="Notifications email" description="Préparation des relances email, sans envoi automatique pour l'instant.">
+        <div className="grid gap-3">
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-lg bg-orange-50 p-3">
+              <p className="text-2xl font-black text-[#111111]">{emailPreparedTasks.length}</p>
+              <p className="text-xs font-semibold text-gray-500">Préparées</p>
+            </div>
+            <div className="rounded-lg bg-yellow-50 p-3">
+              <p className="text-2xl font-black text-yellow-700">{pendingEmailTasks.length}</p>
+              <p className="text-xs font-semibold text-gray-500">À envoyer</p>
+            </div>
+            <div className="rounded-lg bg-red-50 p-3">
+              <p className="text-2xl font-black text-red-700">{failedEmailTasks.length}</p>
+              <p className="text-xs font-semibold text-gray-500">Erreurs</p>
+            </div>
+          </div>
+          <p className="rounded-lg border border-orange-100 bg-white p-3 text-sm leading-6 text-gray-600">
+            Aucun email n&apos;est envoyé automatiquement tant que le fournisseur email n&apos;est pas branché. Le CRM conserve seulement l&apos;intention de relance.
+          </p>
         </div>
       </BentoCard>
 
@@ -3333,7 +3550,7 @@ function PipelinePanel({
                       </div>
 
                       <div className="rounded-lg border border-orange-100 bg-orange-50/60 p-3">
-                        <div className="grid gap-3 md:grid-cols-[1fr_210px_160px_auto] md:items-end">
+                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1fr_210px_150px_160px_180px_auto] xl:items-end">
                           <div className="grid gap-2">
                             <Label htmlFor={`task-title-${lead.id}`}>Nouveau rappel</Label>
                             <Input
@@ -3361,6 +3578,27 @@ function PipelinePanel({
                               </SelectContent>
                             </Select>
                           </div>
+                          <div className="grid gap-2">
+                            <Label>Récurrence</Label>
+                            <Select value={draft.recurrenceRule} onValueChange={(value) => updateDraft(lead.id, { recurrenceRule: value as TaskRecurrenceRule })}>
+                              <SelectTrigger><SelectValue>{(value) => getTaskRecurrenceLabel(value)}</SelectValue></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="NONE">Aucune</SelectItem>
+                                <SelectItem value="WEEKLY">Hebdomadaire</SelectItem>
+                                <SelectItem value="MONTHLY">Mensuelle</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="grid gap-2">
+                            <Label>Notification</Label>
+                            <Select value={draft.reminderChannel} onValueChange={(value) => updateDraft(lead.id, { reminderChannel: value as TaskReminderChannel })}>
+                              <SelectTrigger><SelectValue>{(value) => getTaskReminderChannelLabel(value)}</SelectValue></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="NONE">Aucune notification</SelectItem>
+                                <SelectItem value="EMAIL">Email préparé</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
                           <Button type="button" className="bg-orange-500 text-white hover:bg-orange-600" disabled={pendingId === `task-${lead.id}`} onClick={() => void createTask(lead)}>
                             <Plus className="size-4" />Ajouter
                           </Button>
@@ -3374,6 +3612,18 @@ function PipelinePanel({
                               <div>
                                 <p className="font-semibold text-[#111111]">{task.title}</p>
                                 <p className={cn("text-sm", getTaskDueTone(task))}>{task.dueAt ? formatDateTime(task.dueAt) : "Sans date"}</p>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {task.recurrenceRule !== "NONE" ? (
+                                    <Badge variant="outline" className="border-orange-200 bg-white text-orange-700">
+                                      {getTaskRecurrenceLabel(task.recurrenceRule)}
+                                    </Badge>
+                                  ) : null}
+                                  {task.reminderChannel === "EMAIL" ? (
+                                    <Badge variant="outline" className="border-orange-200 bg-white text-orange-700">
+                                      Email · {getTaskEmailStatusLabel(task.emailReminderStatus)}
+                                    </Badge>
+                                  ) : null}
+                                </div>
                               </div>
                               <Button type="button" variant="outline" disabled={pendingId === task.id} onClick={() => void completeTask(task, true)}>
                                 <CheckCircle2 className="size-4" />Terminer

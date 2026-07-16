@@ -37,6 +37,9 @@ Socle Phase 3 valide :
 - redeploiement Vercel production valide : `/admin` repond, pipeline charge, session admin OK.
 - recette pipeline production validee : acces non authentifie refuse, assignation temporaire, changement de statut, creation de rappel, cloture du rappel, restauration du lead.
 - increment quotidien ajoute : plan de journee, rappels en retard, assignation rapide, suivi commercial par agent et filtre des activites de recette.
+- recette mobile iPhone du pipeline effectuee en largeur 390 px : cartes principales visibles, aucun scroll horizontal global detecte, trace de recette masquee par defaut.
+- increment rappels avance ajoute : vue hebdomadaire, rappels recurrents et preparation des notifications email sans envoi automatique.
+- migration non destructive preparee : `supabase/migrations/202607160004_crm_reminder_automation.sql`.
 
 ## Recette Mobile/Admin Authentifiee
 
@@ -265,6 +268,9 @@ Fonctionnalites ajoutees :
 - carte dediee aux rappels en retard ;
 - assignation rapide des leads sans responsable ;
 - suivi commercial par agent : charge active, rappels ouverts, retards, leads urgents, rendez-vous et mandats ;
+- vue hebdomadaire des rappels ouverts ;
+- rappels recurrents `Aucune`, `Hebdomadaire`, `Mensuelle` ;
+- notification email preparee sur un rappel, sans envoi automatique ;
 - filtres par texte, statut et agent ;
 - modification rapide du statut commercial ;
 - priorite `Faible`, `Normale`, `Haute`, `Urgente` ;
@@ -291,15 +297,23 @@ Migration :
 
 ```text
 supabase/migrations/202607160003_commercial_pipeline_foundation.sql
+supabase/migrations/202607160004_crm_reminder_automation.sql
 ```
 
-Cette migration est non destructive.
+Ces migrations sont non destructives.
 
-Elle ajoute :
+Elles ajoutent :
 
 - `tasks.created_by` ;
 - `tasks.completed_by` ;
 - `tasks.task_type` ;
+- `tasks.recurrence_rule` ;
+- `tasks.reminder_channel` ;
+- `tasks.email_reminder_enabled` ;
+- `tasks.email_reminder_status` ;
+- `tasks.email_reminder_scheduled_at` ;
+- `tasks.email_reminder_sent_at` ;
+- `tasks.email_reminder_last_error` ;
 - contraintes de priorite non validees retroactivement ;
 - index de lecture `leads` et `tasks` ;
 - policies de lecture admin sur `leads`, `lead_status_history`, `tasks`, `communications` et `appointments`.
@@ -313,9 +327,12 @@ Recette manuelle recommandee :
 5. changer son statut et sa priorite ;
 6. creer un rappel date ;
 7. verifier que le rappel apparait dans `Plan de journee` ou `Rappels en retard` selon l'echeance ;
-8. terminer le rappel ;
-9. verifier `Activites` avec le filtre `Activite metier` puis `Tout afficher` ;
-10. verifier `audit_logs` si un controle technique est necessaire.
+8. creer un rappel recurrent hebdomadaire ou mensuel ;
+9. creer un rappel avec `Email prepare` et verifier qu'il apparait dans la carte `Notifications email` ;
+10. verifier la carte `Vue hebdomadaire` ;
+11. terminer le rappel ;
+12. verifier `Activites` avec le filtre `Activite metier` puis `Tout afficher` ;
+13. verifier `audit_logs` si un controle technique est necessaire.
 
 ## Regle de securite
 
@@ -325,4 +342,4 @@ La migration Phase 3 appliquee est non destructive et conserve les anciennes tab
 
 ## Prochaine etape
 
-Poursuivre vers les relances plus avancees : rappels recurrents, vue hebdomadaire, notifications email et assignation automatique par zone ou type de projet.
+Appliquer la migration `202607160004_crm_reminder_automation.sql` sur Supabase production, puis brancher un vrai fournisseur email avant tout envoi automatique. Ensuite, poursuivre vers assignation automatique par zone ou type de projet.
