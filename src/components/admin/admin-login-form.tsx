@@ -92,7 +92,7 @@ export function AdminLoginForm() {
                 {feedback.message}
               </p>
             ) : null}
-            <Button disabled={loading} className="h-11 bg-orange-500 text-white hover:bg-orange-600">
+            <Button type="submit" disabled={loading} className="h-11 bg-orange-500 text-white hover:bg-orange-600">
               <LogIn className="size-4" />
               {loading ? "Connexion..." : "Se connecter"}
             </Button>
