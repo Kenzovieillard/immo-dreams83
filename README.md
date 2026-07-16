@@ -183,13 +183,13 @@ Ce dry-run connecte Supabase :
 - produit un rapport JSON local dans `reports/` ;
 - ne modifie aucune donnee.
 
-Avant ou apres l'execution reelle, appliquer des que possible la migration de garde-fou :
+La migration de garde-fou appliquee sur Supabase le 16/07/2026 est :
 
 ```text
 supabase/migrations/202607160002_legacy_lead_import_guardrails.sql
 ```
 
-Elle ajoute un index unique partiel pour renforcer la protection contre les doublons si l'import est relance.
+Elle ajoute un index unique partiel pour renforcer la protection contre les doublons si l'import est relance. Verification SQL OK : `leads_source_table_source_id_unique` et `leads_source_table_source_id_idx` existent dans `pg_indexes`.
 
 Execution reelle uniquement apres validation du rapport dry-run :
 
@@ -225,13 +225,15 @@ Resultat Phase 2 valide :
 - Le script `npm run crm:legacy-migrate:dry-run` prepare et controle la migration contacts/leads en excluant les cas `IGNORED`.
 - Import reel Phase 3 execute le 16/07/2026 : 9 leads crees, 9 historiques de statut crees, 9 communications initiales creees, 0 contact supplementaire cree, 1 cas legacy ignore.
 - Dry-run post-import OK : 9 leads legacy deja presents, 0 lead a creer, 0 bloqueur.
+- Migration de garde-fou Phase 3 appliquee et verifiee : index unique `leads_source_table_source_id_unique` et index de lecture `leads_source_table_source_id_idx`.
+- Dry-run post-garde-fou OK : 9 leads legacy deja presents, 0 lead a creer, 0 bloqueur.
 
 Actions restantes avant merge/production :
 
 1. Relire et merger la PR Phase 2.
 2. Rededeployer Vercel depuis `main`.
 3. Faire une recette visuelle authentifiee sur mobile : `/admin`, Contacts, Estimations, Biens, Activites, creation/modification de bien, upload photo.
-4. Appliquer la migration de garde-fou `202607160002_legacy_lead_import_guardrails.sql` des qu'un acces SQL/CLI Supabase authentifie est disponible.
+4. Poursuivre la Phase 3 CRM commercial : pipeline, taches, rappels et assignation.
 5. Authentifier GitHub CLI si le flux PR doit etre gere depuis le terminal :
 
 ```bash

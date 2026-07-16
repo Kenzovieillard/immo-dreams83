@@ -28,6 +28,8 @@ Socle Phase 3 valide :
 - route protegee `/api/admin/legacy-review` ajoutee pour charger les cas et journaliser les decisions humaines.
 - import reel legacy execute le 16/07/2026 : 9 leads crees, 9 historiques de statut crees, 9 communications initiales creees, 1 cas ignore.
 - dry-run post-import valide : 9 leads legacy deja presents, 0 lead a creer, 0 bloqueur.
+- migration de garde-fou `202607160002_legacy_lead_import_guardrails.sql` appliquee et verifiee dans Supabase.
+- dry-run post-garde-fou valide : 9 leads legacy deja presents, 0 lead a creer, 0 bloqueur.
 
 ## Recette Mobile/Admin Authentifiee
 
@@ -170,13 +172,19 @@ Resultat du dry-run post-import du 16/07/2026 :
 - 1 cas ignore ;
 - 0 bloqueur.
 
-Migration de garde-fou a appliquer des que possible avec un acces SQL/CLI Supabase authentifie :
+Migration de garde-fou appliquee le 16/07/2026 via Supabase SQL Editor :
 
 ```text
 supabase/migrations/202607160002_legacy_lead_import_guardrails.sql
 ```
 
 Elle ajoute un index unique partiel sur `leads(source_table, source_id)` pour renforcer la protection contre les doublons si l'import est relance.
+
+Verification SQL :
+
+- `leads_source_table_source_id_idx` present ;
+- `leads_source_table_source_id_unique` present ;
+- requete de verification sur `pg_indexes` : 2 lignes retournees.
 
 Commande d'execution reelle, uniquement apres validation du rapport :
 
@@ -240,4 +248,4 @@ La migration Phase 3 appliquee est non destructive et conserve les anciennes tab
 
 ## Prochaine etape
 
-Appliquer la migration de garde-fou `202607160002_legacy_lead_import_guardrails.sql` des qu'un acces SQL/CLI Supabase authentifie est disponible, puis poursuivre la Phase 3 sur les vues CRM quotidiennes : pipeline, taches, rappels et assignation.
+Poursuivre la Phase 3 sur les vues CRM quotidiennes : pipeline, taches, rappels et assignation.
