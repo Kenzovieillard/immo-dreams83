@@ -25,6 +25,32 @@ Socle Phase 3 valide :
 - colonnes Phase 3 disponibles sur `leads` ;
 - dry-run legacy relance sans ecriture.
 
+## Recette Mobile/Admin Authentifiee
+
+Recette effectuee le 16/07/2026 sur la production Vercel apres merge Phase 2 et hotfix login.
+
+Validation mobile CRM en largeur 390 px :
+
+- login admin OK ;
+- vue d'ensemble OK ;
+- onglet Contacts OK ;
+- onglet Estimations OK ;
+- onglet Biens OK ;
+- onglet Activites OK ;
+- onglet Statistiques OK ;
+- aucun scroll horizontal global detecte sur les onglets testes.
+
+Actions admin testees avec un compte temporaire de recette, puis nettoyees :
+
+- upload photo OK ;
+- creation d'un bien brouillon OK ;
+- modification du bien OK ;
+- corbeille photo OK ;
+- restauration photo OK ;
+- archivage du bien OK ;
+- restauration du bien en brouillon OK ;
+- suppression des donnees temporaires de recette OK.
+
 ## Objectif
 
 Transformer les anciennes demandes `contacts` et `estimations` en un modele CRM plus propre :
@@ -74,6 +100,15 @@ Etat du dernier dry-run connecte :
 - 0 `AUCUN MATCH`.
 
 Le cas ambigu doit etre traite manuellement avant migration effective.
+
+Decision Phase 3 :
+
+- ne pas migrer automatiquement le cas `AMBIGU` ;
+- le classer en revue manuelle avant toute transformation legacy ;
+- conserver les anciennes tables `contacts` et `estimations` lisibles ;
+- ne lancer aucune fusion automatique sur simple correspondance telephone.
+
+Raison : le cas ambigu est rapproche uniquement par telephone avec une demande legacy archivee. Cette correspondance est insuffisante pour fusionner ou creer un contact canonical sans validation humaine.
 
 ## Regle de securite
 
