@@ -1,8 +1,9 @@
 import type { MetadataRoute } from "next";
 import { siteUrl } from "@/components/site/site-config";
-import { properties } from "@/data/properties";
+import { getPublicProperties } from "@/lib/public-properties";
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const properties = await getPublicProperties();
   const staticRoutes = [
     "",
     "/agence",

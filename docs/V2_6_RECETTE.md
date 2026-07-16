@@ -22,10 +22,11 @@ Cette checklist valide les ameliorations V2.6 sans refaire la recette complete V
 ## 3. CRM admin
 
 - Ouvrir `/admin`.
+- Si necessaire, passer par `/admin/login`.
 - Verifier que le layout utilise mieux la largeur de l'ecran.
 - Verifier que les onglets ne sont pas coupes, notamment "Vue d'ensemble".
 - Sur mobile, faire defiler horizontalement les onglets si necessaire.
-- Confirmer que la protection par code local fonctionne toujours.
+- Confirmer qu'une session Supabase Auth active est requise pour acceder au CRM.
 
 ## 4. Vue d'ensemble CRM
 

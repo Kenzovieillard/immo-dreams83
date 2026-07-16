@@ -1,15 +1,76 @@
 # Import biens officiels IMMO-DREAMS83
 
-## Source
+## Source V3 phase 2
 
-Le catalogue public V2.5 est compose de deux sources :
+Supabase est la source unique du catalogue public.
 
-1. les biens officiels initiaux versionnes dans `src/data/properties.ts` ;
-2. les biens crees ou modifies depuis le CRM et stockes dans Supabase.
+- Le site public lit la vue `public_properties`.
+- Le CRM lit et modifie la table `properties` via les routes admin protegees.
+- `src/data/properties.ts` reste un seed d'import temporaire, pas une source publique de fallback.
+- Les photos sont normalisees dans `property_photos`; `properties.photos` reste conserve pour compatibilite de transition.
 
-Les biens Supabase sont fusionnes avec le catalogue initial pour alimenter le site public.
+## Statuts
 
-## Inventaire initial importe
+Deux statuts sont separes :
+
+- statut commercial : `AVAILABLE`, `UNDER_OFFER`, `SOLD`;
+- statut de publication : `DRAFT`, `PUBLISHED`, `UNPUBLISHED`, `ARCHIVED`.
+
+Un bien public doit etre :
+
+- `publication_status = 'PUBLISHED'`;
+- non archive ;
+- `status in ('available', 'under_offer')`.
+
+## Import idempotent
+
+Simulation :
+
+```bash
+npm run properties:import:dry-run
+```
+
+Application reelle :
+
+```bash
+npm run properties:import
+```
+
+Le script :
+
+- lit les 12 biens initiaux depuis `src/data/properties.ts`;
+- compare par `reference`;
+- conserve les slugs existants;
+- applique les statuts commerciaux et de publication;
+- importe les photos dans `property_photos`;
+- genere un rapport JSON dans `reports/`.
+
+## Derniere application reelle
+
+Application executee sur le projet Supabase cible le 16/07/2026 apres application des migrations versionnees Phase 1 et Phase 2.
+
+Resultat :
+
+- 12 biens analyses;
+- 7 biens mis a jour;
+- 5 biens crees;
+- 13 biens presents au total dans `properties`;
+- 12 biens importes depuis le seed historique;
+- 12 biens visibles dans `public_properties`;
+- 7 biens a la une;
+- 48 photos actives;
+- 12 photos principales;
+- aucun doublon `reference`;
+- aucun doublon `slug`;
+- lecture anonyme directe de `properties` bloquee par RLS.
+
+Rapports locaux generes dans `reports/` :
+
+- dry-run biens connecte;
+- import reel biens;
+- dry-run legacy CRM.
+
+## Inventaire initial
 
 | Reference | Type | Ville | Statut | Prix |
 | --- | --- | --- | --- | --- |
@@ -26,39 +87,36 @@ Les biens Supabase sont fusionnes avec le catalogue initial pour alimenter le si
 | 71 | Appartement | Toulon | Disponible | 144 000 EUR |
 | 73 | Appartement | Toulon | Disponible | 79 000 EUR |
 
-## Champs couverts par Supabase
+## Photos
 
-La table `properties` couvre :
+Les nouvelles photos envoyees depuis le CRM sont stockees dans Supabase Storage, bucket `property-photos`.
 
-- reference et numero de mandat ;
-- slug public ;
-- titre ;
-- type de bien : appartement, maison, terrain ;
-- statut : disponible, sous offre, vendu ;
-- ville et code postal ;
-- prix affiche honoraires inclus ;
-- surface habitable ou surface terrain ;
-- pieces, chambres et salles d'eau ;
-- DPE/GES ou mention "Non soumis" pour les terrains ;
-- descriptions courte et complete ;
-- atouts et options terrain ;
-- photos ;
-- mise en avant ;
-- URL source si le bien vient d'une annonce existante.
+La table `property_photos` gere :
 
-## Gestion depuis le CRM
+- ordre de galerie;
+- photo principale;
+- statut `ACTIVE`, `TRASHED`, `PURGED`;
+- restauration possible;
+- date limite de restauration.
 
-Le CRM permet maintenant :
+La suppression par defaut est logique : aucune suppression definitive n'est exposee dans le CRM.
 
-- de creer un nouveau bien avec reference automatique ;
-- de modifier un bien deja existant ;
-- d'ajouter des photos depuis l'ordinateur ;
-- de reordonner la galerie ;
-- de choisir la photo principale ;
-- de supprimer du Storage les photos retirees ;
-- de passer un bien en disponible, sous offre ou vendu ;
-- de le mettre ou retirer de la une.
+## Retour arriere
 
-## Limite V2.5
+Avant application production :
 
-Les biens initiaux restent dans `src/data/properties.ts`. La V3 devra faire de Supabase la source unique du catalogue, avec import/export et historique complet.
+1. exporter `properties`, `property_photos`, `property_history`, `property_slug_history`;
+2. exporter la liste des objets Storage du bucket `property-photos`;
+3. executer d'abord `npm run properties:import:dry-run`;
+4. conserver le rapport d'import.
+
+Retour arriere applicatif :
+
+- revert de la branche Phase 2;
+- redeploiement Vercel du dernier commit stable.
+
+Retour arriere donnees :
+
+- ne pas supprimer les nouvelles colonnes;
+- repasser un bien en `UNPUBLISHED` ou `ARCHIVED`;
+- restaurer les photos marquees `TRASHED` si necessaire.

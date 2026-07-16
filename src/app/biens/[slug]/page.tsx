@@ -28,7 +28,6 @@ import { Separator } from "@/components/ui/separator";
 import {
   formatNumber,
   formatPrice,
-  properties,
   propertyStatusBadgeClasses,
   propertyStatusLabels,
   propertyTypeLabels,
@@ -42,7 +41,7 @@ type PropertyPageProps = { params: Promise<{ slug: string }> };
 export const dynamic = "force-dynamic";
 
 export function generateStaticParams() {
-  return properties.map((property) => ({ slug: property.slug }));
+  return [];
 }
 
 export async function generateMetadata({ params }: PropertyPageProps): Promise<Metadata> {

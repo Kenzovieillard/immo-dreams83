@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "properties:import:dry-run": "tsx scripts/import-static-properties.ts --dry-run",
+    "properties:import": "tsx scripts/import-static-properties.ts --apply",
+    "crm:legacy-dry-run": "tsx scripts/dry-run-legacy-crm.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
@@ -28,6 +31,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
     "tailwindcss": "^4",
+    "tsx": "^4.23.1",
     "typescript": "^5"
   },
   "overrides": {

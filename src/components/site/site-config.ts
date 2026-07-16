@@ -43,6 +43,6 @@ export const crmSettings = {
   emailApiKeyEnv: "EMAIL_API_KEY",
   supabaseUrlEnv: "NEXT_PUBLIC_SUPABASE_URL",
   supabaseAnonKeyEnv: "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-  adminCodeEnv: "NEXT_PUBLIC_ADMIN_LOCAL_CODE",
+  adminBootstrapEmailsEnv: "ADMIN_BOOTSTRAP_EMAILS",
   siteUrlEnv: "NEXT_PUBLIC_SITE_URL",
 };

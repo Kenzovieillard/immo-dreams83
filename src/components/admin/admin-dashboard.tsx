@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   Archive,
   ArrowDown,
@@ -11,7 +11,6 @@ import {
   ClipboardCheck,
   ContactRound,
   Info,
-  KeyRound,
   LayoutDashboard,
   ImagePlus,
   ListChecks,
@@ -25,8 +24,12 @@ import {
   X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { BentoCard } from "@/components/admin/bento/bento-card";
+import { BentoGrid } from "@/components/admin/bento/bento-grid";
+import { BentoKpiCard } from "@/components/admin/bento/bento-kpi-card";
+import { BentoEmptyState } from "@/components/admin/bento/bento-states";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -36,8 +39,11 @@ import {
   formatNumber,
   formatPrice,
   type Property,
+  type PropertyPublicationStatus,
   type PropertyStatus,
   type PropertyType,
+  propertyPublicationStatusBadgeClasses,
+  propertyPublicationStatusLabels,
   propertyStatusLabels,
   propertyTypeLabels,
 } from "@/data/properties";
@@ -56,16 +62,19 @@ import {
 } from "@/lib/dpe";
 import {
   getPropertyInventoryMetrics,
+  getPropertyPublicationBreakdown,
   getPropertyStatusBreakdown,
   getPropertyTypeBreakdown,
   propertyImportSource,
 } from "@/lib/property-management";
 import { cn } from "@/lib/utils";
+import { adminRoleLabels, type AdminRole } from "@/types/admin";
 import type { Activity, ContactLead, EstimationLead, LeadStatus } from "@/types/crm";
 
 const contactRequestTypes = ["Achat", "Vente", "Estimation", "Terrain", "Autre"] as const;
 const propertyTypes = ["apartment", "house", "land"] as const satisfies PropertyType[];
 const propertyStatuses = ["available", "under_offer", "sold"] as const satisfies PropertyStatus[];
+const propertyPublicationStatuses = ["DRAFT", "PUBLISHED", "UNPUBLISHED", "ARCHIVED"] as const satisfies PropertyPublicationStatus[];
 type AdminTab = "overview" | "contacts" | "estimations" | "properties" | "activities" | "statistics";
 type ActivityEntityTypeFilter = "ALL" | "contact" | "estimation" | "property" | "other";
 type ActivityActionFilter = "ALL" | "created" | "updated" | "archived" | "uploaded" | "deleted" | "other";
@@ -176,6 +185,7 @@ type PropertyFormState = {
   title: string;
   type: PropertyType;
   status: PropertyStatus;
+  publicationStatus: PropertyPublicationStatus;
   city: string;
   postalCode: string;
   price: string;
@@ -197,6 +207,7 @@ const emptyPropertyForm: PropertyFormState = {
   title: "",
   type: "house",
   status: "available",
+  publicationStatus: "DRAFT",
   city: "",
   postalCode: "",
   price: "",
@@ -253,9 +264,15 @@ function getPropertyFeaturesText(form: PropertyFormState) {
   return getPropertyFeatureList(form).join("\n");
 }
 
-function mergeProperties(staticItems: Property[], remoteItems: Property[]) {
+function getCommercialStatusFromLegacy(status: PropertyStatus) {
+  if (status === "under_offer") return "UNDER_OFFER" as const;
+  if (status === "sold") return "SOLD" as const;
+  return "AVAILABLE" as const;
+}
+
+function upsertProperties(currentItems: Property[], incomingItems: Property[]) {
   const seen = new Set<string>();
-  return [...remoteItems, ...staticItems].filter((property) => {
+  return [...incomingItems, ...currentItems].filter((property) => {
     const key = property.reference || property.id;
     if (seen.has(key)) return false;
     seen.add(key);
@@ -270,15 +287,6 @@ function getNextLocalReference(properties: Property[]) {
   }, 0);
 
   return String(maxReference + 1).padStart(3, "0");
-}
-
-function slugify(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
 }
 
 function toNumberOrNull(value: string) {
@@ -305,6 +313,7 @@ function propertyToForm(property: Property): PropertyFormState {
     title: property.title,
     type: property.type,
     status: property.status,
+    publicationStatus: property.publicationStatus ?? "DRAFT",
     city: property.city,
     postalCode: property.postalCode,
     price: String(property.price || ""),
@@ -344,6 +353,8 @@ function buildUpdatedProperty(property: Property, form: PropertyFormState, photo
     title: form.title.trim(),
     type: form.type,
     status: form.status,
+    commercialStatus: getCommercialStatusFromLegacy(form.status),
+    publicationStatus: form.publicationStatus,
     city: form.city.trim(),
     postalCode: form.postalCode.trim(),
     price: toNumberOrNull(form.price) ?? property.price,
@@ -359,47 +370,9 @@ function buildUpdatedProperty(property: Property, form: PropertyFormState, photo
     features: getPropertyFeatureList(form),
     photos: photoUrls,
     featured: form.featured,
+    publishedAt: form.publicationStatus === "PUBLISHED" ? property.publishedAt ?? now : property.publishedAt ?? null,
+    archivedAt: form.publicationStatus === "ARCHIVED" ? property.archivedAt ?? now : null,
     updatedAt: now,
-  };
-}
-
-function buildLocalProperty(form: PropertyFormState, currentProperties: Property[], photoUrls: string[]): Property {
-  const now = new Date().toISOString();
-  const reference = getNextLocalReference(currentProperties);
-  const isLand = form.type === "land";
-  const id =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `local-property-${Date.now()}`;
-
-  return {
-    id,
-    reference,
-    slug: `${slugify(form.title)}-${slugify(form.city)}-${form.postalCode}-ref-${reference}`,
-    title: form.title.trim(),
-    type: form.type,
-    transactionType: "sale",
-    status: form.status,
-    city: form.city.trim(),
-    postalCode: form.postalCode.trim(),
-    price: toNumberOrNull(form.price) ?? 0,
-    feesIncluded: true,
-    surface: toNumberOrNull(form.surface) ?? 0,
-    landSurface: isLand ? toNumberOrNull(form.surface) : toNumberOrNull(form.landSurface),
-    rooms: isLand ? null : toNumberOrNull(form.rooms),
-    bedrooms: isLand ? null : toNumberOrNull(form.bedrooms),
-    bathrooms: isLand ? null : toNumberOrNull(form.bathrooms),
-    energyClass: isLand ? "Non soumis" : formatEnergyDiagnostic(form.energyClass),
-    climateClass: isLand ? "Non soumis" : formatClimateDiagnostic(form.climateClass),
-    descriptionShort: form.descriptionShort.trim(),
-    descriptionLong: form.descriptionLong.trim() || form.descriptionShort.trim(),
-    features: getPropertyFeatureList(form),
-    photos: photoUrls,
-    featured: form.featured,
-    sourceUrl: "",
-    createdAt: now,
-    updatedAt: now,
-    mandateNumber: reference,
   };
 }
 
@@ -633,17 +606,7 @@ function KpiCard({
   description?: string;
   tone?: "dark" | "orange";
 }) {
-  return (
-    <Card size="sm" className="border-orange-100 bg-white shadow-sm shadow-orange-100/40">
-      <CardContent className="p-4">
-        <p className="text-xs font-semibold leading-5 text-gray-500 sm:text-sm">{label}</p>
-        <p className={cn("mt-2 text-2xl font-black sm:text-3xl", tone === "orange" ? "text-orange-600" : "text-[#111111]")}>
-          {value}
-        </p>
-        {description ? <p className="mt-2 text-xs leading-5 text-gray-500">{description}</p> : null}
-      </CardContent>
-    </Card>
-  );
+  return <BentoKpiCard label={label} value={value} description={description} tone={tone} />;
 }
 
 function MiniBar({ value, max }: { value: number; max: number }) {
@@ -699,7 +662,7 @@ function ActivityPreview({ activity }: { activity: Activity }) {
   );
 }
 
-function DashboardBento({
+function BentoDesignDashboard({
   metrics,
   setActiveTab,
 }: {
@@ -708,133 +671,149 @@ function DashboardBento({
 }) {
   const pipelineMax = Math.max(metrics.newLeads, metrics.contactedLeads, metrics.appointments, metrics.mandateSigned, metrics.lostLeads, 1);
   const propertyMax = Math.max(metrics.availableProperties, metrics.underOfferProperties, metrics.soldProperties, metrics.featuredProperties, 1);
+  const priorityItems = [
+    {
+      label: "Nouveaux leads",
+      value: metrics.newLeads,
+      description: "A qualifier en priorite.",
+      action: () => setActiveTab("contacts"),
+    },
+    {
+      label: "Biens sans photos",
+      value: metrics.propertiesWithoutPhotos,
+      description: "A completer avant mise en avant.",
+      action: () => setActiveTab("properties"),
+    },
+    {
+      label: "Diagnostics incomplets",
+      value: metrics.propertiesWithoutDiagnostics,
+      description: "DPE/GES a verifier.",
+      action: () => setActiveTab("properties"),
+    },
+  ];
+  const activePriorityItems = priorityItems.filter((item) => item.value > 0);
 
   return (
-    <div className="grid gap-4 sm:gap-5 lg:grid-cols-12">
-      <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40 lg:col-span-5">
-        <CardHeader>
-          <CardTitle className="text-xl font-black text-[#111111]">Pipeline commercial</CardTitle>
-          <p className="text-sm leading-6 text-gray-600">Lecture rapide des prospects actifs et de leur avancement.</p>
-        </CardHeader>
-        <CardContent className="grid gap-4 px-4 sm:px-5">
-          <div className="grid grid-cols-2 gap-3">
-            <KpiCard label="Leads actifs" value={metrics.totalLeads} />
-            <KpiCard label="Conversion mandat" value={formatPercentage(metrics.conversionRate)} tone="orange" />
+    <BentoGrid>
+      <BentoCard
+        span="wide"
+        variant="highlight"
+        eyebrow="Priorite"
+        title="Que doit faire l'agence aujourd'hui ?"
+        description="Les actions operationnelles les plus utiles sont regroupees ici pour eviter de chercher dans tout le CRM."
+        action={
+          <Button type="button" size="sm" className="bg-orange-500 text-white hover:bg-orange-600" onClick={() => setActiveTab("contacts")}>
+            Traiter les leads
+          </Button>
+        }
+      >
+        {activePriorityItems.length ? (
+          <div className="grid gap-3 sm:grid-cols-3">
+            {activePriorityItems.map((item) => (
+              <button
+                key={item.label}
+                type="button"
+                onClick={item.action}
+                className="rounded-xl border border-orange-200 bg-white p-4 text-left transition-colors hover:border-orange-300 hover:bg-orange-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 motion-reduce:transition-none"
+              >
+                <span className="text-sm font-semibold text-gray-600">{item.label}</span>
+                <span className="mt-2 block text-3xl font-black text-orange-600">{item.value}</span>
+                <span className="mt-2 block text-xs leading-5 text-gray-500">{item.description}</span>
+              </button>
+            ))}
           </div>
-          <MetricLine label="Nouveaux" value={metrics.newLeads} max={pipelineMax} />
-          <MetricLine label="Contactés" value={metrics.contactedLeads} max={pipelineMax} />
-          <MetricLine label="Rendez-vous" value={metrics.appointments} max={pipelineMax} />
-          <MetricLine label="Mandats signés" value={metrics.mandateSigned} max={pipelineMax} />
-        </CardContent>
-      </Card>
+        ) : (
+          <BentoEmptyState
+            title="Aucune priorite bloquante"
+            description="Les nouveaux leads, photos manquantes et diagnostics incomplets sont sous controle."
+          />
+        )}
+      </BentoCard>
 
-      <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40 lg:col-span-4">
-        <CardHeader>
-          <CardTitle className="text-xl font-black text-[#111111]">Portefeuille de biens</CardTitle>
-          <p className="text-sm leading-6 text-gray-600">Disponibilité, mise en avant et valeur catalogue.</p>
-        </CardHeader>
-        <CardContent className="grid gap-4 px-4 sm:px-5">
-          <div className="grid grid-cols-2 gap-3">
-            <KpiCard label="Biens" value={metrics.totalProperties} />
-            <KpiCard label="Prix moyen" value={formatPrice(Math.round(metrics.averagePrice))} tone="orange" />
-          </div>
-          <MetricLine label="Disponibles" value={metrics.availableProperties} max={propertyMax} />
-          <MetricLine label="Sous offre" value={metrics.underOfferProperties} max={propertyMax} />
-          <MetricLine label="Vendus" value={metrics.soldProperties} max={propertyMax} />
-          <MetricLine label="À la une" value={metrics.featuredProperties} max={propertyMax} />
-          <p className="rounded-xl bg-orange-50 p-3 text-sm text-gray-700">
-            Surface moyenne : <strong>{Math.round(metrics.averageSurface)} m²</strong>
-          </p>
-        </CardContent>
-      </Card>
+      <BentoCard span="medium" title="Resume de performance" description="Lecture rapide de l'activite commerciale.">
+        <div className="grid grid-cols-2 gap-3">
+          <KpiCard label="Leads actifs" value={metrics.totalLeads} />
+          <KpiCard label="Conversion" value={formatPercentage(metrics.conversionRate)} tone="orange" />
+        </div>
+        <MetricLine label="Derniere demande" value={formatDateTime(metrics.latestSubmissionDate)} />
+        <MetricLine label="Derniere activite" value={formatDateTime(metrics.latestActivityDate)} />
+      </BentoCard>
 
-      <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40 lg:col-span-3">
-        <CardHeader>
-          <CardTitle className="text-xl font-black text-[#111111]">Actions rapides</CardTitle>
-          <p className="text-sm leading-6 text-gray-600">Accès direct aux vues de travail.</p>
-        </CardHeader>
-        <CardContent className="grid gap-3">
-          <Button type="button" variant="outline" className="justify-start border-orange-200" onClick={() => setActiveTab("contacts")}>
-            <ContactRound className="size-4" />Voir contacts
-          </Button>
-          <Button type="button" variant="outline" className="justify-start border-orange-200" onClick={() => setActiveTab("estimations")}>
-            <ClipboardCheck className="size-4" />Voir estimations
-          </Button>
-          <Button type="button" variant="outline" className="justify-start border-orange-200" onClick={() => setActiveTab("properties")}>
-            <Building2 className="size-4" />Gérer les biens
-          </Button>
-          <Button type="button" variant="outline" className="justify-start border-orange-200" onClick={() => setActiveTab("statistics")}>
-            <BarChart3 className="size-4" />Voir statistiques
-          </Button>
-        </CardContent>
-      </Card>
+      <BentoCard span="medium" title="Leads urgents" description="Demandes non traitees ou a recontacter.">
+        <MetricLine label="Nouveaux" value={metrics.newLeads} max={pipelineMax} />
+        <MetricLine label="Contactes" value={metrics.contactedLeads} max={pipelineMax} />
+        <MetricLine label="Rendez-vous" value={metrics.appointments} max={pipelineMax} />
+        {metrics.newLeads === 0 ? (
+          <BentoEmptyState title="Aucun lead urgent" description="Aucune demande nouvelle non traitee." />
+        ) : null}
+      </BentoCard>
 
-      <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40 lg:col-span-6">
-        <CardHeader>
-          <CardTitle className="text-xl font-black text-[#111111]">Dernières demandes</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3">
-          {metrics.latestLeads.length ? metrics.latestLeads.map((lead) => <LeadPreview key={`${lead.kind}-${lead.id}`} lead={lead} />) : (
-            <p className="rounded-xl bg-orange-50 p-4 text-sm text-gray-600">Aucune demande active pour le moment.</p>
-          )}
-        </CardContent>
-      </Card>
+      <BentoCard span="medium" title="Agenda" description="Visites et rendez-vous du jour.">
+        <BentoEmptyState title="Aucune visite programmee" description="Le module agenda sera relie aux rendez-vous V3." />
+      </BentoCard>
 
-      <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40 lg:col-span-6">
-        <CardHeader>
-          <CardTitle className="text-xl font-black text-[#111111]">Activité récente</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3">
-          {metrics.latestActivities.length ? metrics.latestActivities.map((activity) => <ActivityPreview key={activity.id} activity={activity} />) : (
-            <p className="rounded-xl bg-orange-50 p-4 text-sm text-gray-600">Aucune activité enregistrée pour le moment.</p>
-          )}
-        </CardContent>
-      </Card>
+      <BentoCard span="medium" title="Mandats" description="Suivi des echeances commerciales.">
+        <BentoEmptyState title="Mandats a connecter" description="Les mandats seront suivis dans la phase transactions." />
+      </BentoCard>
 
-      <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40 lg:col-span-4">
-        <CardHeader>
-          <CardTitle className="text-xl font-black text-[#111111]">Performance du site</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3 text-sm">
-          {["Sessions", "Vues", "Pages populaires"].map((label) => (
-            <MetricLine key={label} label={label} value="À connecter" />
-          ))}
-          <MetricLine label="Leads CRM" value={metrics.totalLeads} />
-          <p className="rounded-xl bg-orange-50 p-3 text-xs leading-5 text-gray-600">
-            Connexion GA4 prévue pour une prochaine version.
-          </p>
-        </CardContent>
-      </Card>
+      <BentoCard span="large" title="Dernieres demandes" description="Les derniers prospects actifs a garder sous les yeux.">
+        {metrics.latestLeads.length ? (
+          metrics.latestLeads.map((lead) => <LeadPreview key={`${lead.kind}-${lead.id}`} lead={lead} />)
+        ) : (
+          <BentoEmptyState title="Aucune demande active" description="Les prochaines demandes apparaitront ici automatiquement." />
+        )}
+      </BentoCard>
 
-      <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40 lg:col-span-4">
-        <CardHeader>
-          <CardTitle className="text-xl font-black text-[#111111]">Origine des demandes</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3">
-          <MetricLine label="Formulaire contact" value={metrics.contactSubmissions} />
-          <MetricLine label="Formulaire estimation" value={metrics.estimationSubmissions} />
-          <MetricLine label="Appel direct" value="À structurer" />
-          <MetricLine label="Agence" value="À structurer" />
-        </CardContent>
-      </Card>
+      <BentoCard span="wide" title="Pipeline commercial" description="Progression des prospects actifs vers le mandat.">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <KpiCard label="Leads actifs" value={metrics.totalLeads} />
+          <KpiCard label="Mandats signes" value={metrics.mandateSigned} tone="orange" />
+        </div>
+        <MetricLine label="Nouveaux" value={metrics.newLeads} max={pipelineMax} />
+        <MetricLine label="Contactes" value={metrics.contactedLeads} max={pipelineMax} />
+        <MetricLine label="Rendez-vous" value={metrics.appointments} max={pipelineMax} />
+        <MetricLine label="Mandats signes" value={metrics.mandateSigned} max={pipelineMax} />
+      </BentoCard>
 
-      <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40 lg:col-span-4">
-        <CardHeader>
-          <CardTitle className="text-xl font-black text-[#111111]">Points à traiter</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3">
-          <MetricLine label="Nouveaux leads" value={metrics.newLeads} />
+      <BentoCard span="medium" title="Sources de leads" description="Origine des demandes actuellement structurees.">
+        <MetricLine label="Formulaire contact" value={metrics.contactSubmissions} />
+        <MetricLine label="Formulaire estimation" value={metrics.estimationSubmissions} />
+        <MetricLine label="Appel direct" value="A structurer" />
+        <MetricLine label="Agence" value="A structurer" />
+      </BentoCard>
+
+      <BentoCard span="large" title="Portefeuille de biens" description="Disponibilite, exposition et qualite du catalogue.">
+        <div className="grid grid-cols-2 gap-3">
+          <KpiCard label="Biens" value={metrics.totalProperties} />
+          <KpiCard label="Prix moyen" value={formatPrice(Math.round(metrics.averagePrice))} tone="orange" />
+        </div>
+        <MetricLine label="Disponibles" value={metrics.availableProperties} max={propertyMax} />
+        <MetricLine label="Sous offre" value={metrics.underOfferProperties} max={propertyMax} />
+        <MetricLine label="Vendus" value={metrics.soldProperties} max={propertyMax} />
+        <MetricLine label="A la une" value={metrics.featuredProperties} max={propertyMax} />
+      </BentoCard>
+
+      <BentoCard span="large" title="Activite recente" description="Derniers mouvements enregistres dans le CRM.">
+        {metrics.latestActivities.length ? (
+          metrics.latestActivities.map((activity) => <ActivityPreview key={activity.id} activity={activity} />)
+        ) : (
+          <BentoEmptyState title="Aucune activite recente" description="Les prochaines actions CRM apparaitront ici." />
+        )}
+      </BentoCard>
+
+      <BentoCard span="full" variant="muted" title="Statistiques secondaires" description="Ces indicateurs restent utiles, mais ne doivent pas prendre le dessus sur les actions du jour.">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <MetricLine label="Biens sans photos" value={metrics.propertiesWithoutPhotos} />
           <MetricLine label="Biens sans DPE/GES" value={metrics.propertiesWithoutDiagnostics} />
-          <MetricLine label="Biens non mis à la une" value={metrics.propertiesNotFeatured} />
-          <MetricLine label="Multidiffusion portails" value="Non configurée" />
-        </CardContent>
-      </Card>
-    </div>
+          <MetricLine label="Biens non mis a la une" value={metrics.propertiesNotFeatured} />
+          <MetricLine label="GA4" value="A connecter" />
+        </div>
+      </BentoCard>
+    </BentoGrid>
   );
 }
 
-function StatisticsPanel({ metrics }: { metrics: AdminMetrics }) {
+function BentoStatisticsPanel({ metrics }: { metrics: AdminMetrics }) {
   const leadMax = Math.max(metrics.totalLeads, 1);
   const propertyMax = Math.max(metrics.totalProperties, 1);
   const cityMax = Math.max(...metrics.propertiesByCity.map((item) => item.count), 1);
@@ -842,104 +821,84 @@ function StatisticsPanel({ metrics }: { metrics: AdminMetrics }) {
   const activityMax = Math.max(...metrics.activitiesByEntity.map((item) => item.count), 1);
 
   return (
-    <div className="grid gap-5">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label="Leads actifs" value={metrics.totalLeads} description="Contacts et estimations non archivés." />
+    <BentoGrid>
+      <div className="grid gap-4 md:col-span-6 md:grid-cols-2 xl:col-span-12 xl:grid-cols-4">
+        <KpiCard label="Leads actifs" value={metrics.totalLeads} description="Contacts et estimations non archives." />
         <KpiCard label="Conversion mandat" value={formatPercentage(metrics.conversionRate)} tone="orange" />
         <KpiCard label="Prix moyen" value={formatPrice(Math.round(metrics.averagePrice))} />
-        <KpiCard label="Prix moyen / m²" value={metrics.averagePricePerSquareMeter ? `${Math.round(metrics.averagePricePerSquareMeter).toLocaleString("fr-FR")} €/m²` : "Non calculable"} />
+        <KpiCard
+          label="Prix moyen / m2"
+          value={metrics.averagePricePerSquareMeter ? `${Math.round(metrics.averagePricePerSquareMeter).toLocaleString("fr-FR")} EUR/m2` : "Non calculable"}
+        />
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-2">
-        <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40">
-          <CardHeader><CardTitle>Performance leads</CardTitle></CardHeader>
-          <CardContent className="grid gap-4">
-            <MetricLine label="Contacts" value={metrics.contacts} max={leadMax} />
-            <MetricLine label="Estimations" value={metrics.estimations} max={leadMax} />
-            <MetricLine label="Nouveaux" value={metrics.newLeads} max={leadMax} />
-            <MetricLine label="Contactés" value={metrics.contactedLeads} max={leadMax} />
-            <MetricLine label="Rendez-vous" value={metrics.appointments} max={leadMax} />
-            <MetricLine label="Mandats signés" value={metrics.mandateSigned} max={leadMax} />
-            <MetricLine label="Perdus" value={metrics.lostLeads} max={leadMax} />
-          </CardContent>
-        </Card>
+      <BentoCard span="wide" title="Performance leads" description="Le graphique principal conserve plus d'espace car il pilote la priorite commerciale.">
+        <MetricLine label="Contacts" value={metrics.contacts} max={leadMax} />
+        <MetricLine label="Estimations" value={metrics.estimations} max={leadMax} />
+        <MetricLine label="Nouveaux" value={metrics.newLeads} max={leadMax} />
+        <MetricLine label="Contactes" value={metrics.contactedLeads} max={leadMax} />
+        <MetricLine label="Rendez-vous" value={metrics.appointments} max={leadMax} />
+        <MetricLine label="Mandats signes" value={metrics.mandateSigned} max={leadMax} />
+        <MetricLine label="Perdus" value={metrics.lostLeads} max={leadMax} />
+      </BentoCard>
 
-        <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40">
-          <CardHeader><CardTitle>Portefeuille de biens</CardTitle></CardHeader>
-          <CardContent className="grid gap-4">
-            <MetricLine label="Disponibles" value={metrics.availableProperties} max={propertyMax} />
-            <MetricLine label="Sous offre" value={metrics.underOfferProperties} max={propertyMax} />
-            <MetricLine label="Vendus" value={metrics.soldProperties} max={propertyMax} />
-            <MetricLine label="À la une" value={metrics.featuredProperties} max={propertyMax} />
-            <MetricLine label="Appartements" value={metrics.apartments} max={propertyMax} />
-            <MetricLine label="Maisons" value={metrics.houses} max={propertyMax} />
-            <MetricLine label="Terrains" value={metrics.lands} max={propertyMax} />
-            <MetricLine label="Surface moyenne" value={`${Math.round(metrics.averageSurface)} m²`} />
-          </CardContent>
-        </Card>
-      </div>
+      <BentoCard span="medium" title="Performance formulaires" description="Qualite du volume entrant.">
+        <MetricLine label="Demandes contact" value={metrics.contactSubmissions} />
+        <MetricLine label="Demandes estimation" value={metrics.estimationSubmissions} />
+        <MetricLine label="Ratio estimation/contact" value={Number.isFinite(metrics.estimationContactRatio) ? metrics.estimationContactRatio.toFixed(2) : "Non calculable"} />
+        <MetricLine label="Derniere soumission" value={formatDateTime(metrics.latestSubmissionDate)} />
+      </BentoCard>
 
-      <div className="grid gap-5 xl:grid-cols-3">
-        <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40">
-          <CardHeader><CardTitle>Biens par ville</CardTitle></CardHeader>
-          <CardContent className="grid gap-4">
-            {metrics.propertiesByCity.slice(0, 6).map((item) => (
-              <div key={item.city} className="grid gap-2">
-                <MetricLine label={item.city} value={item.count} max={cityMax} />
-                <p className="text-xs text-gray-500">Prix moyen : {formatPrice(item.averagePrice)}</p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+      <BentoCard span="large" title="Portefeuille de biens" description="Repartition des biens par statut et type.">
+        <MetricLine label="Disponibles" value={metrics.availableProperties} max={propertyMax} />
+        <MetricLine label="Sous offre" value={metrics.underOfferProperties} max={propertyMax} />
+        <MetricLine label="Vendus" value={metrics.soldProperties} max={propertyMax} />
+        <MetricLine label="A la une" value={metrics.featuredProperties} max={propertyMax} />
+        <MetricLine label="Appartements" value={metrics.apartments} max={propertyMax} />
+        <MetricLine label="Maisons" value={metrics.houses} max={propertyMax} />
+        <MetricLine label="Terrains" value={metrics.lands} max={propertyMax} />
+        <MetricLine label="Surface moyenne" value={`${Math.round(metrics.averageSurface)} m2`} />
+      </BentoCard>
 
-        <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40">
-          <CardHeader><CardTitle>Leads par ville</CardTitle></CardHeader>
-          <CardContent className="grid gap-4">
-            {metrics.leadsByCity.slice(0, 6).map((item) => (
-              <MetricLine key={item.city} label={item.city} value={item.count} max={leadCityMax} />
-            ))}
-            {metrics.leadsByCity.length === 0 ? <p className="text-sm text-gray-600">Aucune ville renseignée.</p> : null}
-          </CardContent>
-        </Card>
+      <BentoCard span="large" title="Biens par ville" description="Lecture locale du portefeuille.">
+        {metrics.propertiesByCity.length ? (
+          metrics.propertiesByCity.slice(0, 6).map((item) => (
+            <div key={item.city} className="grid gap-2">
+              <MetricLine label={item.city} value={item.count} max={cityMax} />
+              <p className="text-xs text-gray-500">Prix moyen : {formatPrice(item.averagePrice)}</p>
+            </div>
+          ))
+        ) : (
+          <BentoEmptyState title="Aucune ville renseignee" description="Les biens importes alimenteront cette analyse." />
+        )}
+      </BentoCard>
 
-        <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40">
-          <CardHeader><CardTitle>Performance formulaires</CardTitle></CardHeader>
-          <CardContent className="grid gap-4">
-            <MetricLine label="Demandes contact" value={metrics.contactSubmissions} />
-            <MetricLine label="Demandes estimation" value={metrics.estimationSubmissions} />
-            <MetricLine label="Ratio estimation/contact" value={Number.isFinite(metrics.estimationContactRatio) ? metrics.estimationContactRatio.toFixed(2) : "Non calculable"} />
-            <MetricLine label="Dernière soumission" value={formatDateTime(metrics.latestSubmissionDate)} />
-          </CardContent>
-        </Card>
-      </div>
+      <BentoCard span="medium" title="Leads par ville" description="Origine geographique des demandes.">
+        {metrics.leadsByCity.length ? (
+          metrics.leadsByCity.slice(0, 6).map((item) => (
+            <MetricLine key={item.city} label={item.city} value={item.count} max={leadCityMax} />
+          ))
+        ) : (
+          <BentoEmptyState title="Aucune ville renseignee" description="Les prochaines demandes completeront ce bloc." />
+        )}
+      </BentoCard>
 
-      <div className="grid gap-5 xl:grid-cols-2">
-        <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40">
-          <CardHeader><CardTitle>Statistiques d&apos;activité</CardTitle></CardHeader>
-          <CardContent className="grid gap-4">
-            <MetricLine label="Activités totales" value={metrics.totalActivities} />
-            {metrics.activitiesByEntity.map((item) => (
-              <MetricLine key={item.label} label={item.label} value={item.count} max={activityMax} />
-            ))}
-            <MetricLine label="Dernière activité" value={formatDateTime(metrics.latestActivityDate)} />
-          </CardContent>
-        </Card>
+      <BentoCard span="medium" title="Statistiques d'activite" description="Volume et recence des actions CRM.">
+        <MetricLine label="Activites totales" value={metrics.totalActivities} />
+        {metrics.activitiesByEntity.map((item) => (
+          <MetricLine key={item.label} label={item.label} value={item.count} max={activityMax} />
+        ))}
+        <MetricLine label="Derniere activite" value={formatDateTime(metrics.latestActivityDate)} />
+      </BentoCard>
 
-        <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40">
-          <CardHeader>
-            <CardTitle>Statistiques site internet</CardTitle>
-            <p className="text-sm leading-6 text-gray-600">
-              Ces métriques seront alimentées après connexion à GA4 via l&apos;API Google Analytics Data.
-            </p>
-          </CardHeader>
-          <CardContent className="grid gap-4">
-            {["Sessions", "Utilisateurs", "Pages vues", "Sources de trafic", "Conversions GA4"].map((label) => (
-              <MetricLine key={label} label={label} value="À connecter" />
-            ))}
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+      <BentoCard span="full" variant="muted" title="Statistiques site internet" description="Aucune fausse donnee n'est affichee tant que GA4 n'est pas connecte.">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          {["Sessions", "Utilisateurs", "Pages vues", "Sources de trafic", "Conversions GA4"].map((label) => (
+            <MetricLine key={label} label={label} value="A connecter" />
+          ))}
+        </div>
+      </BentoCard>
+    </BentoGrid>
   );
 }
 
@@ -967,14 +926,12 @@ function ActivityPanel({
   setActivityPeriod: React.Dispatch<React.SetStateAction<ActivityPeriodFilter>>;
 }) {
   return (
-    <Card className="border-orange-100 bg-white shadow-sm shadow-orange-100/40">
-      <CardHeader>
-        <CardTitle className="text-xl font-black text-[#111111]">Journal d&apos;activité</CardTitle>
-        <p className="text-sm leading-6 text-gray-600">
-          Recherche, filtres et lecture rapide des actions CRM.
-        </p>
-      </CardHeader>
-      <CardContent className="grid gap-5">
+    <BentoCard
+      span="full"
+      title="Journal d'activité"
+      description="Recherche, filtres et lecture rapide des actions CRM."
+      contentClassName="gap-5"
+    >
         <div className="grid gap-3 lg:grid-cols-[1fr_180px_180px_180px]">
           <div className="relative">
             <Search className="absolute left-3 top-3 size-4 text-gray-400" />
@@ -1040,16 +997,14 @@ function ActivityPanel({
             ))}
           </div>
         ) : (
-          <Card className="border-dashed border-orange-200 bg-orange-50/60">
-            <CardContent className="py-12 text-center">
-              <ListChecks className="mx-auto size-9 text-orange-500" />
-              <p className="mt-4 font-bold text-[#111111]">Aucune activité ne correspond à votre recherche.</p>
-              <p className="mt-2 text-sm text-gray-600">Ajustez la recherche, le type, l&apos;action ou la période.</p>
-            </CardContent>
-          </Card>
+          <BentoEmptyState
+            icon={<ListChecks className="size-5" />}
+            title="Aucune activité ne correspond à votre recherche."
+            description="Ajustez la recherche, le type, l'action ou la période."
+            className="py-12"
+          />
         )}
-      </CardContent>
-    </Card>
+    </BentoCard>
   );
 }
 
@@ -1059,7 +1014,8 @@ type Props = {
   activities: Activity[];
   properties: Property[];
   connected: boolean;
-  expectedCode: string;
+  userName: string;
+  userRole: AdminRole;
 };
 
 function normalizeContacts(items: ContactLead[]): AdminLead[] {
@@ -1098,11 +1054,9 @@ function normalizeEstimations(items: EstimationLead[]): AdminLead[] {
 
 function CreateContactCard({
   setLeads,
-  expectedCode,
   connected,
 }: {
   setLeads: React.Dispatch<React.SetStateAction<AdminLead[]>>;
-  expectedCode: string;
   connected: boolean;
 }) {
   const [form, setForm] = useState<ContactFormState>(emptyContactForm);
@@ -1161,7 +1115,7 @@ function CreateContactCard({
     setSubmitting(true);
     const response = await fetch("/api/admin/leads", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-admin-code": expectedCode },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),
     }).catch(() => null);
     const payload = response
@@ -1186,15 +1140,12 @@ function CreateContactCard({
   }
 
   return (
-    <Card className="border-orange-100 bg-white">
-      <CardHeader>
-        <CardTitle className="text-lg text-[#111111]">Créer un contact</CardTitle>
-        <p className="text-sm leading-6 text-gray-600">
-          Ajoutez manuellement un prospect reçu par téléphone, email ou passage agence.
-        </p>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={(event) => void submitContact(event)} className="grid gap-5">
+    <BentoCard
+      span="full"
+      title="Créer un contact"
+      description="Ajoutez manuellement un prospect reçu par téléphone, email ou passage agence."
+    >
+      <form onSubmit={(event) => void submitContact(event)} className="grid gap-5">
           <div className="grid gap-5 sm:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor="contact-full-name">Nom complet</Label>
@@ -1282,21 +1233,18 @@ function CreateContactCard({
             <ContactRound className="size-4" />
             {submitting ? "Création..." : "Créer le contact"}
           </Button>
-        </form>
-      </CardContent>
-    </Card>
+      </form>
+    </BentoCard>
   );
 }
 
 function CreatePropertyCard({
   properties,
   setProperties,
-  expectedCode,
   connected,
 }: {
   properties: Property[];
   setProperties: React.Dispatch<React.SetStateAction<Property[]>>;
-  expectedCode: string;
   connected: boolean;
 }) {
   const [form, setForm] = useState<PropertyFormState>(emptyPropertyForm);
@@ -1376,7 +1324,6 @@ function CreatePropertyCard({
 
     const response = await fetch("/api/admin/property-photos", {
       method: "POST",
-      headers: { "x-admin-code": expectedCode },
       body: uploadBody,
     }).catch(() => null);
     const payload = response
@@ -1412,6 +1359,14 @@ function CreatePropertyCard({
       return;
     }
 
+    if (!connected) {
+      setFeedback({
+        type: "error",
+        message: "Supabase doit etre connecte pour creer un bien dans le catalogue officiel.",
+      });
+      return;
+    }
+
     setSubmitting(true);
     const photos = await uploadSelectedPhotos();
     if (!photos) {
@@ -1420,23 +1375,9 @@ function CreatePropertyCard({
     }
     const photoUrls = photos.map((photo) => photo.url);
 
-    if (!connected) {
-      const property = buildLocalProperty(form, properties, photoUrls);
-      setProperties((current) => [property, ...current]);
-      setForm(emptyPropertyForm);
-      setUploadedPhotos([]);
-      setPhotoInputKey((current) => current + 1);
-      setSubmitting(false);
-      setFeedback({
-        type: "success",
-        message: `Bien créé dans cette session locale avec la référence ${property.reference}.`,
-      });
-      return;
-    }
-
     const response = await fetch("/api/admin/properties", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-admin-code": expectedCode },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...form, featuresText: getPropertyFeaturesText(form), photoUrls }),
     }).catch(() => null);
     const payload = response
@@ -1455,7 +1396,7 @@ function CreatePropertyCard({
       return;
     }
 
-    setProperties((current) => mergeProperties(current, [payload.property!]));
+    setProperties((current) => upsertProperties(current, [payload.property!]));
     setForm(emptyPropertyForm);
     setUploadedPhotos([]);
     setPhotoInputKey((current) => current + 1);
@@ -1463,22 +1404,17 @@ function CreatePropertyCard({
   }
 
   return (
-    <Card className="border-orange-100 bg-white">
-      <CardHeader>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <CardTitle className="text-lg text-[#111111]">Créer un bien</CardTitle>
-            <p className="mt-1 text-sm leading-6 text-gray-600">
-              La référence sera attribuée automatiquement au moment de l&apos;enregistrement.
-            </p>
-          </div>
-          <Badge className="w-fit border-0 bg-orange-100 text-orange-800">
-            Prochaine réf. {nextReference}
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={(event) => void submitProperty(event)} className="grid gap-5">
+    <BentoCard
+      span="full"
+      title="Créer un bien"
+      description="La référence sera attribuée automatiquement au moment de l'enregistrement."
+      action={
+        <Badge className="w-fit border-0 bg-orange-100 text-orange-800">
+          Prochaine réf. {nextReference}
+        </Badge>
+      }
+    >
+      <form onSubmit={(event) => void submitProperty(event)} className="grid gap-5">
           <div className="grid gap-4 lg:grid-cols-3">
             <div className="grid gap-2 lg:col-span-2">
               <Label htmlFor="property-title">Titre de l&apos;annonce</Label>
@@ -1524,6 +1460,26 @@ function CreatePropertyCard({
                   {propertyStatuses.map((status) => (
                     <SelectItem key={status} value={status}>
                       {propertyStatusLabels[status]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Publication</Label>
+              <Select
+                value={form.publicationStatus}
+                onValueChange={(value) => updateField("publicationStatus", value as PropertyPublicationStatus)}
+              >
+                <SelectTrigger className="w-full">
+                  <span className="flex flex-1 text-left text-gray-900">
+                    {propertyPublicationStatusLabels[form.publicationStatus]}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  {propertyPublicationStatuses.map((status) => (
+                    <SelectItem key={status} value={status}>
+                      {propertyPublicationStatusLabels[status]}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1877,20 +1833,17 @@ function CreatePropertyCard({
             <Plus className="size-4" />
             {submitting ? "Création..." : "Créer le bien"}
           </Button>
-        </form>
-      </CardContent>
-    </Card>
+      </form>
+    </BentoCard>
   );
 }
 
 function PropertyEditorCard({
   property,
-  expectedCode,
   connected,
   onPersist,
 }: {
   property: Property;
-  expectedCode: string;
   connected: boolean;
   onPersist: (property: Property) => Promise<boolean>;
 }) {
@@ -1987,7 +1940,6 @@ function PropertyEditorCard({
     selectedPhotos.forEach((file) => uploadBody.append("photos", file));
     const response = await fetch("/api/admin/property-photos", {
       method: "POST",
-      headers: { "x-admin-code": expectedCode },
       body: uploadBody,
     }).catch(() => null);
     const payload = response
@@ -2014,7 +1966,7 @@ function PropertyEditorCard({
 
     const response = await fetch("/api/admin/property-photos", {
       method: "DELETE",
-      headers: { "Content-Type": "application/json", "x-admin-code": expectedCode },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ urls: urlsToDelete }),
     }).catch(() => null);
     const payload = response
@@ -2064,7 +2016,7 @@ function PropertyEditorCard({
     setEditing(false);
   }
 
-  async function quickUpdate(updates: Partial<Pick<Property, "status" | "featured">>) {
+  async function quickUpdate(updates: Partial<Pick<Property, "status" | "featured" | "publicationStatus">>) {
     setFeedback(null);
     const nextProperty = { ...property, ...updates, updatedAt: new Date().toISOString() };
     await onPersist(nextProperty);
@@ -2079,18 +2031,24 @@ function PropertyEditorCard({
             <p className="mt-1 font-bold text-[#111111]">{property.title}</p>
             <p className="mt-1 text-sm text-gray-600">{property.city} · {formatNumber(property.surface)} m² · {propertyTypeLabels[property.type]}</p>
           </div>
-          <Badge className="border-0 bg-orange-100 text-orange-800">{propertyStatusLabels[property.status]}</Badge>
+          <div className="flex flex-col gap-2 sm:items-end">
+            <Badge className="border-0 bg-orange-100 text-orange-800">{propertyStatusLabels[property.status]}</Badge>
+            <Badge className={cn("w-fit", propertyPublicationStatusBadgeClasses[property.publicationStatus ?? "DRAFT"])}>
+              {propertyPublicationStatusLabels[property.publicationStatus ?? "DRAFT"]}
+            </Badge>
+          </div>
         </div>
 
-        <div className="grid gap-2 text-sm text-gray-700 sm:grid-cols-4">
+        <div className="grid gap-2 text-sm text-gray-700 sm:grid-cols-5">
           <p><strong>Prix</strong><br />{formatPrice(property.price)}</p>
           <p><strong>Pièces</strong><br />{property.rooms ?? "Non renseigné"}</p>
           <p><strong>Photos</strong><br />{property.photos.length}</p>
+          <p><strong>Publication</strong><br />{propertyPublicationStatusLabels[property.publicationStatus ?? "DRAFT"]}</p>
           <p><strong>Mise en avant</strong><br />{property.featured ? "Oui" : "Non"}</p>
         </div>
 
         <div className="grid gap-3 rounded-lg border border-orange-100 bg-orange-50 p-3 sm:grid-cols-[1fr_auto] sm:items-end">
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-2 sm:grid-cols-3">
             <div className="grid gap-1.5">
               <Label>Disponibilité</Label>
               <Select
@@ -2106,6 +2064,26 @@ function PropertyEditorCard({
                   {propertyStatuses.map((status) => (
                     <SelectItem key={status} value={status}>
                       {propertyStatusLabels[status]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-1.5">
+              <Label>Publication</Label>
+              <Select
+                value={property.publicationStatus ?? "DRAFT"}
+                onValueChange={(value) => void quickUpdate({ publicationStatus: value as PropertyPublicationStatus })}
+              >
+                <SelectTrigger className="h-12 w-full sm:h-10">
+                  <span className="flex flex-1 text-left text-gray-900">
+                    {propertyPublicationStatusLabels[property.publicationStatus ?? "DRAFT"]}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  {propertyPublicationStatuses.map((status) => (
+                    <SelectItem key={status} value={status}>
+                      {propertyPublicationStatusLabels[status]}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -2361,6 +2339,19 @@ function PropertyEditorCard({
             Photo principale : {property.photos[0]}
           </div>
         ) : null}
+        {property.history?.length ? (
+          <div className="rounded-lg border border-orange-100 bg-orange-50 p-3">
+            <p className="text-xs font-bold uppercase tracking-wide text-orange-700">Historique recent</p>
+            <div className="mt-2 grid gap-2">
+              {property.history.slice(0, 4).map((item) => (
+                <p key={item.id} className="text-xs leading-5 text-gray-700">
+                  <strong>{item.action}</strong> - {new Date(item.createdAt).toLocaleString("fr-FR")}
+                  {item.actorEmail ? ` - ${item.actorEmail}` : ""}
+                </p>
+              ))}
+            </div>
+          </div>
+        ) : null}
         {property.sourceUrl ? (
           <a href={property.sourceUrl} target="_blank" rel="noreferrer" className="text-sm font-semibold text-orange-700 hover:text-orange-900">
             Voir l&apos;annonce source
@@ -2376,18 +2367,17 @@ function PropertyEditorCard({
 function PropertyManager({
   properties,
   setProperties,
-  expectedCode,
   connected,
 }: {
   properties: Property[];
   setProperties: React.Dispatch<React.SetStateAction<Property[]>>;
-  expectedCode: string;
   connected: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [feedback, setFeedback] = useState<string | null>(null);
   const propertyInventoryMetrics = useMemo(() => getPropertyInventoryMetrics(properties), [properties]);
   const propertyStatusBreakdown = useMemo(() => getPropertyStatusBreakdown(properties), [properties]);
+  const propertyPublicationBreakdown = useMemo(() => getPropertyPublicationBreakdown(properties), [properties]);
   const propertyTypeBreakdown = useMemo(() => getPropertyTypeBreakdown(properties), [properties]);
   const filteredProperties = properties.filter((property) => {
     const haystack = [
@@ -2398,6 +2388,7 @@ function PropertyManager({
       property.postalCode,
       propertyTypeLabels[property.type],
       propertyStatusLabels[property.status],
+      propertyPublicationStatusLabels[property.publicationStatus ?? "DRAFT"],
     ]
       .join(" ")
       .toLowerCase();
@@ -2407,14 +2398,14 @@ function PropertyManager({
 
   async function persistProperty(property: Property) {
     if (!connected) {
-      setProperties((current) => mergeProperties(current, [property]));
-      setFeedback("Modification conservée dans cette session locale.");
-      return true;
+      void property;
+      setFeedback("Modification refusee : Supabase doit etre connecte pour enregistrer le catalogue officiel.");
+      return false;
     }
 
     const response = await fetch("/api/admin/properties", {
       method: "PATCH",
-      headers: { "Content-Type": "application/json", "x-admin-code": expectedCode },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(buildPropertyPayload(property, propertyToForm(property), property.photos)),
     }).catch(() => null);
     const payload = response
@@ -2429,105 +2420,128 @@ function PropertyManager({
       return false;
     }
 
-    setProperties((current) => mergeProperties(current, [payload.property!]));
+    setProperties((current) => upsertProperties(current, [payload.property!]));
     setFeedback(payload.message ?? "Bien mis à jour.");
     return true;
   }
 
   return (
-    <div className="grid gap-6">
+    <BentoGrid>
       <CreatePropertyCard
         properties={properties}
         setProperties={setProperties}
-        expectedCode={expectedCode}
         connected={connected}
       />
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {propertyInventoryMetrics.map((metric) => (
-          <Card key={metric.label} className="border-orange-100 bg-white">
-            <CardContent className="p-5">
-              <p className="text-sm text-gray-500">{metric.label}</p>
-              <p className="mt-2 text-2xl font-black text-[#111111]">{metric.value}</p>
-              <p className="mt-2 text-xs leading-5 text-gray-500">{metric.description}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-      <Card className="border-orange-100 bg-white">
-        <CardHeader>
-          <CardTitle>Source catalogue</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-2 text-sm text-gray-700">
-          <p><strong>{propertyImportSource.name}</strong></p>
-          <p>Source actuelle : <span className="font-mono text-xs">catalogue officiel + Supabase properties</span></p>
-          <p>Source cible : {propertyImportSource.futureSource}</p>
-          <p className="text-gray-500">{propertyImportSource.note}</p>
-        </CardContent>
-      </Card>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="border-orange-100 bg-white">
-          <CardHeader><CardTitle>Répartition par statut</CardTitle></CardHeader>
-          <CardContent className="grid gap-3">
-            {propertyStatusBreakdown.map((item) => (
-              <p key={item.key} className="flex items-center justify-between border-b border-orange-100 pb-2 text-sm">
-                <span>{item.label}</span>
-                <strong>{item.count}</strong>
-              </p>
-            ))}
-          </CardContent>
-        </Card>
-        <Card className="border-orange-100 bg-white">
-          <CardHeader><CardTitle>Répartition par type</CardTitle></CardHeader>
-          <CardContent className="grid gap-3">
-            {propertyTypeBreakdown.map((item) => (
-              <p key={item.key} className="flex items-center justify-between border-b border-orange-100 pb-2 text-sm">
-                <span>{item.label}</span>
-                <strong>{item.count}</strong>
-              </p>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
-      <div className="relative">
-        <Search className="absolute left-3 top-2.5 size-4 text-gray-400" />
-        <Input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Rechercher un bien par référence, ville, titre ou statut"
-          className="pl-9"
+
+      {propertyInventoryMetrics.map((metric) => (
+        <BentoKpiCard
+          key={metric.label}
+          label={metric.label}
+          value={metric.value}
+          description={metric.description}
+          span="medium"
         />
-      </div>
-      {feedback ? (
-        <p className="rounded-md bg-emerald-50 p-3 text-sm font-medium text-emerald-800">
-          {feedback}
-        </p>
-      ) : null}
-      {filteredProperties.length === 0 ? (
-        <Card className="border-dashed border-orange-200 bg-white">
-          <CardContent className="py-12 text-center">
-            <Building2 className="mx-auto size-9 text-orange-500" />
-            <p className="mt-4 font-bold text-[#111111]">Aucun bien trouvé</p>
-            <p className="mt-2 text-sm text-gray-600">Modifiez la recherche ou créez un nouveau bien.</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {filteredProperties.map((property) => (
-            <PropertyEditorCard
-              key={`${property.reference}-${property.updatedAt}`}
-              property={property}
-              expectedCode={expectedCode}
-              connected={connected}
-              onPersist={persistProperty}
-            />
+      ))}
+
+      <BentoCard
+        span="full"
+        variant="muted"
+        title="Source catalogue"
+        description="Suivi de la transition vers un catalogue 100 % Supabase."
+      >
+        <div className="grid gap-2 text-sm text-gray-700">
+          <p><strong>{propertyImportSource.name}</strong></p>
+          <p>Source actuelle : <span className="font-mono text-xs">Supabase public_properties</span></p>
+          <p>Source cible : {propertyImportSource.futureSource}</p>
+          <p>
+            Publication :{" "}
+            {propertyPublicationBreakdown.map((item) => `${item.label} ${item.count}`).join(" / ")}
+          </p>
+          <p className="text-gray-500">{propertyImportSource.note}</p>
+        </div>
+      </BentoCard>
+
+      <BentoCard span="large" title="Répartition par statut">
+        <div className="grid gap-3">
+          {propertyStatusBreakdown.map((item) => (
+            <p key={item.key} className="flex items-center justify-between border-b border-orange-100 pb-2 text-sm">
+              <span>{item.label}</span>
+              <strong>{item.count}</strong>
+            </p>
           ))}
         </div>
-      )}
-    </div>
+      </BentoCard>
+
+      <BentoCard span="large" title="Répartition par type">
+        <div className="grid gap-3">
+          {propertyTypeBreakdown.map((item) => (
+            <p key={item.key} className="flex items-center justify-between border-b border-orange-100 pb-2 text-sm">
+              <span>{item.label}</span>
+              <strong>{item.count}</strong>
+            </p>
+          ))}
+        </div>
+      </BentoCard>
+
+      <BentoCard
+        span="full"
+        title="Catalogue des biens"
+        description="Recherche, disponibilité, mise à la une et édition rapide des biens."
+        contentClassName="gap-5"
+      >
+        <div className="relative">
+          <Search className="absolute left-3 top-2.5 size-4 text-gray-400" />
+          <Input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Rechercher un bien par référence, ville, titre ou statut"
+            className="pl-9"
+          />
+        </div>
+
+        {feedback ? (
+          <p className="rounded-md bg-emerald-50 p-3 text-sm font-medium text-emerald-800">
+            {feedback}
+          </p>
+        ) : null}
+
+        {filteredProperties.length === 0 ? (
+          <BentoEmptyState
+            icon={<Building2 className="size-5" />}
+            title="Aucun bien trouvé"
+            description="Modifiez la recherche ou créez un nouveau bien."
+            className="py-12"
+          />
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-2">
+            {filteredProperties.map((property) => (
+              <PropertyEditorCard
+                key={`${property.reference}-${property.updatedAt}`}
+                property={property}
+                connected={connected}
+                onPersist={persistProperty}
+              />
+            ))}
+          </div>
+        )}
+      </BentoCard>
+    </BentoGrid>
   );
 }
 
-function LeadManager({ leads, setLeads, expectedCode, connected }: { leads: AdminLead[]; setLeads: React.Dispatch<React.SetStateAction<AdminLead[]>>; expectedCode: string; connected: boolean }) {
+function LeadManager({
+  leads,
+  setLeads,
+  connected,
+  title,
+  description,
+}: {
+  leads: AdminLead[];
+  setLeads: React.Dispatch<React.SetStateAction<AdminLead[]>>;
+  connected: boolean;
+  title: string;
+  description: string;
+}) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("ALL");
   const [feedback, setFeedback] = useState("");
@@ -2544,7 +2558,7 @@ function LeadManager({ leads, setLeads, expectedCode, connected }: { leads: Admi
     }
     const response = await fetch("/api/admin/leads", {
       method: "PATCH",
-      headers: { "Content-Type": "application/json", "x-admin-code": expectedCode },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ table: lead.kind, id: lead.id, ...updates }),
     });
     const payload = await response.json().catch(() => null) as { message?: string } | null;
@@ -2552,7 +2566,7 @@ function LeadManager({ leads, setLeads, expectedCode, connected }: { leads: Admi
   }
 
   return (
-    <div className="grid gap-5">
+    <BentoCard span="full" title={title} description={description} contentClassName="gap-5">
       <div className="flex flex-col gap-3 sm:flex-row">
         <div className="relative flex-1"><Search className="absolute left-3 top-2.5 size-4 text-gray-400" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Rechercher un nom, une ville, un email" className="pl-9" /></div>
         <Select value={status} onValueChange={(value) => setStatus(value ?? "ALL")}>
@@ -2564,14 +2578,19 @@ function LeadManager({ leads, setLeads, expectedCode, connected }: { leads: Admi
       </div>
       {feedback ? <p className="rounded-md bg-orange-50 p-3 text-sm text-orange-800">{feedback}</p> : null}
       {visible.length === 0 ? (
-        <Card className="border-dashed border-orange-200 bg-white"><CardContent className="py-12 text-center"><ContactRound className="mx-auto size-9 text-orange-500" /><p className="mt-4 font-bold text-[#111111]">Aucun prospect dans cette vue</p><p className="mt-2 text-sm text-gray-600">Les prochaines demandes apparaîtront ici automatiquement.</p></CardContent></Card>
+        <BentoEmptyState
+          icon={<ContactRound className="size-5" />}
+          title="Aucun prospect dans cette vue"
+          description="Les prochaines demandes apparaîtront ici automatiquement."
+          className="py-12"
+        />
       ) : visible.map((lead) => (
-        <Card key={lead.id} className="border-orange-100 bg-white">
-          <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div><CardTitle className="text-lg text-[#111111]">{lead.name}</CardTitle><p className="mt-1 text-sm text-gray-500">{new Date(lead.createdAt).toLocaleString("fr-FR")} · {lead.city}</p></div>
+        <article key={lead.id} className="rounded-xl border border-orange-100 bg-white p-4 shadow-sm shadow-orange-100/40 sm:p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div><p className="text-lg font-bold text-[#111111]">{lead.name}</p><p className="mt-1 text-sm text-gray-500">{new Date(lead.createdAt).toLocaleString("fr-FR")} · {lead.city}</p></div>
             <Badge className="w-fit border-0 bg-orange-100 text-orange-800">{leadStatusLabels[lead.status]}</Badge>
-          </CardHeader>
-          <CardContent className="grid gap-5">
+          </div>
+          <div className="mt-5 grid gap-5">
             <div className="grid gap-2 text-sm text-gray-700 sm:grid-cols-3"><p><strong>Email</strong><br />{lead.email}</p><p><strong>Téléphone</strong><br />{lead.phone}</p><p><strong>Demande</strong><br />{lead.category}</p></div>
             <p className="break-words rounded-md bg-orange-50 p-4 text-sm leading-6 text-gray-700">{lead.message}</p>
             <div className="grid gap-3 lg:grid-cols-[200px_1fr_auto_auto] lg:items-end">
@@ -2580,18 +2599,16 @@ function LeadManager({ leads, setLeads, expectedCode, connected }: { leads: Admi
               <Button variant="outline" onClick={() => persist(lead, { notes: lead.notes })}><Save className="size-4" />Sauver</Button>
               <Button variant="outline" onClick={() => persist(lead, { archived: true })}><Archive className="size-4" />Archiver</Button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </article>
       ))}
-    </div>
+    </BentoCard>
   );
 }
 
-export function AdminDashboard({ contacts, estimations, activities: initialActivities, properties, connected, expectedCode }: Props) {
-  const [unlocked, setUnlocked] = useState(false);
-  const [code, setCode] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+export function AdminDashboard({ contacts, estimations, activities: initialActivities, properties, connected, userName, userRole }: Props) {
+  const [loadError, setLoadError] = useState("");
+  const [loading, setLoading] = useState(connected);
   const [activeTab, setActiveTab] = useState<AdminTab>("overview");
   const [contactLeads, setContactLeads] = useState(() => normalizeContacts(contacts));
   const [estimationLeads, setEstimationLeads] = useState(() => normalizeEstimations(estimations));
@@ -2610,58 +2627,64 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
     [activities, activityAction, activityEntityType, activityPeriod, activitySearch]
   );
 
-  async function unlock() {
-    if (code !== expectedCode) {
-      setError("Code incorrect.");
+  useEffect(() => {
+    if (!connected) {
       return;
     }
 
-    setError("");
-    if (connected) {
+    let cancelled = false;
+
+    async function loadCrmData() {
       setLoading(true);
+      setLoadError("");
+
       const [response, propertiesResponse] = await Promise.all([
-        fetch("/api/admin/leads", { headers: { "x-admin-code": code } }),
-        fetch("/api/admin/properties", { headers: { "x-admin-code": code } }),
+        fetch("/api/admin/leads"),
+        fetch("/api/admin/properties"),
       ]);
-      const payload = await response.json().catch(() => null) as { message?: string; contacts?: ContactLead[]; estimations?: EstimationLead[]; activities?: Activity[] } | null;
-      const propertiesPayload = await propertiesResponse.json().catch(() => null) as { properties?: Property[] } | null;
+      const payload = (await response.json().catch(() => null)) as {
+        message?: string;
+        contacts?: ContactLead[];
+        estimations?: EstimationLead[];
+        activities?: Activity[];
+      } | null;
+      const propertiesPayload = (await propertiesResponse.json().catch(() => null)) as {
+        properties?: Property[];
+      } | null;
+
+      if (cancelled) return;
       setLoading(false);
+
       if (!response.ok) {
-        setError(payload?.message ?? "Le CRM n'a pas pu être chargé.");
+        setLoadError(payload?.message ?? "Le CRM n'a pas pu etre charge.");
+        if (response.status === 401) window.location.assign("/admin/login");
         return;
       }
+
       setContactLeads(normalizeContacts(payload?.contacts ?? []));
       setEstimationLeads(normalizeEstimations(payload?.estimations ?? []));
       setActivities(payload?.activities ?? []);
+
       if (propertiesResponse.ok) {
-        setPropertyItems(mergeProperties(properties, propertiesPayload?.properties ?? []));
+        setPropertyItems(propertiesPayload?.properties ?? []);
       }
     }
-    setUnlocked(true);
-  }
 
-  if (!expectedCode) {
-    return (
-      <main className="flex min-h-svh items-center justify-center bg-[#111111] px-4 py-12">
-        <Card className="w-full max-w-lg min-w-0 border-white/10 bg-white text-[#111111] shadow-2xl">
-          <CardHeader className="min-w-0"><Badge className="w-fit border-0 bg-yellow-300 text-[#111111]">Configuration requise</Badge><KeyRound className="size-8 text-orange-600" /><CardTitle className="text-2xl font-black">CRM à verrouiller</CardTitle><p className="text-sm leading-6 text-gray-600">Définis <span className="break-all font-mono text-xs">NEXT_PUBLIC_ADMIN_LOCAL_CODE</span> dans l&apos;environnement avant d&apos;utiliser l&apos;administration locale.</p></CardHeader>
-          <CardContent><p className="rounded-md bg-orange-50 p-4 text-sm leading-6 text-gray-700">Le site public reste disponible. Cette protection temporaire évite d&apos;ouvrir le CRM avec un code par défaut.</p></CardContent>
-        </Card>
-      </main>
-    );
-  }
+    void loadCrmData();
 
-  if (!unlocked) {
-    return (
-      <main className="flex min-h-svh items-center justify-center bg-[#111111] px-4 py-12">
-        <Card className="w-full max-w-md border-white/10 bg-white text-[#111111] shadow-2xl">
-          <CardHeader><KeyRound className="size-8 text-orange-600" /><CardTitle className="text-2xl font-black">Administration locale</CardTitle><p className="text-sm leading-6 text-gray-600">Accès temporaire avant la future authentification sécurisée.</p></CardHeader>
-          <CardContent className="grid gap-4"><div className="grid gap-2"><Label htmlFor="admin-code">Code d&apos;accès</Label><Input id="admin-code" type="password" value={code} onChange={(event) => setCode(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void unlock(); }} /></div>{error ? <p className="text-sm font-semibold text-red-600">{error}</p> : null}<Button disabled={loading} onClick={() => void unlock()} className="h-11 bg-orange-500 text-white hover:bg-orange-600">{loading ? "Chargement..." : "Ouvrir le CRM"}</Button></CardContent>
-        </Card>
-      </main>
-    );
-  }
+    return () => {
+      cancelled = true;
+    };
+  }, [connected, properties]);
 
+  async function logout() {
+    const response = await fetch("/api/admin/auth/logout", { method: "POST" }).catch(() => null);
+    const payload = response
+      ? ((await response.json().catch(() => null)) as { redirectTo?: string } | null)
+      : null;
+
+    window.location.assign(payload?.redirectTo ?? "/admin/login");
+  }
   return (
     <main className="min-h-dvh overflow-x-hidden bg-orange-50 px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 sm:py-8 lg:px-8">
       <div className="mx-auto w-full max-w-screen-2xl min-w-0">
@@ -2673,10 +2696,18 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
             <h1 className="mt-3 text-3xl font-black text-[#111111] sm:text-4xl">CRM IMMO-DREAMS83</h1>
             <p className="mt-2 text-sm leading-6 text-gray-600">Prospects, estimations, biens, statistiques et activité de l&apos;agence.</p>
           </div>
-          <Button variant="outline" onClick={() => setUnlocked(false)} className="w-full border-orange-200 bg-white sm:w-auto">
-            <LogOut className="size-4" />Verrouiller
+          <Button variant="outline" onClick={() => void logout()} className="w-full border-orange-200 bg-white sm:w-auto">
+            <LogOut className="size-4" />Déconnexion
           </Button>
         </header>
+        <div className="mb-6 grid gap-3 rounded-lg border border-orange-100 bg-white p-4 text-sm text-gray-700 shadow-sm shadow-orange-100/40 sm:grid-cols-[1fr_auto] sm:items-center">
+          <p>
+            Connecté : <strong className="text-[#111111]">{userName}</strong> · rôle{" "}
+            <strong className="text-[#111111]">{adminRoleLabels[userRole]}</strong>
+          </p>
+          {loading ? <Badge className="w-fit border-0 bg-orange-100 text-orange-800">Chargement CRM...</Badge> : null}
+          {loadError ? <p className="text-sm font-semibold text-red-700 sm:col-span-2">{loadError}</p> : null}
+        </div>
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as AdminTab)} className="w-full min-w-0 gap-6 sm:gap-8">
           <div className="w-full min-w-0">
             <TabsList className="!grid h-auto w-full grid-cols-2 gap-1 bg-white p-1 shadow-sm shadow-orange-100/40 sm:grid-cols-3 lg:!inline-flex lg:w-full lg:justify-start">
@@ -2689,17 +2720,33 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
             </TabsList>
           </div>
           <TabsContent value="overview" className="w-full">
-            <DashboardBento metrics={metrics} setActiveTab={setActiveTab} />
+            <BentoDesignDashboard metrics={metrics} setActiveTab={setActiveTab} />
           </TabsContent>
           <TabsContent value="contacts">
-            <div className="grid gap-5">
-              <CreateContactCard setLeads={setContactLeads} expectedCode={expectedCode} connected={connected} />
-              <LeadManager leads={contactLeads} setLeads={setContactLeads} expectedCode={expectedCode} connected={connected} />
-            </div>
+            <BentoGrid>
+              <CreateContactCard setLeads={setContactLeads} connected={connected} />
+              <LeadManager
+                title="Contacts"
+                description="Demandes entrantes, prospects créés manuellement et suivi commercial rapide."
+                leads={contactLeads}
+                setLeads={setContactLeads}
+                connected={connected}
+              />
+            </BentoGrid>
           </TabsContent>
-          <TabsContent value="estimations" className="w-full"><LeadManager leads={estimationLeads} setLeads={setEstimationLeads} expectedCode={expectedCode} connected={connected} /></TabsContent>
+          <TabsContent value="estimations" className="w-full">
+            <BentoGrid>
+              <LeadManager
+                title="Estimations"
+                description="Demandes d'estimation reçues depuis le formulaire public et leur statut de suivi."
+                leads={estimationLeads}
+                setLeads={setEstimationLeads}
+                connected={connected}
+              />
+            </BentoGrid>
+          </TabsContent>
           <TabsContent value="properties" className="w-full">
-            <PropertyManager properties={propertyItems} setProperties={setPropertyItems} expectedCode={expectedCode} connected={connected} />
+            <PropertyManager properties={propertyItems} setProperties={setPropertyItems} connected={connected} />
           </TabsContent>
           <TabsContent value="activities" className="w-full">
             <ActivityPanel
@@ -2716,7 +2763,7 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
             />
           </TabsContent>
           <TabsContent value="statistics" className="w-full">
-            <StatisticsPanel metrics={metrics} />
+            <BentoStatisticsPanel metrics={metrics} />
           </TabsContent>
         </Tabs>
       </div>
