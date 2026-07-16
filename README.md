@@ -161,11 +161,14 @@ La Partie 3 CRM commercial ne doit pas commencer tant que la Phase 2 n'est pas v
 
 Blocages actuels :
 
-- GitHub CLI `gh` est installe, mais pas encore authentifie : impossible de pousser la branche et d'ouvrir la PR depuis le terminal.
+- La branche `feature/v3-supabase-property-source` est poussee et la PR draft Phase 2 est ouverte : https://github.com/Kenzovieillard/immo-dreams83/pull/3.
+- GitHub CLI `gh` est installe mais pas encore authentifie localement ; le push a toutefois fonctionne via Git Credential Manager.
 - Supabase CLI est accessible via `npx supabase`, mais pas encore authentifiee : les migrations ne peuvent pas encore etre appliquees/verifiees via CLI.
-- `.env.local` est configure localement et ignore par Git, mais les appels Supabase depuis ce terminal echouent avec `fetch failed`.
-- Le push Git echoue depuis ce terminal avec un blocage reseau vers `github.com:443`.
-- La validation reelle RLS, import connecte et recette admin authentifiee doit etre relancee depuis un terminal ayant acces a Supabase et GitHub.
+- `.env.local` est configure localement et ignore par Git.
+- Les dry-runs connectes Supabase fonctionnent.
+- La migration Phase 2 n'est pas encore appliquee dans Supabase : la colonne `properties.commercial_status` est absente.
+- L'import reel des biens est donc volontairement bloque.
+- La validation reelle RLS, `public_properties`, `property_photos`, import connecte et recette admin authentifiee doit etre relancee apres application des migrations.
 
 Actions a faire avant de declarer la Partie 3 prete :
 
@@ -197,9 +200,11 @@ npm run properties:import:dry-run
 npm run crm:legacy-dry-run -- --write-report
 ```
 
-5. Appliquer l'import reel uniquement si le rapport biens ne signale aucun doublon reference, collision slug, perte photo ou statut inconnu.
-6. Faire la recette Phase 2 : public, CRM, RLS, photos, publication, archivage, restauration, responsive mobile.
-7. Pousser `feature/v3-supabase-property-source`, puis ouvrir la PR vers `main`.
+5. Appliquer la migration Phase 2 `supabase/migrations/202607150002_property_source_of_truth.sql`.
+6. Relancer le dry-run biens et verifier que `commercial_status`, `publication_status`, `public_properties`, `property_photos` et `property_history` existent.
+7. Appliquer l'import reel uniquement si le rapport biens ne signale aucun doublon reference, collision slug, perte photo ou statut inconnu.
+8. Faire la recette Phase 2 : public, CRM, RLS, photos, publication, archivage, restauration, responsive mobile.
+9. Mettre a jour la PR Phase 2 avec le resultat final avant merge.
 
 Critere de sortie :
 
