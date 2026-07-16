@@ -2,14 +2,28 @@
 
 ## Statut
 
-Phase 3 demarree cote depot, mais pas encore applicable en production.
+Phase 3 demarree cote depot et socle Supabase applique le 16/07/2026.
 
-Pre-requis obligatoire :
+Pre-requis Phase 2 valides le 16/07/2026 :
 
-1. terminer la Phase 2 Supabase ;
-2. appliquer `supabase/migrations/202607150002_property_source_of_truth.sql` ;
-3. lancer l'import reel des biens ;
-4. valider RLS, `public_properties`, `property_photos` et la recette CRM.
+1. migration securite appliquee : `supabase/migrations/202607150001_v3_secure_crm_foundation.sql` ;
+2. migration biens appliquee : `supabase/migrations/202607150002_property_source_of_truth.sql` ;
+3. import reel des 12 biens statiques execute ;
+4. vue `public_properties` validee avec 12 biens visibles ;
+5. table `property_photos` validee avec 48 photos actives ;
+6. lecture anonyme directe de `properties` bloquee ;
+7. `npm run lint` OK ;
+8. `npm run build` OK.
+
+Socle Phase 3 valide :
+
+- migration appliquee : `supabase/migrations/202607160001_leads_data_model_foundation.sql` ;
+- 6 sources de leads disponibles dans `lead_sources` ;
+- vue `crm_legacy_lead_candidates` lisible avec les 10 demandes legacy ;
+- tables `lead_import_runs` et `lead_merge_logs` lisibles ;
+- colonnes de normalisation disponibles sur `contacts` ;
+- colonnes Phase 3 disponibles sur `leads` ;
+- dry-run legacy relance sans ecriture.
 
 ## Objectif
 
@@ -63,10 +77,10 @@ Le cas ambigu doit etre traite manuellement avant migration effective.
 
 ## Regle de securite
 
-Aucune ecriture Phase 3 ne doit etre lancee tant que la Phase 2 n'est pas mergee ou explicitement validee.
+Aucune migration destructive Phase 3 ne doit etre lancee.
 
-La migration Phase 3 peut etre relue et preparee, mais son application doit attendre la validation Phase 2.
+La migration Phase 3 appliquee est non destructive et conserve les anciennes tables `contacts` et `estimations` lisibles pendant la transition.
 
 ## Prochaine etape
 
-Appliquer la migration Phase 2, importer les biens, puis relancer le dry-run legacy avant de transformer les anciens contacts et estimations.
+Relire la PR Phase 2, merger vers `main`, redeployer Vercel, puis commencer la transformation applicative Phase 3 sans migration effective des anciens contacts et estimations tant que le cas `AMBIGU` n'est pas arbitre.

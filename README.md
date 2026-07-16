@@ -175,6 +175,7 @@ Resultat Phase 2 valide :
 - Rapport legacy CRM relance : 10 demandes analysees, 9 `MATCH CERTAIN`, 1 `AMBIGU`, aucune ecriture.
 - `npm run lint` OK.
 - `npm run build` OK.
+- Sur la branche `feature/v3-commercial-crm-foundation`, la migration Phase 3 non destructive a ete appliquee : `lead_sources`, `lead_import_runs`, `lead_merge_logs` et `crm_legacy_lead_candidates` sont disponibles.
 
 Actions restantes avant merge/production :
 
@@ -217,7 +218,7 @@ Critere de sortie :
 PRET A IMPLEMENTER LA PARTIE 3
 ```
 
-Le depot est maintenant dans cet etat cote migration/import. La Partie 3 doit rester sur sa branche dediee et commencer par le modele contacts/leads, sans mutation destructive des donnees legacy.
+Le depot est maintenant dans cet etat cote migration/import. La Partie 3 reste sur sa branche dediee et commence par le modele contacts/leads, sans mutation destructive des donnees legacy.
 
 ## Routes importantes
 
