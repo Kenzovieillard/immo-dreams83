@@ -30,6 +30,9 @@ Socle Phase 3 valide :
 - dry-run post-import valide : 9 leads legacy deja presents, 0 lead a creer, 0 bloqueur.
 - migration de garde-fou `202607160002_legacy_lead_import_guardrails.sql` appliquee et verifiee dans Supabase.
 - dry-run post-garde-fou valide : 9 leads legacy deja presents, 0 lead a creer, 0 bloqueur.
+- onglet applicatif `Pipeline` ajoute dans `/admin` pour suivre les leads normalises.
+- route protegee `/api/admin/pipeline` ajoutee pour les statuts, priorites, assignations et rappels.
+- migration non destructive preparee : `supabase/migrations/202607160003_commercial_pipeline_foundation.sql`.
 
 ## Recette Mobile/Admin Authentifiee
 
@@ -240,6 +243,71 @@ Permissions :
 
 Le `PATCH` sert uniquement a journaliser une decision de revue. Il ne cree pas de contact canonique, ne cree pas de lead final et ne deplace aucune donnee legacy.
 
+## Pipeline Commercial Quotidien
+
+Objectif : transformer les leads importes en liste de travail exploitable au quotidien.
+
+Ecran :
+
+```text
+/admin
+Onglet : Pipeline
+```
+
+Fonctionnalites ajoutees :
+
+- KPI leads actifs, rappels du jour, rappels en retard et leads non assignes ;
+- filtres par texte, statut et agent ;
+- modification rapide du statut commercial ;
+- priorite `Faible`, `Normale`, `Haute`, `Urgente` ;
+- assignation a un profil admin actif ;
+- notes internes ;
+- creation d'un rappel lie au lead ;
+- cloture ou reouverture d'un rappel.
+
+Route API :
+
+```text
+GET /api/admin/pipeline
+POST /api/admin/pipeline
+PATCH /api/admin/pipeline
+```
+
+Permissions :
+
+- lecture : `crm.read` ;
+- modification lead/rappel : `lead.write`.
+
+Migration :
+
+```text
+supabase/migrations/202607160003_commercial_pipeline_foundation.sql
+```
+
+Cette migration est non destructive.
+
+Elle ajoute :
+
+- `tasks.created_by` ;
+- `tasks.completed_by` ;
+- `tasks.task_type` ;
+- contraintes de priorite non validees retroactivement ;
+- index de lecture `leads` et `tasks` ;
+- policies de lecture admin sur `leads`, `lead_status_history`, `tasks`, `communications` et `appointments`.
+
+Recette manuelle recommandee :
+
+1. appliquer la migration 003 dans Supabase ;
+2. ouvrir `/admin` avec un compte autorise ;
+3. aller dans `Pipeline` ;
+4. assigner un lead a un utilisateur ;
+5. changer son statut ;
+6. passer la priorite en `Haute` ou `Urgente` ;
+7. creer un rappel date ;
+8. verifier que le rappel apparait dans `Aujourd'hui` si la date correspond ;
+9. terminer le rappel ;
+10. verifier `activities` et `audit_logs`.
+
 ## Regle de securite
 
 Aucune migration destructive Phase 3 ne doit etre lancee.
@@ -248,4 +316,4 @@ La migration Phase 3 appliquee est non destructive et conserve les anciennes tab
 
 ## Prochaine etape
 
-Poursuivre la Phase 3 sur les vues CRM quotidiennes : pipeline, taches, rappels et assignation.
+Appliquer la migration pipeline 003 dans Supabase, puis recetter `/admin` > `Pipeline` sur desktop et mobile avant de poursuivre vers les relances plus avancees.

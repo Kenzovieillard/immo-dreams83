@@ -8,8 +8,11 @@ import {
   ArrowUp,
   BarChart3,
   Building2,
+  CalendarClock,
+  CheckCircle2,
   ClipboardCheck,
   ContactRound,
+  Clock,
   Info,
   LayoutDashboard,
   ImagePlus,
@@ -20,7 +23,9 @@ import {
   Save,
   Search,
   Star,
+  Target,
   Trash2,
+  UserRound,
   X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -47,7 +52,13 @@ import {
   propertyStatusLabels,
   propertyTypeLabels,
 } from "@/data/properties";
-import { leadStatusLabels, leadStatuses } from "@/lib/crm";
+import {
+  leadPriorities,
+  leadPriorityBadgeClasses,
+  leadPriorityLabels,
+  leadStatusLabels,
+  leadStatuses,
+} from "@/lib/crm";
 import {
   climateUnit,
   dpeBadgeClasses,
@@ -75,13 +86,22 @@ import {
 } from "@/lib/property-management";
 import { cn } from "@/lib/utils";
 import { adminRoleLabels, type AdminRole } from "@/types/admin";
-import type { Activity, ContactLead, EstimationLead, LeadStatus } from "@/types/crm";
+import type {
+  Activity,
+  AdminTeamMember,
+  ContactLead,
+  EstimationLead,
+  LeadPriority,
+  LeadStatus,
+  PipelineLead,
+  PipelineTask,
+} from "@/types/crm";
 
 const contactRequestTypes = ["Achat", "Vente", "Estimation", "Terrain", "Autre"] as const;
 const propertyTypes = ["apartment", "house", "land"] as const satisfies PropertyType[];
 const propertyStatuses = ["available", "under_offer", "sold"] as const satisfies PropertyStatus[];
 const propertyPublicationStatuses = ["DRAFT", "PUBLISHED", "UNPUBLISHED", "ARCHIVED"] as const satisfies PropertyPublicationStatus[];
-type AdminTab = "overview" | "contacts" | "estimations" | "legacyReview" | "properties" | "activities" | "statistics";
+type AdminTab = "overview" | "pipeline" | "contacts" | "estimations" | "legacyReview" | "properties" | "activities" | "statistics";
 type ActivityEntityTypeFilter = "ALL" | "contact" | "estimation" | "property" | "other";
 type ActivityActionFilter = "ALL" | "created" | "updated" | "archived" | "uploaded" | "deleted" | "other";
 type ActivityPeriodFilter = "ALL" | "today" | "last7days" | "last30days";
@@ -115,6 +135,14 @@ type LegacyReviewResponse = {
     manualReview: number;
     doNotMerge: number;
   };
+};
+
+type PipelineResponse = {
+  success?: boolean;
+  message?: string;
+  leads?: PipelineLead[];
+  tasks?: PipelineTask[];
+  team?: AdminTeamMember[];
 };
 
 const activityEntityTypeLabels: Record<ActivityEntityTypeFilter, string> = {
@@ -305,6 +333,63 @@ function getStatusSelectLabel(value: unknown) {
   }
 
   return "Tous les statuts";
+}
+
+function getPrioritySelectLabel(value: unknown) {
+  if (typeof value === "string" && leadPriorities.includes(value as LeadPriority)) {
+    return leadPriorityLabels[value as LeadPriority];
+  }
+
+  return "Priorite";
+}
+
+function getTeamMemberLabel(member?: AdminTeamMember | null) {
+  if (!member) return "Non assigne";
+  return member.fullName || member.email;
+}
+
+function formatPipelineBudget(min: number | null, max: number | null) {
+  if (min && max) return `${formatPrice(min)} - ${formatPrice(max)}`;
+  if (max) return `jusqu'a ${formatPrice(max)}`;
+  if (min) return `a partir de ${formatPrice(min)}`;
+  return "Non renseigne";
+}
+
+function isOpenTask(task: PipelineTask) {
+  return !task.completedAt;
+}
+
+function isTaskDueToday(task: PipelineTask) {
+  if (!task.dueAt || task.completedAt) return false;
+  const due = new Date(task.dueAt);
+  if (Number.isNaN(due.getTime())) return false;
+  const today = new Date();
+  return (
+    due.getFullYear() === today.getFullYear() &&
+    due.getMonth() === today.getMonth() &&
+    due.getDate() === today.getDate()
+  );
+}
+
+function isTaskOverdue(task: PipelineTask) {
+  if (!task.dueAt || task.completedAt) return false;
+  return new Date(task.dueAt).getTime() < Date.now() && !isTaskDueToday(task);
+}
+
+function getTaskDueTone(task: PipelineTask) {
+  if (isTaskOverdue(task)) return "text-red-700";
+  if (isTaskDueToday(task)) return "text-orange-700";
+  return "text-gray-600";
+}
+
+function groupTasksByLead(tasks: PipelineTask[]) {
+  return tasks.reduce((map, task) => {
+    if (!task.leadId) return map;
+    const current = map.get(task.leadId) ?? [];
+    current.push(task);
+    map.set(task.leadId, current);
+    return map;
+  }, new Map<string, PipelineTask[]>());
 }
 
 function parseMultilineValues(value: string) {
@@ -741,7 +826,7 @@ function BentoDesignDashboard({
       label: "Nouveaux leads",
       value: metrics.newLeads,
       description: "A qualifier en priorite.",
-      action: () => setActiveTab("contacts"),
+      action: () => setActiveTab("pipeline"),
     },
     {
       label: "Biens sans photos",
@@ -767,7 +852,7 @@ function BentoDesignDashboard({
         title="Que doit faire l'agence aujourd'hui ?"
         description="Les actions operationnelles les plus utiles sont regroupees ici pour eviter de chercher dans tout le CRM."
         action={
-          <Button type="button" size="sm" className="bg-orange-500 text-white hover:bg-orange-600" onClick={() => setActiveTab("contacts")}>
+          <Button type="button" size="sm" className="bg-orange-500 text-white hover:bg-orange-600" onClick={() => setActiveTab("pipeline")}>
             Traiter les leads
           </Button>
         }
@@ -2594,6 +2679,454 @@ function PropertyManager({
   );
 }
 
+type PipelineTaskDraft = {
+  title: string;
+  dueAt: string;
+  priority: LeadPriority;
+};
+
+const emptyPipelineTaskDraft: PipelineTaskDraft = {
+  title: "",
+  dueAt: "",
+  priority: "normal",
+};
+
+function PipelinePanel({
+  leads,
+  setLeads,
+  tasks,
+  setTasks,
+  team,
+  connected,
+  error,
+  onRefresh,
+}: {
+  leads: PipelineLead[];
+  setLeads: React.Dispatch<React.SetStateAction<PipelineLead[]>>;
+  tasks: PipelineTask[];
+  setTasks: React.Dispatch<React.SetStateAction<PipelineTask[]>>;
+  team: AdminTeamMember[];
+  connected: boolean;
+  error: string;
+  onRefresh: () => Promise<void>;
+}) {
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("ALL");
+  const [assignee, setAssignee] = useState("ALL");
+  const [feedback, setFeedback] = useState("");
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [taskDrafts, setTaskDrafts] = useState<Record<string, PipelineTaskDraft>>({});
+  const teamById = useMemo(() => new Map(team.map((member) => [member.id, member])), [team]);
+  const leadsById = useMemo(() => new Map(leads.map((lead) => [lead.id, lead])), [leads]);
+  const tasksByLead = useMemo(() => groupTasksByLead(tasks), [tasks]);
+  const activeLeads = leads.filter((lead) => !lead.archived);
+  const openTasks = tasks.filter(isOpenTask);
+  const overdueTasks = openTasks.filter(isTaskOverdue);
+  const todayTasks = openTasks.filter(isTaskDueToday);
+  const unassignedLeads = activeLeads.filter((lead) => !lead.assignedTo);
+  const visibleLeads = activeLeads.filter((lead) => {
+    const haystack = [
+      lead.contactName,
+      lead.contactEmail,
+      lead.contactPhone,
+      lead.city,
+      lead.title,
+      lead.requestType,
+      lead.projectType,
+      lead.sourceCode,
+      lead.linkedPropertyTitle,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    const matchesSearch = !search.trim() || haystack.includes(search.trim().toLowerCase());
+    const matchesStatus = status === "ALL" || lead.status === status;
+    const matchesAssignee =
+      assignee === "ALL" ||
+      (assignee === "UNASSIGNED" ? !lead.assignedTo : lead.assignedTo === assignee);
+
+    return matchesSearch && matchesStatus && matchesAssignee;
+  });
+  const dailyTasks = [...overdueTasks, ...todayTasks.filter((task) => !isTaskOverdue(task))]
+    .sort((a, b) => new Date(a.dueAt ?? 0).getTime() - new Date(b.dueAt ?? 0).getTime())
+    .slice(0, 8);
+
+  function getDraft(leadId: string) {
+    return taskDrafts[leadId] ?? emptyPipelineTaskDraft;
+  }
+
+  function updateDraft(leadId: string, updates: Partial<PipelineTaskDraft>) {
+    setTaskDrafts((current) => ({
+      ...current,
+      [leadId]: { ...getDraft(leadId), ...updates },
+    }));
+  }
+
+  async function persistLead(lead: PipelineLead, updates: Partial<PipelineLead>) {
+    const previousLeads = leads;
+    setLeads((current) => current.map((item) => (item.id === lead.id ? { ...item, ...updates } : item)));
+
+    if (!connected) {
+      setFeedback("Modification conservee dans cette session locale.");
+      return;
+    }
+
+    setPendingId(lead.id);
+    const response = await fetch("/api/admin/pipeline", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "update-lead",
+        id: lead.id,
+        status: updates.status,
+        priority: updates.priority,
+        assignedTo: updates.assignedTo,
+        notes: updates.notes,
+        archived: updates.archived,
+      }),
+    }).catch(() => null);
+    const payload = response
+      ? ((await response.json().catch(() => null)) as { message?: string } | null)
+      : null;
+    setPendingId(null);
+
+    if (!response?.ok) {
+      setLeads(previousLeads);
+      if (response?.status === 401) window.location.assign("/admin/login");
+      setFeedback(payload?.message ?? "La mise a jour du pipeline a echoue.");
+      return;
+    }
+
+    setFeedback(payload?.message ?? "Pipeline mis a jour.");
+  }
+
+  async function createTask(lead: PipelineLead) {
+    const draft = getDraft(lead.id);
+    if (!draft.title.trim()) {
+      setFeedback("Ajoute un titre de rappel avant de l'enregistrer.");
+      return;
+    }
+
+    if (!connected) {
+      setFeedback("Rappel conserve dans cette session locale.");
+      return;
+    }
+
+    setPendingId(`task-${lead.id}`);
+    const response = await fetch("/api/admin/pipeline", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "create-task",
+        leadId: lead.id,
+        title: draft.title,
+        dueAt: draft.dueAt,
+        priority: draft.priority,
+        assignedTo: lead.assignedTo,
+      }),
+    }).catch(() => null);
+    const payload = response
+      ? ((await response.json().catch(() => null)) as { message?: string } | null)
+      : null;
+    setPendingId(null);
+
+    if (!response?.ok) {
+      if (response?.status === 401) window.location.assign("/admin/login");
+      setFeedback(payload?.message ?? "Le rappel n'a pas pu etre cree.");
+      return;
+    }
+
+    setTaskDrafts((current) => ({ ...current, [lead.id]: emptyPipelineTaskDraft }));
+    await onRefresh();
+    setFeedback(payload?.message ?? "Rappel cree.");
+  }
+
+  async function completeTask(task: PipelineTask, completed: boolean) {
+    const previousTasks = tasks;
+    const now = completed ? new Date().toISOString() : null;
+    setTasks((current) =>
+      current.map((item) => (item.id === task.id ? { ...item, completedAt: now } : item))
+    );
+
+    if (!connected) {
+      setFeedback(completed ? "Rappel coche en local." : "Rappel rouvert en local.");
+      return;
+    }
+
+    setPendingId(task.id);
+    const response = await fetch("/api/admin/pipeline", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "complete-task", id: task.id, completed }),
+    }).catch(() => null);
+    const payload = response
+      ? ((await response.json().catch(() => null)) as { message?: string } | null)
+      : null;
+    setPendingId(null);
+
+    if (!response?.ok) {
+      setTasks(previousTasks);
+      if (response?.status === 401) window.location.assign("/admin/login");
+      setFeedback(payload?.message ?? "Le rappel n'a pas pu etre mis a jour.");
+      return;
+    }
+
+    setFeedback(payload?.message ?? "Rappel mis a jour.");
+  }
+
+  return (
+    <BentoGrid>
+      <div className="grid gap-4 md:col-span-6 md:grid-cols-2 xl:col-span-12 xl:grid-cols-4">
+        <KpiCard label="Leads actifs" value={activeLeads.length} description="Demandes normalisees non archivees." />
+        <KpiCard label="A traiter aujourd'hui" value={todayTasks.length} tone="orange" />
+        <KpiCard label="En retard" value={overdueTasks.length} tone={overdueTasks.length ? "orange" : "dark"} />
+        <KpiCard label="Non assignes" value={unassignedLeads.length} />
+      </div>
+
+      <BentoCard span="wide" title="Aujourd'hui" description="Rappels prioritaires a traiter avant de parcourir tout le CRM.">
+        {dailyTasks.length ? (
+          <div className="grid gap-3">
+            {dailyTasks.map((task) => {
+              const lead = task.leadId ? leadsById.get(task.leadId) : null;
+
+              return (
+                <article key={task.id} className="rounded-xl border border-orange-100 bg-white p-4 shadow-sm shadow-orange-100/40">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="font-bold text-[#111111]">{task.title}</p>
+                      <p className="mt-1 text-sm text-gray-500">{lead?.contactName ?? "Lead non lie"}</p>
+                      <p className={cn("mt-2 text-sm font-semibold", getTaskDueTone(task))}>
+                        {task.dueAt ? formatDateTime(task.dueAt) : "Sans date"}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={pendingId === task.id}
+                      onClick={() => void completeTask(task, true)}
+                    >
+                      <CheckCircle2 className="size-4" />Terminer
+                    </Button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <BentoEmptyState
+            icon={<CalendarClock className="size-5" />}
+            title="Aucun rappel urgent"
+            description="Les rappels du jour et en retard apparaitront ici."
+            className="py-10"
+          />
+        )}
+      </BentoCard>
+
+      <BentoCard span="medium" title="Filtres pipeline" description="Vue simple pour chercher un prospect ou un agent.">
+        <div className="grid gap-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 size-4 text-gray-400" />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Nom, ville, telephone, projet"
+              className="pl-9"
+            />
+          </div>
+          <Select value={status} onValueChange={(value) => setStatus(value ?? "ALL")}>
+            <SelectTrigger>
+              <SelectValue>{(value) => getStatusSelectLabel(value)}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Tous les statuts</SelectItem>
+              {leadStatuses.map((value) => (
+                <SelectItem key={value} value={value}>{leadStatusLabels[value]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={assignee} onValueChange={(value) => setAssignee(value ?? "ALL")}>
+            <SelectTrigger>
+              <SelectValue>{(value) => value === "ALL" ? "Tous les agents" : value === "UNASSIGNED" ? "Non assignes" : getTeamMemberLabel(teamById.get(String(value)))}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Tous les agents</SelectItem>
+              <SelectItem value="UNASSIGNED">Non assignes</SelectItem>
+              {team.map((member) => (
+                <SelectItem key={member.id} value={member.id}>{getTeamMemberLabel(member)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </BentoCard>
+
+      <BentoCard span="full" title="Pipeline commercial" description="Suivi quotidien des prospects, rappels et assignations." contentClassName="gap-5">
+        {error ? <p className="rounded-md bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p> : null}
+        {feedback ? <p className="rounded-md bg-orange-50 p-3 text-sm text-orange-800">{feedback}</p> : null}
+
+        {visibleLeads.length === 0 ? (
+          <BentoEmptyState
+            icon={<Target className="size-5" />}
+            title="Aucun lead dans cette vue"
+            description="Modifie les filtres ou attends les prochaines demandes."
+            className="py-12"
+          />
+        ) : (
+          <div className="grid gap-4">
+            {visibleLeads.map((lead) => {
+              const leadTasks = (tasksByLead.get(lead.id) ?? []).filter(isOpenTask);
+              const draft = getDraft(lead.id);
+
+              return (
+                <article key={lead.id} className="rounded-xl border border-orange-100 bg-white p-4 shadow-sm shadow-orange-100/40 sm:p-5">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-lg font-black text-[#111111]">{lead.contactName}</h3>
+                        <Badge className="border-0 bg-orange-100 text-orange-800">{leadStatusLabels[lead.status]}</Badge>
+                        <Badge className={leadPriorityBadgeClasses[lead.priority]}>{leadPriorityLabels[lead.priority]}</Badge>
+                      </div>
+                      <p className="mt-2 text-sm leading-6 text-gray-600">
+                        {lead.requestType} · {lead.city ?? "Ville non renseignee"} · {formatDateTime(lead.createdAt)}
+                      </p>
+                      <p className="mt-1 break-words text-sm text-gray-500">
+                        {lead.contactEmail ?? "Email non renseigne"} · {lead.contactPhone ?? "Telephone non renseigne"}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="outline" className="border-orange-200 bg-white text-gray-700">
+                        <UserRound className="mr-1 size-3" />{lead.assignedToName ?? "Non assigne"}
+                      </Badge>
+                      <Badge variant="outline" className="border-orange-200 bg-white text-gray-700">
+                        <Clock className="mr-1 size-3" />{leadTasks.length} rappel(s)
+                      </Badge>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 grid gap-4 lg:grid-cols-3">
+                    <div className="rounded-lg bg-orange-50 p-4 text-sm leading-6 text-gray-700">
+                      <p><strong>Projet</strong><br />{lead.projectType}</p>
+                      <p className="mt-3"><strong>Budget</strong><br />{formatPipelineBudget(lead.budgetMin, lead.budgetMax)}</p>
+                      <p className="mt-3"><strong>Surface / pieces</strong><br />{lead.desiredSurface ? `${lead.desiredSurface} m2` : "Non renseigne"} · {lead.desiredRooms ?? "Pieces non renseignees"}</p>
+                      {lead.linkedPropertyTitle ? <p className="mt-3"><strong>Bien lie</strong><br />{lead.linkedPropertyTitle}</p> : null}
+                    </div>
+
+                    <div className="grid gap-3 lg:col-span-2">
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <div className="grid gap-2">
+                          <Label>Statut</Label>
+                          <Select value={lead.status} onValueChange={(value) => void persistLead(lead, { status: value as LeadStatus })}>
+                            <SelectTrigger><SelectValue>{(value) => getStatusSelectLabel(value)}</SelectValue></SelectTrigger>
+                            <SelectContent>
+                              {leadStatuses.map((value) => <SelectItem key={value} value={value}>{leadStatusLabels[value]}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="grid gap-2">
+                          <Label>Priorite</Label>
+                          <Select value={lead.priority} onValueChange={(value) => void persistLead(lead, { priority: value as LeadPriority })}>
+                            <SelectTrigger><SelectValue>{(value) => getPrioritySelectLabel(value)}</SelectValue></SelectTrigger>
+                            <SelectContent>
+                              {leadPriorities.map((value) => <SelectItem key={value} value={value}>{leadPriorityLabels[value]}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="grid gap-2">
+                          <Label>Assigne a</Label>
+                          <Select value={lead.assignedTo ?? "UNASSIGNED"} onValueChange={(value) => void persistLead(lead, { assignedTo: value === "UNASSIGNED" ? null : value })}>
+                            <SelectTrigger>
+                              <SelectValue>{(value) => value === "UNASSIGNED" ? "Non assigne" : getTeamMemberLabel(teamById.get(String(value)))}</SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="UNASSIGNED">Non assigne</SelectItem>
+                              {team.map((member) => (
+                                <SelectItem key={member.id} value={member.id}>{getTeamMemberLabel(member)}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-2">
+                        <Label htmlFor={`pipeline-notes-${lead.id}`}>Notes internes</Label>
+                        <Textarea
+                          id={`pipeline-notes-${lead.id}`}
+                          value={lead.notes ?? ""}
+                          onChange={(event) => setLeads((current) => current.map((item) => item.id === lead.id ? { ...item, notes: event.target.value } : item))}
+                          className="min-h-20"
+                          placeholder="Prochain appel, objection, contexte vendeur..."
+                        />
+                        <div className="flex flex-wrap gap-2">
+                          <Button type="button" variant="outline" disabled={pendingId === lead.id} onClick={() => void persistLead(lead, { notes: lead.notes })}>
+                            <Save className="size-4" />Sauver les notes
+                          </Button>
+                          <Button type="button" variant="outline" disabled={pendingId === lead.id} onClick={() => void persistLead(lead, { archived: true })}>
+                            <Archive className="size-4" />Archiver
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="rounded-lg border border-orange-100 bg-orange-50/60 p-3">
+                        <div className="grid gap-3 md:grid-cols-[1fr_210px_160px_auto] md:items-end">
+                          <div className="grid gap-2">
+                            <Label htmlFor={`task-title-${lead.id}`}>Nouveau rappel</Label>
+                            <Input
+                              id={`task-title-${lead.id}`}
+                              value={draft.title}
+                              onChange={(event) => updateDraft(lead.id, { title: event.target.value })}
+                              placeholder="Appeler pour qualifier le projet"
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor={`task-due-${lead.id}`}>Echeance</Label>
+                            <Input
+                              id={`task-due-${lead.id}`}
+                              type="datetime-local"
+                              value={draft.dueAt}
+                              onChange={(event) => updateDraft(lead.id, { dueAt: event.target.value })}
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label>Priorite</Label>
+                            <Select value={draft.priority} onValueChange={(value) => updateDraft(lead.id, { priority: value as LeadPriority })}>
+                              <SelectTrigger><SelectValue>{(value) => getPrioritySelectLabel(value)}</SelectValue></SelectTrigger>
+                              <SelectContent>
+                                {leadPriorities.map((value) => <SelectItem key={value} value={value}>{leadPriorityLabels[value]}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <Button type="button" className="bg-orange-500 text-white hover:bg-orange-600" disabled={pendingId === `task-${lead.id}`} onClick={() => void createTask(lead)}>
+                            <Plus className="size-4" />Ajouter
+                          </Button>
+                        </div>
+                      </div>
+
+                      {leadTasks.length ? (
+                        <div className="grid gap-2">
+                          {leadTasks.slice(0, 4).map((task) => (
+                            <div key={task.id} className="flex flex-col gap-2 rounded-lg border border-orange-100 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+                              <div>
+                                <p className="font-semibold text-[#111111]">{task.title}</p>
+                                <p className={cn("text-sm", getTaskDueTone(task))}>{task.dueAt ? formatDateTime(task.dueAt) : "Sans date"}</p>
+                              </div>
+                              <Button type="button" variant="outline" disabled={pendingId === task.id} onClick={() => void completeTask(task, true)}>
+                                <CheckCircle2 className="size-4" />Terminer
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </BentoCard>
+    </BentoGrid>
+  );
+}
+
 function LeadManager({
   leads,
   setLeads,
@@ -3020,6 +3553,10 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
   const [activeTab, setActiveTab] = useState<AdminTab>("overview");
   const [contactLeads, setContactLeads] = useState(() => normalizeContacts(contacts));
   const [estimationLeads, setEstimationLeads] = useState(() => normalizeEstimations(estimations));
+  const [pipelineLeads, setPipelineLeads] = useState<PipelineLead[]>([]);
+  const [pipelineTasks, setPipelineTasks] = useState<PipelineTask[]>([]);
+  const [teamMembers, setTeamMembers] = useState<AdminTeamMember[]>([]);
+  const [pipelineError, setPipelineError] = useState("");
   const [activities, setActivities] = useState(initialActivities);
   const [propertyItems, setPropertyItems] = useState(properties);
   const [activitySearch, setActivitySearch] = useState("");
@@ -3035,6 +3572,28 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
     [activities, activityAction, activityEntityType, activityPeriod, activitySearch]
   );
 
+  async function refreshPipeline() {
+    if (!connected) {
+      return;
+    }
+
+    setPipelineError("");
+    const response = await fetch("/api/admin/pipeline").catch(() => null);
+    const payload = response
+      ? ((await response.json().catch(() => null)) as PipelineResponse | null)
+      : null;
+
+    if (!response?.ok || !payload?.success) {
+      if (response?.status === 401) window.location.assign("/admin/login");
+      setPipelineError(payload?.message ?? "Le pipeline CRM n'a pas pu etre charge.");
+      return;
+    }
+
+    setPipelineLeads(payload.leads ?? []);
+    setPipelineTasks(payload.tasks ?? []);
+    setTeamMembers(payload.team ?? []);
+  }
+
   useEffect(() => {
     if (!connected) {
       return;
@@ -3046,9 +3605,10 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
       setLoading(true);
       setLoadError("");
 
-      const [response, propertiesResponse] = await Promise.all([
+      const [response, propertiesResponse, pipelineResponse] = await Promise.all([
         fetch("/api/admin/leads"),
         fetch("/api/admin/properties"),
+        fetch("/api/admin/pipeline"),
       ]);
       const payload = (await response.json().catch(() => null)) as {
         message?: string;
@@ -3059,6 +3619,7 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
       const propertiesPayload = (await propertiesResponse.json().catch(() => null)) as {
         properties?: Property[];
       } | null;
+      const pipelinePayload = (await pipelineResponse.json().catch(() => null)) as PipelineResponse | null;
 
       if (cancelled) return;
       setLoading(false);
@@ -3075,6 +3636,16 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
 
       if (propertiesResponse.ok) {
         setPropertyItems(propertiesPayload?.properties ?? []);
+      }
+
+      if (pipelineResponse.ok && pipelinePayload?.success) {
+        setPipelineError("");
+        setPipelineLeads(pipelinePayload.leads ?? []);
+        setPipelineTasks(pipelinePayload.tasks ?? []);
+        setTeamMembers(pipelinePayload.team ?? []);
+      } else {
+        if (pipelineResponse.status === 401) window.location.assign("/admin/login");
+        setPipelineError(pipelinePayload?.message ?? "Le pipeline CRM n'a pas pu etre charge.");
       }
     }
 
@@ -3120,6 +3691,7 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
           <div className="w-full min-w-0">
             <TabsList className="!grid h-auto w-full grid-cols-2 gap-1 bg-white p-1 shadow-sm shadow-orange-100/40 sm:grid-cols-3 lg:!inline-flex lg:w-full lg:justify-start">
               <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="overview"><LayoutDashboard />Vue d&apos;ensemble</TabsTrigger>
+              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="pipeline"><Target />Pipeline</TabsTrigger>
               <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="contacts"><ContactRound />Contacts</TabsTrigger>
               <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="estimations"><ClipboardCheck />Estimations</TabsTrigger>
               <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="legacyReview"><ListChecks />Revue legacy</TabsTrigger>
@@ -3130,6 +3702,18 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
           </div>
           <TabsContent value="overview" className="w-full">
             <BentoDesignDashboard metrics={metrics} setActiveTab={setActiveTab} />
+          </TabsContent>
+          <TabsContent value="pipeline" className="w-full">
+            <PipelinePanel
+              leads={pipelineLeads}
+              setLeads={setPipelineLeads}
+              tasks={pipelineTasks}
+              setTasks={setPipelineTasks}
+              team={teamMembers}
+              connected={connected}
+              error={pipelineError}
+              onRefresh={refreshPipeline}
+            />
           </TabsContent>
           <TabsContent value="contacts">
             <BentoGrid>

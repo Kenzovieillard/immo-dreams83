@@ -8,7 +8,7 @@ V3 phase 3 - CRM securise, Supabase source unique des biens et revue legacy appl
 
 Cette version conserve le socle V2.6, ajoute la securite admin V3 et branche le catalogue immobilier public sur Supabase comme source unique via la vue `public_properties`.
 
-La Phase 3 demarre cote applicatif avec un ecran de revue legacy dans `/admin`. Il permet de verifier les rapprochements entre anciennes demandes `contacts` et `estimations`, de journaliser une decision manuelle, puis de migrer les demandes validees vers `leads`.
+La Phase 3 demarre cote applicatif avec un ecran de revue legacy dans `/admin`. Il permet de verifier les rapprochements entre anciennes demandes `contacts` et `estimations`, de journaliser une decision manuelle, puis de migrer les demandes validees vers `leads`. Elle ajoute maintenant un onglet `Pipeline` pour traiter les prospects normalises, assigner un responsable et creer des rappels.
 
 ## Nouveautes V3 foundation
 
@@ -33,6 +33,9 @@ La Phase 3 demarre cote applicatif avec un ecran de revue legacy dans `/admin`. 
 - route admin `/api/admin/legacy-review` protegee par session et permission CRM ;
 - journalisation des decisions de revue dans `lead_merge_logs` ;
 - migration controlee des anciennes demandes `contacts` et `estimations` vers `leads`, avec historique de statut et communication initiale.
+- onglet CRM `Pipeline` pour suivre les leads normalises au quotidien ;
+- route admin `/api/admin/pipeline` protegee par session pour statuts, priorites, assignations et rappels ;
+- migration `202607160003_commercial_pipeline_foundation.sql` pour renforcer les taches, rappels et policies de lecture admin.
 
 ## Fonctionnalites V2.6
 
@@ -120,10 +123,11 @@ ADMIN_BOOTSTRAP_EMAILS=antoine.faridoni@immo-dreams83.fr
 4. Ouvrir `/admin/login`.
 5. Se connecter avec l'email et le mot de passe Supabase Auth.
 6. Consulter les contacts, estimations, biens, activites et statistiques.
-7. Modifier un statut, ajouter une note ou archiver un prospect.
-8. Creer un contact manuel si une demande arrive par telephone ou en agence.
-9. Creer ou modifier un bien avec prix FAI, statut, photos, DPE/GES, options terrain et mise en avant.
-10. Verifier ensuite le rendu public sur Accueil, Biens et la fiche detail.
+7. Ouvrir `Pipeline` pour traiter les leads normalises, assigner un agent et creer un rappel.
+8. Modifier un statut, ajouter une note ou archiver un prospect.
+9. Creer un contact manuel si une demande arrive par telephone ou en agence.
+10. Creer ou modifier un bien avec prix FAI, statut, photos, DPE/GES, options terrain et mise en avant.
+11. Verifier ensuite le rendu public sur Accueil, Biens et la fiche detail.
 
 Sans Supabase Auth configure, le CRM n'est pas accessible. Le site public reste disponible.
 
@@ -197,6 +201,41 @@ Execution reelle uniquement apres validation du rapport dry-run :
 npm run crm:legacy-migrate
 ```
 
+### Pipeline quotidien
+
+Le CRM dispose maintenant d'un onglet :
+
+```text
+/admin > Pipeline
+```
+
+Cet onglet lit le modele normalise `leads` et `tasks`.
+
+Il permet de :
+
+- voir les leads actifs ;
+- identifier les rappels du jour et les rappels en retard ;
+- filtrer par statut, agent ou recherche libre ;
+- modifier statut, priorite, assignation et notes ;
+- creer un rappel lie a un lead ;
+- terminer ou rouvrir un rappel.
+
+Route API protegee :
+
+```text
+GET /api/admin/pipeline
+POST /api/admin/pipeline
+PATCH /api/admin/pipeline
+```
+
+Migration a appliquer avant recette complete :
+
+```text
+supabase/migrations/202607160003_commercial_pipeline_foundation.sql
+```
+
+Cette migration est non destructive. Elle ajoute des colonnes de suivi sur `tasks`, des index de lecture et des policies de lecture admin pour `leads`, `tasks`, `communications`, `appointments` et `lead_status_history`.
+
 ## Statut de deblocage avant Partie 3
 
 Statut actuel : **Phase 3 applicative migree cote Supabase, validation finale en cours avant suite CRM commercial**.
@@ -227,13 +266,16 @@ Resultat Phase 2 valide :
 - Dry-run post-import OK : 9 leads legacy deja presents, 0 lead a creer, 0 bloqueur.
 - Migration de garde-fou Phase 3 appliquee et verifiee : index unique `leads_source_table_source_id_unique` et index de lecture `leads_source_table_source_id_idx`.
 - Dry-run post-garde-fou OK : 9 leads legacy deja presents, 0 lead a creer, 0 bloqueur.
+- Pipeline commercial applicatif ajoute : statuts, priorites, assignation, rappels et vue quotidienne.
+- Migration pipeline a appliquer : `supabase/migrations/202607160003_commercial_pipeline_foundation.sql`.
 
 Actions restantes avant merge/production :
 
 1. Relire et merger la PR Phase 2.
 2. Rededeployer Vercel depuis `main`.
 3. Faire une recette visuelle authentifiee sur mobile : `/admin`, Contacts, Estimations, Biens, Activites, creation/modification de bien, upload photo.
-4. Poursuivre la Phase 3 CRM commercial : pipeline, taches, rappels et assignation.
+4. Appliquer et valider la migration pipeline `202607160003_commercial_pipeline_foundation.sql`.
+5. Recetter `/admin` > `Pipeline` : changement de statut, assignation, creation de rappel, rappel termine.
 5. Authentifier GitHub CLI si le flux PR doit etre gere depuis le terminal :
 
 ```bash
