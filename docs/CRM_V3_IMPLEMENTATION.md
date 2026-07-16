@@ -196,7 +196,19 @@ Le catalogue public est branche sur Supabase comme source unique :
 
 ### Risque
 
-Le site public depend maintenant de la migration Phase 2 et de la vue `public_properties`. Si la migration n'est pas appliquee, le catalogue public reste vide plutot que d'afficher de fausses donnees.
+Le site public depend maintenant de la migration Phase 2 et de la vue `public_properties`. La migration Phase 2 a ete appliquee sur le projet Supabase cible le 16/07/2026 et l'import reel des biens a ete execute.
+
+Etat valide apres import :
+
+- 13 biens dans `properties`;
+- 12 biens issus du seed historique;
+- 12 biens visibles dans `public_properties`;
+- 48 photos actives dans `property_photos`;
+- 0 doublon reference;
+- 0 doublon slug;
+- lecture directe anonyme de `properties` bloquee par RLS.
+
+Si un autre environnement Supabase n'a pas encore cette migration, le catalogue public y restera vide volontairement plutot que d'afficher de fausses donnees.
 
 ### Correction V3 Phase 2
 
@@ -247,7 +259,7 @@ Toutes les operations sensibles doivent etre journalisees dans `audit_logs` ou `
 | Critique | Session admin sans refresh robuste | Deconnexion ou session expiree mal geree | Phase 1 |
 | Critique | `service_role` encore central pour admin | Bypass RLS si une route est mal protegee | Phase 1 |
 | Elevee | Droits par role trop globaux | Un role peut faire plus que necessaire | Phase 1 |
-| Elevee | Migration Phase 2 non appliquee en production | Catalogue public vide | Phase 2 |
+| Elevee | Migration Phase 2 absente sur un autre environnement Supabase | Catalogue public vide | Phase 2 |
 | Elevee | `admin-dashboard.tsx` concentre trop de logique | Maintenance difficile et risque regression | Phase 4 |
 | Moyenne | Pas de tests API 401/403 automatises | Regression securite difficile a detecter | Phase 1 |
 | Moyenne | Photos en corbeille sans ecran de restauration | Recuperation manuelle uniquement | Phase 2 |

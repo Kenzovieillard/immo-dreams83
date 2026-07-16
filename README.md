@@ -155,24 +155,34 @@ npm run crm:legacy-dry-run -- --write-report
 
 ## Statut de deblocage avant Partie 3
 
-Statut actuel : **pas encore pret a implementer la Partie 3**.
+Statut actuel : **pret a demarrer la Partie 3 en branche dediee**.
 
-La Partie 3 CRM commercial ne doit pas commencer tant que la Phase 2 n'est pas validee en environnement de test.
+La Phase 2 Supabase source unique des biens a ete appliquee sur le projet Supabase cible le 16/07/2026 via SQL Editor, car la Supabase CLI n'etait pas authentifiee localement.
 
-Blocages actuels :
+Resultat Phase 2 valide :
 
 - La branche `feature/v3-supabase-property-source` est poussee et la PR draft Phase 2 est ouverte : https://github.com/Kenzovieillard/immo-dreams83/pull/3.
 - GitHub CLI `gh` est installe mais pas encore authentifie localement ; le push a toutefois fonctionne via Git Credential Manager.
-- Supabase CLI est accessible via `npx supabase`, mais pas encore authentifiee : les migrations ne peuvent pas encore etre appliquees/verifiees via CLI.
 - `.env.local` est configure localement et ignore par Git.
-- Les dry-runs connectes Supabase fonctionnent.
-- La migration Phase 2 n'est pas encore appliquee dans Supabase : la colonne `properties.commercial_status` est absente.
-- L'import reel des biens est donc volontairement bloque.
-- La validation reelle RLS, `public_properties`, `property_photos`, import connecte et recette admin authentifiee doit etre relancee apres application des migrations.
+- Migration Phase 1 appliquee : `supabase/migrations/202607150001_v3_secure_crm_foundation.sql`.
+- Migration Phase 2 appliquee : `supabase/migrations/202607150002_property_source_of_truth.sql`.
+- Dry-run biens connecte OK : 12 biens analyses, 7 mises a jour, 5 creations.
+- Import reel biens OK : 12 biens synchronises depuis `src/data/properties.ts`.
+- Donnees post-import : 13 biens au total, 12 biens importes, 0 doublon reference, 0 doublon slug.
+- Photos post-import : 48 photos actives, 12 photos principales.
+- Vue publique `public_properties` : 12 biens visibles, 7 biens a la une.
+- Lecture anonyme directe de `properties` : bloquee par RLS.
+- Rapport legacy CRM relance : 10 demandes analysees, 9 `MATCH CERTAIN`, 1 `AMBIGU`, aucune ecriture.
+- `npm run lint` OK.
+- `npm run build` OK.
 
-Actions a faire avant de declarer la Partie 3 prete :
+Actions restantes avant merge/production :
 
-1. Installer et connecter GitHub CLI, puis verifier :
+1. Relire et merger la PR Phase 2.
+2. Rededeployer Vercel depuis `main`.
+3. Faire une recette visuelle authentifiee sur mobile : `/admin`, Contacts, Estimations, Biens, Activites, creation/modification de bien, upload photo.
+4. Traiter le cas legacy `AMBIGU` avant toute migration effective contacts/leads.
+5. Authentifier GitHub CLI si le flux PR doit etre gere depuis le terminal :
 
 ```bash
 gh auth status
@@ -185,26 +195,21 @@ Si le terminal courant ne retrouve pas encore `gh` apres installation Windows, o
 & 'C:\Program Files\GitHub CLI\gh.exe' auth status
 ```
 
-2. Connecter Supabase CLI ou prevoir l'application manuelle migration par migration via SQL Editor.
+6. Connecter Supabase CLI plus tard pour remplacer l'application manuelle SQL Editor :
 
 ```bash
 npx supabase login
 npx supabase projects list
 ```
 
-3. Verifier `.env.local` a partir de `.env.example` avec les variables Supabase de test, sans jamais le commiter.
-4. Relancer les rapports :
+Commandes de verification utiles :
 
 ```bash
 npm run properties:import:dry-run
 npm run crm:legacy-dry-run -- --write-report
+npm run lint
+npm run build
 ```
-
-5. Appliquer la migration Phase 2 `supabase/migrations/202607150002_property_source_of_truth.sql`.
-6. Relancer le dry-run biens et verifier que `commercial_status`, `publication_status`, `public_properties`, `property_photos` et `property_history` existent.
-7. Appliquer l'import reel uniquement si le rapport biens ne signale aucun doublon reference, collision slug, perte photo ou statut inconnu.
-8. Faire la recette Phase 2 : public, CRM, RLS, photos, publication, archivage, restauration, responsive mobile.
-9. Mettre a jour la PR Phase 2 avec le resultat final avant merge.
 
 Critere de sortie :
 
@@ -212,7 +217,7 @@ Critere de sortie :
 PRET A IMPLEMENTER LA PARTIE 3
 ```
 
-Ce statut ne doit etre declare qu'apres lint, build, import connecte, recette Supabase et PR Phase 2 ouverte ou validee.
+Le depot est maintenant dans cet etat cote migration/import. La Partie 3 doit rester sur sa branche dediee et commencer par le modele contacts/leads, sans mutation destructive des donnees legacy.
 
 ## Routes importantes
 

@@ -45,6 +45,31 @@ Le script :
 - importe les photos dans `property_photos`;
 - genere un rapport JSON dans `reports/`.
 
+## Derniere application reelle
+
+Application executee sur le projet Supabase cible le 16/07/2026 apres application des migrations versionnees Phase 1 et Phase 2.
+
+Resultat :
+
+- 12 biens analyses;
+- 7 biens mis a jour;
+- 5 biens crees;
+- 13 biens presents au total dans `properties`;
+- 12 biens importes depuis le seed historique;
+- 12 biens visibles dans `public_properties`;
+- 7 biens a la une;
+- 48 photos actives;
+- 12 photos principales;
+- aucun doublon `reference`;
+- aucun doublon `slug`;
+- lecture anonyme directe de `properties` bloquee par RLS.
+
+Rapports locaux generes dans `reports/` :
+
+- dry-run biens connecte;
+- import reel biens;
+- dry-run legacy CRM.
+
 ## Inventaire initial
 
 | Reference | Type | Ville | Statut | Prix |
