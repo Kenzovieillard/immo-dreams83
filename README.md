@@ -8,7 +8,7 @@ V3 phase 3 - CRM securise, Supabase source unique des biens et revue legacy appl
 
 Cette version conserve le socle V2.6, ajoute la securite admin V3 et branche le catalogue immobilier public sur Supabase comme source unique via la vue `public_properties`.
 
-La Phase 3 demarre cote applicatif avec un ecran de revue legacy dans `/admin`. Il permet de verifier les rapprochements entre anciennes demandes `contacts` et `estimations`, puis de journaliser une decision manuelle avant toute migration reelle.
+La Phase 3 demarre cote applicatif avec un ecran de revue legacy dans `/admin`. Il permet de verifier les rapprochements entre anciennes demandes `contacts` et `estimations`, de journaliser une decision manuelle, puis de migrer les demandes validees vers `leads`.
 
 ## Nouveautes V3 foundation
 
@@ -31,7 +31,8 @@ La Phase 3 demarre cote applicatif avec un ecran de revue legacy dans `/admin`. 
 - script d'import idempotent des biens statiques historiques.
 - onglet CRM `Revue legacy` pour controler les rapprochements avant migration contacts/leads ;
 - route admin `/api/admin/legacy-review` protegee par session et permission CRM ;
-- journalisation des decisions de revue dans `lead_merge_logs`, sans fusion ni migration automatique.
+- journalisation des decisions de revue dans `lead_merge_logs` ;
+- migration controlee des anciennes demandes `contacts` et `estimations` vers `leads`, avec historique de statut et communication initiale.
 
 ## Fonctionnalites V2.6
 
@@ -142,9 +143,9 @@ npm run properties:import
 
 Le script conserve les references et les slugs existants, puis ecrit un rapport JSON dans `reports/`.
 
-## Preparer la Partie 3 CRM commercial
+## Partie 3 CRM commercial
 
-Avant de migrer `contacts` et `estimations` vers le futur modele `contacts` + `leads`, executer le rapport lecture seule :
+Pour auditer `contacts` et `estimations` avant toute action, executer le rapport lecture seule :
 
 ```bash
 npm run crm:legacy-dry-run
@@ -166,9 +167,9 @@ Une revue visuelle est aussi disponible dans le CRM :
 4. ajouter une note de revue ;
 5. enregistrer une decision : `Pret pour migration future`, `A revoir manuellement` ou `Ne pas fusionner`.
 
-Important : cet ecran ne lance pas la migration reelle. Il journalise uniquement la decision dans `lead_merge_logs` et trace l'action dans l'audit admin.
+Important : cet ecran ne migre rien tout seul. Il journalise uniquement la decision dans `lead_merge_logs` et trace l'action dans l'audit admin.
 
-Une fois les cas ambigus arbitres, preparer la migration reelle `contacts/leads` avec :
+Une fois les cas ambigus arbitres, verifier la migration `contacts/leads` avec :
 
 ```bash
 npm run crm:legacy-migrate:dry-run
@@ -182,13 +183,13 @@ Ce dry-run connecte Supabase :
 - produit un rapport JSON local dans `reports/` ;
 - ne modifie aucune donnee.
 
-Avant l'execution reelle, appliquer la migration de garde-fou :
+Avant ou apres l'execution reelle, appliquer des que possible la migration de garde-fou :
 
 ```text
 supabase/migrations/202607160002_legacy_lead_import_guardrails.sql
 ```
 
-Elle ajoute un index unique partiel pour eviter de creer deux leads depuis la meme ancienne ligne legacy.
+Elle ajoute un index unique partiel pour renforcer la protection contre les doublons si l'import est relance.
 
 Execution reelle uniquement apres validation du rapport dry-run :
 
@@ -198,7 +199,7 @@ npm run crm:legacy-migrate
 
 ## Statut de deblocage avant Partie 3
 
-Statut actuel : **pret a demarrer la Partie 3 en branche dediee**.
+Statut actuel : **Phase 3 applicative migree cote Supabase, validation finale en cours avant suite CRM commercial**.
 
 La Phase 2 Supabase source unique des biens a ete appliquee sur le projet Supabase cible le 16/07/2026 via SQL Editor, car la Supabase CLI n'etait pas authentifiee localement.
 
@@ -221,14 +222,16 @@ Resultat Phase 2 valide :
 - Sur la branche `feature/v3-commercial-crm-foundation`, la migration Phase 3 non destructive a ete appliquee : `lead_sources`, `lead_import_runs`, `lead_merge_logs` et `crm_legacy_lead_candidates` sont disponibles.
 - L'ecran applicatif de revue legacy est disponible dans `/admin` via l'onglet `Revue legacy`.
 - La route `/api/admin/legacy-review` permet de charger la revue et de journaliser une decision sans migration.
-- Le script `npm run crm:legacy-migrate:dry-run` prepare la migration reelle contacts/leads en excluant les cas `IGNORED`.
+- Le script `npm run crm:legacy-migrate:dry-run` prepare et controle la migration contacts/leads en excluant les cas `IGNORED`.
+- Import reel Phase 3 execute le 16/07/2026 : 9 leads crees, 9 historiques de statut crees, 9 communications initiales creees, 0 contact supplementaire cree, 1 cas legacy ignore.
+- Dry-run post-import OK : 9 leads legacy deja presents, 0 lead a creer, 0 bloqueur.
 
 Actions restantes avant merge/production :
 
 1. Relire et merger la PR Phase 2.
 2. Rededeployer Vercel depuis `main`.
 3. Faire une recette visuelle authentifiee sur mobile : `/admin`, Contacts, Estimations, Biens, Activites, creation/modification de bien, upload photo.
-4. Traiter le cas legacy `AMBIGU` avant toute migration effective contacts/leads.
+4. Appliquer la migration de garde-fou `202607160002_legacy_lead_import_guardrails.sql` des qu'un acces SQL/CLI Supabase authentifie est disponible.
 5. Authentifier GitHub CLI si le flux PR doit etre gere depuis le terminal :
 
 ```bash

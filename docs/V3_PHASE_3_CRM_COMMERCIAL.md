@@ -26,6 +26,8 @@ Socle Phase 3 valide :
 - dry-run legacy relance sans ecriture.
 - ecran applicatif `/admin` > `Revue legacy` ajoute pour traiter les rapprochements avant migration reelle.
 - route protegee `/api/admin/legacy-review` ajoutee pour charger les cas et journaliser les decisions humaines.
+- import reel legacy execute le 16/07/2026 : 9 leads crees, 9 historiques de statut crees, 9 communications initiales creees, 1 cas ignore.
+- dry-run post-import valide : 9 leads legacy deja presents, 0 lead a creer, 0 bloqueur.
 
 ## Recette Mobile/Admin Authentifiee
 
@@ -101,7 +103,7 @@ Etat du dernier dry-run connecte :
 - 1 `AMBIGU` ;
 - 0 `AUCUN MATCH`.
 
-Le cas ambigu doit etre traite manuellement avant migration effective.
+Le cas ambigu a ete traite manuellement avant migration effective.
 
 Decision Phase 3 :
 
@@ -126,7 +128,7 @@ Le contact legacy concerne est marque :
 contacts.dedupe_status = IGNORED
 ```
 
-La migration reelle est maintenant preparee par un script applicatif idempotent :
+La migration reelle est geree par un script applicatif idempotent :
 
 ```bash
 npm run crm:legacy-migrate:dry-run
@@ -139,11 +141,11 @@ Regles du script :
 - exclusion stricte des contacts `dedupe_status = IGNORED` ;
 - blocage si un cas `AMBIGU` reste non ignore ;
 - detection des leads deja crees par `source_table` + `source_id` ;
-- creation future de `leads`, `lead_status_history` et `communications` ;
+- creation de `leads`, `lead_status_history` et `communications` ;
 - conservation des anciennes tables `contacts` et `estimations` ;
 - rapport JSON dans `reports/`.
 
-Resultat du dry-run connecte du 16/07/2026 :
+Resultat du dry-run connecte avant import du 16/07/2026 :
 
 - 5 contacts lus ;
 - 5 estimations lues ;
@@ -153,13 +155,28 @@ Resultat du dry-run connecte du 16/07/2026 :
 - 0 bloqueur ;
 - 0 ecriture.
 
-Avant l'execution reelle, appliquer la migration non destructive :
+Resultat de l'import reel du 16/07/2026 :
+
+- 9 leads crees ;
+- 0 contact supplementaire cree ;
+- 9 entrees `lead_status_history` creees ;
+- 9 communications initiales creees ;
+- 1 run d'import trace dans `lead_import_runs`.
+
+Resultat du dry-run post-import du 16/07/2026 :
+
+- 9 leads legacy deja presents ;
+- 0 lead a creer ;
+- 1 cas ignore ;
+- 0 bloqueur.
+
+Migration de garde-fou a appliquer des que possible avec un acces SQL/CLI Supabase authentifie :
 
 ```text
 supabase/migrations/202607160002_legacy_lead_import_guardrails.sql
 ```
 
-Elle ajoute un index unique partiel sur `leads(source_table, source_id)` pour eviter les doublons si l'import est relance.
+Elle ajoute un index unique partiel sur `leads(source_table, source_id)` pour renforcer la protection contre les doublons si l'import est relance.
 
 Commande d'execution reelle, uniquement apres validation du rapport :
 
@@ -169,7 +186,7 @@ npm run crm:legacy-migrate
 
 ## Revue Applicative Legacy
 
-Objectif : permettre une validation humaine avant toute migration reelle.
+Objectif : permettre une validation humaine avant toute migration reelle ou toute fusion definitive.
 
 Ecran :
 
@@ -195,7 +212,7 @@ Decisions possibles :
 
 Garanties :
 
-- aucune migration reelle n'est executee ;
+- aucune migration reelle n'est executee directement par cet ecran ;
 - aucune fusion automatique n'est faite ;
 - aucune donnee legacy n'est supprimee ;
 - les decisions sont tracees dans `lead_merge_logs` ;
@@ -223,4 +240,4 @@ La migration Phase 3 appliquee est non destructive et conserve les anciennes tab
 
 ## Prochaine etape
 
-Appliquer la migration de garde-fou `202607160002_legacy_lead_import_guardrails.sql`, relancer le dry-run, puis executer `npm run crm:legacy-migrate` si le rapport reste sans bloqueur.
+Appliquer la migration de garde-fou `202607160002_legacy_lead_import_guardrails.sql` des qu'un acces SQL/CLI Supabase authentifie est disponible, puis poursuivre la Phase 3 sur les vues CRM quotidiennes : pipeline, taches, rappels et assignation.
