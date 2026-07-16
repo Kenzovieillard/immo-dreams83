@@ -32,7 +32,11 @@ Socle Phase 3 valide :
 - dry-run post-garde-fou valide : 9 leads legacy deja presents, 0 lead a creer, 0 bloqueur.
 - onglet applicatif `Pipeline` ajoute dans `/admin` pour suivre les leads normalises.
 - route protegee `/api/admin/pipeline` ajoutee pour les statuts, priorites, assignations et rappels.
-- migration non destructive preparee : `supabase/migrations/202607160003_commercial_pipeline_foundation.sql`.
+- migration non destructive appliquee et validee : `supabase/migrations/202607160003_commercial_pipeline_foundation.sql`.
+- merge de `feature/v3-commercial-crm-foundation` dans `main` effectue le 16/07/2026.
+- redeploiement Vercel production valide : `/admin` repond, pipeline charge, session admin OK.
+- recette pipeline production validee : acces non authentifie refuse, assignation temporaire, changement de statut, creation de rappel, cloture du rappel, restauration du lead.
+- increment quotidien ajoute : plan de journee, rappels en retard, assignation rapide, suivi commercial par agent et filtre des activites de recette.
 
 ## Recette Mobile/Admin Authentifiee
 
@@ -257,6 +261,10 @@ Onglet : Pipeline
 Fonctionnalites ajoutees :
 
 - KPI leads actifs, rappels du jour, rappels en retard et leads non assignes ;
+- plan de journee qui remonte les rappels en retard et les rappels du jour ;
+- carte dediee aux rappels en retard ;
+- assignation rapide des leads sans responsable ;
+- suivi commercial par agent : charge active, rappels ouverts, retards, leads urgents, rendez-vous et mandats ;
 - filtres par texte, statut et agent ;
 - modification rapide du statut commercial ;
 - priorite `Faible`, `Normale`, `Haute`, `Urgente` ;
@@ -264,6 +272,7 @@ Fonctionnalites ajoutees :
 - notes internes ;
 - creation d'un rappel lie au lead ;
 - cloture ou reouverture d'un rappel.
+- journal d'activite filtre par defaut sur l'activite metier, avec option pour afficher ou isoler les traces de recette.
 
 Route API :
 
@@ -297,16 +306,16 @@ Elle ajoute :
 
 Recette manuelle recommandee :
 
-1. appliquer la migration 003 dans Supabase ;
-2. ouvrir `/admin` avec un compte autorise ;
-3. aller dans `Pipeline` ;
-4. assigner un lead a un utilisateur ;
-5. changer son statut ;
-6. passer la priorite en `Haute` ou `Urgente` ;
-7. creer un rappel date ;
-8. verifier que le rappel apparait dans `Aujourd'hui` si la date correspond ;
-9. terminer le rappel ;
-10. verifier `activities` et `audit_logs`.
+1. ouvrir `/admin` avec un compte autorise ;
+2. aller dans `Pipeline` ;
+3. verifier les KPI leads actifs, aujourd'hui, en retard et non assignes ;
+4. assigner un lead depuis `Assignation rapide` ;
+5. changer son statut et sa priorite ;
+6. creer un rappel date ;
+7. verifier que le rappel apparait dans `Plan de journee` ou `Rappels en retard` selon l'echeance ;
+8. terminer le rappel ;
+9. verifier `Activites` avec le filtre `Activite metier` puis `Tout afficher` ;
+10. verifier `audit_logs` si un controle technique est necessaire.
 
 ## Regle de securite
 
@@ -316,4 +325,4 @@ La migration Phase 3 appliquee est non destructive et conserve les anciennes tab
 
 ## Prochaine etape
 
-Appliquer la migration pipeline 003 dans Supabase, puis recetter `/admin` > `Pipeline` sur desktop et mobile avant de poursuivre vers les relances plus avancees.
+Poursuivre vers les relances plus avancees : rappels recurrents, vue hebdomadaire, notifications email et assignation automatique par zone ou type de projet.

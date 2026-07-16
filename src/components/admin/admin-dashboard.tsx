@@ -105,6 +105,7 @@ type AdminTab = "overview" | "pipeline" | "contacts" | "estimations" | "legacyRe
 type ActivityEntityTypeFilter = "ALL" | "contact" | "estimation" | "property" | "other";
 type ActivityActionFilter = "ALL" | "created" | "updated" | "archived" | "uploaded" | "deleted" | "other";
 type ActivityPeriodFilter = "ALL" | "today" | "last7days" | "last30days";
+type ActivityVisibilityFilter = "business" | "all" | "recipe";
 type LegacyMatchFilter = "ALL" | MatchCategory;
 type LegacyReviewStatusFilter = "ALL" | "PENDING" | "REVIEWED";
 type LegacyReviewDecision = "READY_FOR_MIGRATION" | "MANUAL_REVIEW" | "DO_NOT_MERGE";
@@ -168,6 +169,12 @@ const activityPeriodLabels: Record<ActivityPeriodFilter, string> = {
   today: "Aujourd'hui",
   last7days: "7 derniers jours",
   last30days: "30 derniers jours",
+};
+
+const activityVisibilityLabels: Record<ActivityVisibilityFilter, string> = {
+  business: "Activité métier",
+  all: "Tout afficher",
+  recipe: "Recette uniquement",
 };
 
 const legacyMatchCategoryLabels: Record<MatchCategory, string> = {
@@ -373,13 +380,30 @@ function isTaskDueToday(task: PipelineTask) {
 
 function isTaskOverdue(task: PipelineTask) {
   if (!task.dueAt || task.completedAt) return false;
-  return new Date(task.dueAt).getTime() < Date.now() && !isTaskDueToday(task);
+  const due = new Date(task.dueAt);
+  if (Number.isNaN(due.getTime())) return false;
+  return due.getTime() < Date.now();
 }
 
 function getTaskDueTone(task: PipelineTask) {
   if (isTaskOverdue(task)) return "text-red-700";
   if (isTaskDueToday(task)) return "text-orange-700";
   return "text-gray-600";
+}
+
+function getTaskDueLabel(task: PipelineTask) {
+  if (isTaskOverdue(task)) return "En retard";
+  if (isTaskDueToday(task)) return "Aujourd'hui";
+  if (!task.dueAt) return "A planifier";
+  return "Planifié";
+}
+
+function sortTasksByUrgency(tasks: PipelineTask[]) {
+  return [...tasks].sort((a, b) => {
+    const aDue = a.dueAt ? new Date(a.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
+    const bDue = b.dueAt ? new Date(b.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
+    return aDue - bDue;
+  });
 }
 
 function groupTasksByLead(tasks: PipelineTask[]) {
@@ -390,6 +414,87 @@ function groupTasksByLead(tasks: PipelineTask[]) {
     map.set(task.leadId, current);
     return map;
   }, new Map<string, PipelineTask[]>());
+}
+
+function getLeadNextOpenTask(tasks: PipelineTask[]) {
+  return sortTasksByUrgency(tasks.filter(isOpenTask))[0] ?? null;
+}
+
+type PipelineAgentStat = {
+  id: string;
+  label: string;
+  isUnassigned: boolean;
+  leadCount: number;
+  newLeadCount: number;
+  appointmentCount: number;
+  mandateCount: number;
+  urgentLeadCount: number;
+  openTaskCount: number;
+  todayTaskCount: number;
+  overdueTaskCount: number;
+};
+
+function buildPipelineAgentStats(
+  leads: PipelineLead[],
+  openTasks: PipelineTask[],
+  team: AdminTeamMember[]
+) {
+  const teamById = new Map(team.map((member) => [member.id, member]));
+  const leadById = new Map(leads.map((lead) => [lead.id, lead]));
+  const stats = new Map<string, PipelineAgentStat>();
+
+  function ensureStat(id: string | null | undefined) {
+    const safeId = id || "UNASSIGNED";
+    const member = safeId === "UNASSIGNED" ? null : teamById.get(safeId);
+    const existing = stats.get(safeId);
+
+    if (existing) return existing;
+
+    const created: PipelineAgentStat = {
+      id: safeId,
+      label: member ? getTeamMemberLabel(member) : "Non assigné",
+      isUnassigned: safeId === "UNASSIGNED",
+      leadCount: 0,
+      newLeadCount: 0,
+      appointmentCount: 0,
+      mandateCount: 0,
+      urgentLeadCount: 0,
+      openTaskCount: 0,
+      todayTaskCount: 0,
+      overdueTaskCount: 0,
+    };
+    stats.set(safeId, created);
+    return created;
+  }
+
+  team.forEach((member) => ensureStat(member.id));
+  ensureStat("UNASSIGNED");
+
+  leads.forEach((lead) => {
+    const stat = ensureStat(lead.assignedTo);
+    stat.leadCount += 1;
+    if (lead.status === "NEW") stat.newLeadCount += 1;
+    if (lead.status === "APPOINTMENT") stat.appointmentCount += 1;
+    if (lead.status === "MANDATE_SIGNED") stat.mandateCount += 1;
+    if (lead.priority === "high" || lead.priority === "urgent") stat.urgentLeadCount += 1;
+  });
+
+  openTasks.forEach((task) => {
+    const linkedLead = task.leadId ? leadById.get(task.leadId) : null;
+    const stat = ensureStat(task.assignedTo ?? linkedLead?.assignedTo);
+    stat.openTaskCount += 1;
+    if (isTaskDueToday(task) && !isTaskOverdue(task)) stat.todayTaskCount += 1;
+    if (isTaskOverdue(task)) stat.overdueTaskCount += 1;
+  });
+
+  return Array.from(stats.values())
+    .filter((stat) => stat.leadCount > 0 || stat.openTaskCount > 0 || stat.isUnassigned)
+    .sort((a, b) => {
+      if (a.isUnassigned !== b.isUnassigned) return a.isUnassigned ? -1 : 1;
+      const aWorkload = a.leadCount + a.openTaskCount + a.overdueTaskCount;
+      const bWorkload = b.leadCount + b.openTaskCount + b.overdueTaskCount;
+      return bWorkload - aWorkload;
+    });
 }
 
 function parseMultilineValues(value: string) {
@@ -620,6 +725,14 @@ function getActivityEntityBucket(entityType: string): ActivityEntityTypeFilter {
   return "other";
 }
 
+function isRecipeActivity(activity: Activity) {
+  return includesText(activity.action, [
+    "test rappel phase 3",
+    "recette phase 3",
+    "recette production",
+  ]);
+}
+
 function isActivityInPeriod(activity: Activity, period: ActivityPeriodFilter) {
   if (period === "ALL") return true;
 
@@ -643,11 +756,16 @@ function filterActivities(
   search: string,
   entityType: ActivityEntityTypeFilter,
   action: ActivityActionFilter,
-  period: ActivityPeriodFilter
+  period: ActivityPeriodFilter,
+  visibility: ActivityVisibilityFilter
 ) {
   const normalizedSearch = search.trim().toLowerCase();
 
   return activities.filter((activity) => {
+    const recipeActivity = isRecipeActivity(activity);
+    if (visibility === "business" && recipeActivity) return false;
+    if (visibility === "recipe" && !recipeActivity) return false;
+
     const formattedDate = formatDateTime(activity.created_at);
     const haystack = [
       activity.action,
@@ -1055,6 +1173,7 @@ function BentoStatisticsPanel({ metrics }: { metrics: AdminMetrics }) {
 function ActivityPanel({
   activities,
   filteredActivities,
+  recipeActivitiesCount,
   activitySearch,
   setActivitySearch,
   activityEntityType,
@@ -1063,9 +1182,12 @@ function ActivityPanel({
   setActivityAction,
   activityPeriod,
   setActivityPeriod,
+  activityVisibility,
+  setActivityVisibility,
 }: {
   activities: Activity[];
   filteredActivities: Activity[];
+  recipeActivitiesCount: number;
   activitySearch: string;
   setActivitySearch: React.Dispatch<React.SetStateAction<string>>;
   activityEntityType: ActivityEntityTypeFilter;
@@ -1074,6 +1196,8 @@ function ActivityPanel({
   setActivityAction: React.Dispatch<React.SetStateAction<ActivityActionFilter>>;
   activityPeriod: ActivityPeriodFilter;
   setActivityPeriod: React.Dispatch<React.SetStateAction<ActivityPeriodFilter>>;
+  activityVisibility: ActivityVisibilityFilter;
+  setActivityVisibility: React.Dispatch<React.SetStateAction<ActivityVisibilityFilter>>;
 }) {
   return (
     <BentoCard
@@ -1082,7 +1206,7 @@ function ActivityPanel({
       description="Recherche, filtres et lecture rapide des actions CRM."
       contentClassName="gap-5"
     >
-        <div className="grid gap-3 lg:grid-cols-[1fr_180px_180px_180px]">
+        <div className="grid gap-3 xl:grid-cols-[1fr_180px_180px_180px_190px]">
           <div className="relative">
             <Search className="absolute left-3 top-3 size-4 text-gray-400" />
             <Input
@@ -1116,6 +1240,14 @@ function ActivityPanel({
               ))}
             </SelectContent>
           </Select>
+          <Select value={activityVisibility} onValueChange={(value) => setActivityVisibility((value ?? "business") as ActivityVisibilityFilter)}>
+            <SelectTrigger><SelectValue>{activityVisibilityLabels[activityVisibility]}</SelectValue></SelectTrigger>
+            <SelectContent>
+              {(Object.keys(activityVisibilityLabels) as ActivityVisibilityFilter[]).map((value) => (
+                <SelectItem key={value} value={value}>{activityVisibilityLabels[value]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -1123,6 +1255,11 @@ function ActivityPanel({
             {filteredActivities.length} résultat{filteredActivities.length > 1 ? "s" : ""}
           </Badge>
           <span className="text-sm text-gray-500">sur {activities.length} activité{activities.length > 1 ? "s" : ""}</span>
+          {activityVisibility === "business" && recipeActivitiesCount > 0 ? (
+            <Badge variant="outline" className="border-orange-200 bg-white text-orange-700">
+              {recipeActivitiesCount} trace{recipeActivitiesCount > 1 ? "s" : ""} de recette masquée{recipeActivitiesCount > 1 ? "s" : ""}
+            </Badge>
+          ) : null}
         </div>
 
         {filteredActivities.length ? (
@@ -2721,9 +2858,15 @@ function PipelinePanel({
   const tasksByLead = useMemo(() => groupTasksByLead(tasks), [tasks]);
   const activeLeads = leads.filter((lead) => !lead.archived);
   const openTasks = tasks.filter(isOpenTask);
-  const overdueTasks = openTasks.filter(isTaskOverdue);
-  const todayTasks = openTasks.filter(isTaskDueToday);
+  const overdueTasks = sortTasksByUrgency(openTasks.filter(isTaskOverdue));
+  const todayTasks = sortTasksByUrgency(openTasks.filter(isTaskDueToday));
+  const todayRemainingTasks = todayTasks.filter((task) => !isTaskOverdue(task));
   const unassignedLeads = activeLeads.filter((lead) => !lead.assignedTo);
+  const agentStats = buildPipelineAgentStats(activeLeads, openTasks, team);
+  const maxAgentWorkload = Math.max(
+    ...agentStats.map((stat) => stat.leadCount + stat.openTaskCount),
+    1
+  );
   const visibleLeads = activeLeads.filter((lead) => {
     const haystack = [
       lead.contactName,
@@ -2747,9 +2890,8 @@ function PipelinePanel({
 
     return matchesSearch && matchesStatus && matchesAssignee;
   });
-  const dailyTasks = [...overdueTasks, ...todayTasks.filter((task) => !isTaskOverdue(task))]
-    .sort((a, b) => new Date(a.dueAt ?? 0).getTime() - new Date(b.dueAt ?? 0).getTime())
-    .slice(0, 8);
+  const dailyTasks = sortTasksByUrgency([...overdueTasks, ...todayRemainingTasks]).slice(0, 8);
+  const unassignedPreview = unassignedLeads.slice(0, 6);
 
   function getDraft(leadId: string) {
     return taskDrafts[leadId] ?? emptyPipelineTaskDraft;
@@ -2878,12 +3020,21 @@ function PipelinePanel({
     <BentoGrid>
       <div className="grid gap-4 md:col-span-6 md:grid-cols-2 xl:col-span-12 xl:grid-cols-4">
         <KpiCard label="Leads actifs" value={activeLeads.length} description="Demandes normalisees non archivees." />
-        <KpiCard label="A traiter aujourd'hui" value={todayTasks.length} tone="orange" />
-        <KpiCard label="En retard" value={overdueTasks.length} tone={overdueTasks.length ? "orange" : "dark"} />
-        <KpiCard label="Non assignes" value={unassignedLeads.length} />
+        <KpiCard label="A traiter aujourd'hui" value={todayRemainingTasks.length} description="Rappels encore ouverts aujourd'hui." tone="orange" />
+        <KpiCard label="En retard" value={overdueTasks.length} description="Rappels passes non termines." tone={overdueTasks.length ? "orange" : "dark"} />
+        <KpiCard label="Non assignes" value={unassignedLeads.length} description="Leads sans responsable." />
       </div>
 
-      <BentoCard span="wide" title="Aujourd'hui" description="Rappels prioritaires a traiter avant de parcourir tout le CRM.">
+      <BentoCard
+        span="wide"
+        title="Plan de journée"
+        description="Rappels en retard et rappels du jour, classes dans l'ordre de traitement."
+        action={
+          <Button type="button" variant="outline" size="sm" className="border-orange-200 bg-white" onClick={() => void onRefresh()}>
+            Actualiser
+          </Button>
+        }
+      >
         {dailyTasks.length ? (
           <div className="grid gap-3">
             {dailyTasks.map((task) => {
@@ -2899,6 +3050,15 @@ function PipelinePanel({
                         {task.dueAt ? formatDateTime(task.dueAt) : "Sans date"}
                       </p>
                     </div>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "w-fit border-orange-200 bg-white",
+                        isTaskOverdue(task) ? "border-red-200 text-red-700" : "text-orange-700"
+                      )}
+                    >
+                      {getTaskDueLabel(task)}
+                    </Badge>
                     <Button
                       type="button"
                       variant="outline"
@@ -2959,6 +3119,107 @@ function PipelinePanel({
         </div>
       </BentoCard>
 
+      <BentoCard
+        span="medium"
+        variant={overdueTasks.length ? "danger" : "success"}
+        title="Rappels en retard"
+        description="Actions a rattraper avant les nouveaux dossiers."
+      >
+        {overdueTasks.length ? (
+          <div className="grid gap-3">
+            {overdueTasks.slice(0, 5).map((task) => {
+              const lead = task.leadId ? leadsById.get(task.leadId) : null;
+
+              return (
+                <div key={task.id} className="rounded-xl border border-red-100 bg-white p-4">
+                  <p className="font-bold text-[#111111]">{task.title}</p>
+                  <p className="mt-1 text-sm text-gray-600">{lead?.contactName ?? "Lead non lie"}</p>
+                  <p className="mt-2 text-sm font-semibold text-red-700">{task.dueAt ? formatDateTime(task.dueAt) : "Sans date"}</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mt-3 w-full border-red-200 bg-white sm:w-auto"
+                    disabled={pendingId === task.id}
+                    onClick={() => void completeTask(task, true)}
+                  >
+                    <CheckCircle2 className="size-4" />Terminer
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <BentoEmptyState
+            icon={<CheckCircle2 className="size-5" />}
+            title="Aucun retard"
+            description="Les rappels passes sont tous traites."
+            className="py-10"
+          />
+        )}
+      </BentoCard>
+
+      <BentoCard span="medium" title="Assignation rapide" description="Donner un responsable aux nouveaux leads sans ouvrir chaque fiche.">
+        {unassignedPreview.length && team.length ? (
+          <div className="grid gap-3">
+            {unassignedPreview.map((lead) => (
+              <div key={lead.id} className="rounded-xl border border-orange-100 bg-white p-3">
+                <p className="font-bold text-[#111111]">{lead.contactName}</p>
+                <p className="mt-1 text-xs text-gray-500">{lead.requestType} · {lead.city ?? "Ville non renseignee"}</p>
+                <Select value="UNASSIGNED" onValueChange={(value) => void persistLead(lead, { assignedTo: value === "UNASSIGNED" ? null : value })}>
+                  <SelectTrigger className="mt-3">
+                    <SelectValue>Choisir un agent</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="UNASSIGNED">Non assigne</SelectItem>
+                    {team.map((member) => (
+                      <SelectItem key={member.id} value={member.id}>{getTeamMemberLabel(member)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <BentoEmptyState
+            icon={<UserRound className="size-5" />}
+            title={team.length ? "Tous les leads ont un responsable" : "Aucun agent actif"}
+            description={team.length ? "Les prochains leads non assignes apparaitront ici." : "Ajoutez un profil actif pour utiliser l'assignation rapide."}
+            className="py-10"
+          />
+        )}
+      </BentoCard>
+
+      <BentoCard span="wide" title="Suivi commercial par agent" description="Charge active, rappels ouverts et retards par responsable.">
+        <div className="grid gap-3">
+          {agentStats.map((stat) => (
+            <div key={stat.id} className="rounded-xl border border-orange-100 bg-white p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <p className="font-bold text-[#111111]">{stat.label}</p>
+                  <p className="mt-1 text-sm text-gray-500">
+                    {stat.leadCount} lead{stat.leadCount > 1 ? "s" : ""} · {stat.openTaskCount} rappel{stat.openTaskCount > 1 ? "s" : ""} ouvert{stat.openTaskCount > 1 ? "s" : ""}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {stat.isUnassigned ? <Badge className="border-0 bg-orange-100 text-orange-800">A assigner</Badge> : null}
+                  {stat.overdueTaskCount ? <Badge className="border-0 bg-red-100 text-red-700">{stat.overdueTaskCount} retard</Badge> : null}
+                  {stat.urgentLeadCount ? <Badge className="border-0 bg-yellow-100 text-yellow-800">{stat.urgentLeadCount} urgent</Badge> : null}
+                </div>
+              </div>
+              <div className="mt-4">
+                <MiniBar value={stat.leadCount + stat.openTaskCount} max={maxAgentWorkload} />
+              </div>
+              <div className="mt-4 grid gap-2 text-sm text-gray-600 sm:grid-cols-4">
+                <span><strong className="text-[#111111]">{stat.newLeadCount}</strong><br />Nouveaux</span>
+                <span><strong className="text-[#111111]">{stat.todayTaskCount}</strong><br />Aujourd&apos;hui</span>
+                <span><strong className="text-[#111111]">{stat.appointmentCount}</strong><br />Rendez-vous</span>
+                <span><strong className="text-[#111111]">{stat.mandateCount}</strong><br />Mandats</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </BentoCard>
+
       <BentoCard span="full" title="Pipeline commercial" description="Suivi quotidien des prospects, rappels et assignations." contentClassName="gap-5">
         {error ? <p className="rounded-md bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p> : null}
         {feedback ? <p className="rounded-md bg-orange-50 p-3 text-sm text-orange-800">{feedback}</p> : null}
@@ -2974,6 +3235,7 @@ function PipelinePanel({
           <div className="grid gap-4">
             {visibleLeads.map((lead) => {
               const leadTasks = (tasksByLead.get(lead.id) ?? []).filter(isOpenTask);
+              const nextTask = getLeadNextOpenTask(leadTasks);
               const draft = getDraft(lead.id);
 
               return (
@@ -2991,6 +3253,11 @@ function PipelinePanel({
                       <p className="mt-1 break-words text-sm text-gray-500">
                         {lead.contactEmail ?? "Email non renseigne"} · {lead.contactPhone ?? "Telephone non renseigne"}
                       </p>
+                      {nextTask ? (
+                        <p className={cn("mt-3 text-sm font-semibold", getTaskDueTone(nextTask))}>
+                          Prochain rappel : {nextTask.title} · {nextTask.dueAt ? formatDateTime(nextTask.dueAt) : "sans date"}
+                        </p>
+                      ) : null}
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Badge variant="outline" className="border-orange-200 bg-white text-gray-700">
@@ -3563,13 +3830,19 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
   const [activityEntityType, setActivityEntityType] = useState<ActivityEntityTypeFilter>("ALL");
   const [activityAction, setActivityAction] = useState<ActivityActionFilter>("ALL");
   const [activityPeriod, setActivityPeriod] = useState<ActivityPeriodFilter>("ALL");
+  const [activityVisibility, setActivityVisibility] = useState<ActivityVisibilityFilter>("business");
+  const businessActivities = useMemo(
+    () => activities.filter((activity) => !isRecipeActivity(activity)),
+    [activities]
+  );
+  const recipeActivitiesCount = activities.length - businessActivities.length;
   const metrics = useMemo(
-    () => buildAdminMetrics(contactLeads, estimationLeads, propertyItems, activities),
-    [activities, contactLeads, estimationLeads, propertyItems]
+    () => buildAdminMetrics(contactLeads, estimationLeads, propertyItems, businessActivities),
+    [businessActivities, contactLeads, estimationLeads, propertyItems]
   );
   const filteredActivities = useMemo(
-    () => filterActivities(activities, activitySearch, activityEntityType, activityAction, activityPeriod),
-    [activities, activityAction, activityEntityType, activityPeriod, activitySearch]
+    () => filterActivities(activities, activitySearch, activityEntityType, activityAction, activityPeriod, activityVisibility),
+    [activities, activityAction, activityEntityType, activityPeriod, activitySearch, activityVisibility]
   );
 
   async function refreshPipeline() {
@@ -3748,6 +4021,7 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
             <ActivityPanel
               activities={activities}
               filteredActivities={filteredActivities}
+              recipeActivitiesCount={recipeActivitiesCount}
               activitySearch={activitySearch}
               setActivitySearch={setActivitySearch}
               activityEntityType={activityEntityType}
@@ -3756,6 +4030,8 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
               setActivityAction={setActivityAction}
               activityPeriod={activityPeriod}
               setActivityPeriod={setActivityPeriod}
+              activityVisibility={activityVisibility}
+              setActivityVisibility={setActivityVisibility}
             />
           </TabsContent>
           <TabsContent value="statistics" className="w-full">

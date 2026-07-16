@@ -4,11 +4,11 @@ Plateforme immobiliere responsive de l'agence IMMO-DREAMS83, situee a Sollies-Po
 
 ## Version actuelle
 
-V3 phase 3 - CRM securise, Supabase source unique des biens et revue legacy applicative.
+V3 phase 3 - CRM securise, Supabase source unique des biens, revue legacy applicative et pipeline commercial quotidien.
 
 Cette version conserve le socle V2.6, ajoute la securite admin V3 et branche le catalogue immobilier public sur Supabase comme source unique via la vue `public_properties`.
 
-La Phase 3 demarre cote applicatif avec un ecran de revue legacy dans `/admin`. Il permet de verifier les rapprochements entre anciennes demandes `contacts` et `estimations`, de journaliser une decision manuelle, puis de migrer les demandes validees vers `leads`. Elle ajoute maintenant un onglet `Pipeline` pour traiter les prospects normalises, assigner un responsable et creer des rappels.
+La Phase 3 demarre cote applicatif avec un ecran de revue legacy dans `/admin`. Il permet de verifier les rapprochements entre anciennes demandes `contacts` et `estimations`, de journaliser une decision manuelle, puis de migrer les demandes validees vers `leads`. Elle ajoute maintenant un onglet `Pipeline` pour traiter les prospects normalises, assigner un responsable, creer des rappels, suivre les retards et piloter la charge par agent.
 
 ## Nouveautes V3 foundation
 
@@ -35,7 +35,9 @@ La Phase 3 demarre cote applicatif avec un ecran de revue legacy dans `/admin`. 
 - migration controlee des anciennes demandes `contacts` et `estimations` vers `leads`, avec historique de statut et communication initiale.
 - onglet CRM `Pipeline` pour suivre les leads normalises au quotidien ;
 - route admin `/api/admin/pipeline` protegee par session pour statuts, priorites, assignations et rappels ;
-- migration `202607160003_commercial_pipeline_foundation.sql` pour renforcer les taches, rappels et policies de lecture admin.
+- migration `202607160003_commercial_pipeline_foundation.sql` appliquee pour renforcer les taches, rappels et policies de lecture admin ;
+- vue quotidienne du pipeline : plan de journee, rappels en retard, assignation rapide, suivi par agent ;
+- journal d'activite filtre par defaut pour masquer les traces de recette, avec option `Tout afficher`.
 
 ## Fonctionnalites V2.6
 
@@ -215,6 +217,9 @@ Il permet de :
 
 - voir les leads actifs ;
 - identifier les rappels du jour et les rappels en retard ;
+- traiter un plan de journee priorise ;
+- assigner rapidement les leads sans responsable ;
+- suivre la charge commerciale par agent ;
 - filtrer par statut, agent ou recherche libre ;
 - modifier statut, priorite, assignation et notes ;
 - creer un rappel lie a un lead ;
@@ -228,7 +233,7 @@ POST /api/admin/pipeline
 PATCH /api/admin/pipeline
 ```
 
-Migration a appliquer avant recette complete :
+Migration appliquee avant recette complete :
 
 ```text
 supabase/migrations/202607160003_commercial_pipeline_foundation.sql
@@ -236,9 +241,9 @@ supabase/migrations/202607160003_commercial_pipeline_foundation.sql
 
 Cette migration est non destructive. Elle ajoute des colonnes de suivi sur `tasks`, des index de lecture et des policies de lecture admin pour `leads`, `tasks`, `communications`, `appointments` et `lead_status_history`.
 
-## Statut de deblocage avant Partie 3
+## Statut Phase 3
 
-Statut actuel : **Phase 3 applicative migree cote Supabase, validation finale en cours avant suite CRM commercial**.
+Statut actuel : **Phase 3 CRM commercial en production, socle quotidien exploitable**.
 
 La Phase 2 Supabase source unique des biens a ete appliquee sur le projet Supabase cible le 16/07/2026 via SQL Editor, car la Supabase CLI n'etait pas authentifiee localement.
 
@@ -267,16 +272,18 @@ Resultat Phase 2 valide :
 - Migration de garde-fou Phase 3 appliquee et verifiee : index unique `leads_source_table_source_id_unique` et index de lecture `leads_source_table_source_id_idx`.
 - Dry-run post-garde-fou OK : 9 leads legacy deja presents, 0 lead a creer, 0 bloqueur.
 - Pipeline commercial applicatif ajoute : statuts, priorites, assignation, rappels et vue quotidienne.
-- Migration pipeline a appliquer : `supabase/migrations/202607160003_commercial_pipeline_foundation.sql`.
+- Migration pipeline appliquee et validee : `supabase/migrations/202607160003_commercial_pipeline_foundation.sql`.
+- Merge de `feature/v3-commercial-crm-foundation` dans `main` effectue.
+- Vercel production redeploye et valide : `/admin` OK, pipeline OK, session admin OK.
+- Recette production pipeline OK : acces anonyme refuse, assignation temporaire, changement de statut, rappel cree, rappel termine, lead restaure.
+- Increment quotidien ajoute : plan de journee, rappels en retard, assignation rapide, suivi par agent, filtre des activites de recette.
 
-Actions restantes avant merge/production :
+Actions restantes recommandees :
 
-1. Relire et merger la PR Phase 2.
-2. Rededeployer Vercel depuis `main`.
-3. Faire une recette visuelle authentifiee sur mobile : `/admin`, Contacts, Estimations, Biens, Activites, creation/modification de bien, upload photo.
-4. Appliquer et valider la migration pipeline `202607160003_commercial_pipeline_foundation.sql`.
-5. Recetter `/admin` > `Pipeline` : changement de statut, assignation, creation de rappel, rappel termine.
-5. Authentifier GitHub CLI si le flux PR doit etre gere depuis le terminal :
+1. Recetter la nouvelle vue quotidienne sur mobile dans `/admin > Pipeline`.
+2. Verifier que les traces de recette sont masquees par defaut dans `Activites`.
+3. Continuer vers rappels recurrents, vue hebdomadaire, notifications email et assignation automatique.
+4. Authentifier GitHub CLI si le flux PR doit etre gere depuis le terminal :
 
 ```bash
 gh auth status
