@@ -248,6 +248,7 @@ Les statistiques CRM sont calculees a partir des donnees locales ou Supabase dej
 - Inventaire des annonces importees : `docs/PROPERTY_IMPORTS.md`
 - Design system CRM Bento : `docs/CRM_BENTO_DESIGN_SYSTEM.md`
 - Implementation CRM V3 : `docs/CRM_V3_IMPLEMENTATION.md`
+- Demarrage CRM commercial V3 : `docs/V3_PHASE_3_CRM_COMMERCIAL.md`
 - Objectifs V3 : `docs/V3.md`
 
 ## Verifications
