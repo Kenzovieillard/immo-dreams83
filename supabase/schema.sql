@@ -476,6 +476,10 @@ create index if not exists property_versions_reference_idx on property_versions(
 create index if not exists property_photo_trash_deleted_at_idx on property_photo_trash(deleted_at desc);
 create index if not exists leads_status_idx on leads(status);
 create index if not exists leads_assigned_to_idx on leads(assigned_to);
+create unique index if not exists leads_source_table_source_id_unique
+  on leads(source_table, source_id)
+  where source_table is not null and source_id is not null;
+create index if not exists leads_source_table_source_id_idx on leads(source_table, source_id);
 create index if not exists tasks_due_at_idx on tasks(due_at);
 create index if not exists communications_lead_id_idx on communications(lead_id);
 create index if not exists appointments_starts_at_idx on appointments(starts_at);

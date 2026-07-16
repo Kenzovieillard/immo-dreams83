@@ -168,6 +168,34 @@ Une revue visuelle est aussi disponible dans le CRM :
 
 Important : cet ecran ne lance pas la migration reelle. Il journalise uniquement la decision dans `lead_merge_logs` et trace l'action dans l'audit admin.
 
+Une fois les cas ambigus arbitres, preparer la migration reelle `contacts/leads` avec :
+
+```bash
+npm run crm:legacy-migrate:dry-run
+```
+
+Ce dry-run connecte Supabase :
+
+- exclut les cas marques `IGNORED` ;
+- bloque les cas `AMBIGU` non arbitres ;
+- detecte les leads legacy deja crees via `source_table` + `source_id` ;
+- produit un rapport JSON local dans `reports/` ;
+- ne modifie aucune donnee.
+
+Avant l'execution reelle, appliquer la migration de garde-fou :
+
+```text
+supabase/migrations/202607160002_legacy_lead_import_guardrails.sql
+```
+
+Elle ajoute un index unique partiel pour eviter de creer deux leads depuis la meme ancienne ligne legacy.
+
+Execution reelle uniquement apres validation du rapport dry-run :
+
+```bash
+npm run crm:legacy-migrate
+```
+
 ## Statut de deblocage avant Partie 3
 
 Statut actuel : **pret a demarrer la Partie 3 en branche dediee**.
@@ -193,6 +221,7 @@ Resultat Phase 2 valide :
 - Sur la branche `feature/v3-commercial-crm-foundation`, la migration Phase 3 non destructive a ete appliquee : `lead_sources`, `lead_import_runs`, `lead_merge_logs` et `crm_legacy_lead_candidates` sont disponibles.
 - L'ecran applicatif de revue legacy est disponible dans `/admin` via l'onglet `Revue legacy`.
 - La route `/api/admin/legacy-review` permet de charger la revue et de journaliser une decision sans migration.
+- Le script `npm run crm:legacy-migrate:dry-run` prepare la migration reelle contacts/leads en excluant les cas `IGNORED`.
 
 Actions restantes avant merge/production :
 

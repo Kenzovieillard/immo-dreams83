@@ -112,6 +112,61 @@ Decision Phase 3 :
 
 Raison : le cas ambigu est rapproche uniquement par telephone avec une demande legacy archivee. Cette correspondance est insuffisante pour fusionner ou creer un contact canonical sans validation humaine.
 
+## Preparation De La Migration Reelle Contacts/Leads
+
+Le cas `AMBIGU` bloquant a ete arbitre en revue manuelle avec la decision :
+
+```text
+Ne pas fusionner
+```
+
+Le contact legacy concerne est marque :
+
+```text
+contacts.dedupe_status = IGNORED
+```
+
+La migration reelle est maintenant preparee par un script applicatif idempotent :
+
+```bash
+npm run crm:legacy-migrate:dry-run
+```
+
+Regles du script :
+
+- dry-run par defaut ;
+- aucune ecriture sans `--apply` ;
+- exclusion stricte des contacts `dedupe_status = IGNORED` ;
+- blocage si un cas `AMBIGU` reste non ignore ;
+- detection des leads deja crees par `source_table` + `source_id` ;
+- creation future de `leads`, `lead_status_history` et `communications` ;
+- conservation des anciennes tables `contacts` et `estimations` ;
+- rapport JSON dans `reports/`.
+
+Resultat du dry-run connecte du 16/07/2026 :
+
+- 5 contacts lus ;
+- 5 estimations lues ;
+- 10 soumissions analysees ;
+- 9 leads planifies ;
+- 1 cas ignore : `contact:fdbaec34-e229-4035-9606-546f0f59c468` ;
+- 0 bloqueur ;
+- 0 ecriture.
+
+Avant l'execution reelle, appliquer la migration non destructive :
+
+```text
+supabase/migrations/202607160002_legacy_lead_import_guardrails.sql
+```
+
+Elle ajoute un index unique partiel sur `leads(source_table, source_id)` pour eviter les doublons si l'import est relance.
+
+Commande d'execution reelle, uniquement apres validation du rapport :
+
+```bash
+npm run crm:legacy-migrate
+```
+
 ## Revue Applicative Legacy
 
 Objectif : permettre une validation humaine avant toute migration reelle.
@@ -168,4 +223,4 @@ La migration Phase 3 appliquee est non destructive et conserve les anciennes tab
 
 ## Prochaine etape
 
-Faire une recette admin authentifiee de l'onglet `Revue legacy`, traiter le cas `AMBIGU`, puis seulement ensuite preparer la migration reelle vers le modele `contacts` + `leads`.
+Appliquer la migration de garde-fou `202607160002_legacy_lead_import_guardrails.sql`, relancer le dry-run, puis executer `npm run crm:legacy-migrate` si le rapport reste sans bloqueur.
