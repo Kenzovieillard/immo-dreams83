@@ -7,7 +7,13 @@ import {
   leadStatusLabels,
 } from "@/lib/crm";
 import { getSupabaseAdminClient } from "@/lib/supabase";
-import type { LeadPriority, LeadStatus } from "@/types/crm";
+import type {
+  LeadPriority,
+  LeadStatus,
+  TaskEmailReminderStatus,
+  TaskRecurrenceRule,
+  TaskReminderChannel,
+} from "@/types/crm";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -75,6 +81,13 @@ type TaskRow = {
   completed_by?: string | null;
   priority: string | null;
   task_type?: string | null;
+  recurrence_rule?: string | null;
+  reminder_channel?: string | null;
+  email_reminder_enabled?: boolean | null;
+  email_reminder_status?: string | null;
+  email_reminder_scheduled_at?: string | null;
+  email_reminder_sent_at?: string | null;
+  email_reminder_last_error?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -89,6 +102,18 @@ function safeStatus(value: unknown): LeadStatus {
 
 function safePriority(value: unknown): LeadPriority {
   return isLeadPriority(value) ? value : "normal";
+}
+
+function safeRecurrenceRule(value: unknown): TaskRecurrenceRule {
+  return value === "WEEKLY" || value === "MONTHLY" ? value : "NONE";
+}
+
+function safeReminderChannel(value: unknown): TaskReminderChannel {
+  return value === "EMAIL" ? value : "NONE";
+}
+
+function safeEmailReminderStatus(value: unknown): TaskEmailReminderStatus {
+  return value === "PENDING" || value === "SENT" || value === "FAILED" ? value : "NOT_SCHEDULED";
 }
 
 function getString(value: unknown) {
@@ -126,6 +151,13 @@ async function loadTasks(supabase: ReturnType<typeof getSupabaseAdminClient>) {
     "completed_by",
     "priority",
     "task_type",
+    "recurrence_rule",
+    "reminder_channel",
+    "email_reminder_enabled",
+    "email_reminder_status",
+    "email_reminder_scheduled_at",
+    "email_reminder_sent_at",
+    "email_reminder_last_error",
     "created_at",
     "updated_at",
   ].join(",");
@@ -293,6 +325,13 @@ export async function GET() {
       completedBy: task.completed_by ?? null,
       priority: safePriority(task.priority),
       taskType: task.task_type ?? "FOLLOW_UP",
+      recurrenceRule: safeRecurrenceRule(task.recurrence_rule),
+      reminderChannel: safeReminderChannel(task.reminder_channel),
+      emailReminderEnabled: Boolean(task.email_reminder_enabled),
+      emailReminderStatus: safeEmailReminderStatus(task.email_reminder_status),
+      emailReminderScheduledAt: task.email_reminder_scheduled_at ?? null,
+      emailReminderSentAt: task.email_reminder_sent_at ?? null,
+      emailReminderLastError: task.email_reminder_last_error ?? null,
       createdAt: task.created_at,
       updatedAt: task.updated_at,
     };
@@ -319,6 +358,10 @@ async function createPipelineTask(payload: JsonRecord, actorId: string) {
   const assignedTo = getNullableString(payload.assignedTo);
   const priority = safePriority(payload.priority);
   const taskType = getString(payload.taskType) || "FOLLOW_UP";
+  const recurrenceRule = safeRecurrenceRule(payload.recurrenceRule);
+  const reminderChannel = safeReminderChannel(payload.reminderChannel);
+  const emailReminderEnabled = reminderChannel === "EMAIL" && Boolean(dueAt);
+  const emailReminderStatus = emailReminderEnabled ? "PENDING" : "NOT_SCHEDULED";
 
   if (!leadId || !title) {
     return { response: NextResponse.json({ success: false, message: "Lead et titre de rappel obligatoires." }, { status: 400 }) };
@@ -338,6 +381,11 @@ async function createPipelineTask(payload: JsonRecord, actorId: string) {
     due_at: dueAt,
     priority,
     task_type: taskType,
+    recurrence_rule: recurrenceRule,
+    reminder_channel: reminderChannel,
+    email_reminder_enabled: emailReminderEnabled,
+    email_reminder_status: emailReminderStatus,
+    email_reminder_scheduled_at: emailReminderEnabled ? dueAt : null,
   };
   let result = await supabase.from("tasks").insert(fullInsert).select("*").single();
 
@@ -384,6 +432,8 @@ export async function POST(request: NextRequest) {
   await writeAdminAuditLog(auth.session, "pipeline.task.create", "task", task?.id ?? null, {
     leadId: task?.lead_id,
     priority: task?.priority,
+    recurrenceRule: task?.recurrence_rule ?? "NONE",
+    reminderChannel: task?.reminder_channel ?? "NONE",
   });
 
   return NextResponse.json({ success: true, message: "Rappel cree.", task });

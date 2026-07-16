@@ -2,6 +2,12 @@ export type LeadStatus = "NEW" | "CONTACTED" | "APPOINTMENT" | "MANDATE_SIGNED" 
 
 export type LeadPriority = "low" | "normal" | "high" | "urgent";
 
+export type TaskRecurrenceRule = "NONE" | "WEEKLY" | "MONTHLY";
+
+export type TaskReminderChannel = "NONE" | "EMAIL";
+
+export type TaskEmailReminderStatus = "NOT_SCHEDULED" | "PENDING" | "SENT" | "FAILED";
+
 export type ContactLead = {
   id: string;
   created_at: string;
@@ -92,6 +98,13 @@ export type PipelineTask = {
   completedBy: string | null;
   priority: LeadPriority;
   taskType: string;
+  recurrenceRule: TaskRecurrenceRule;
+  reminderChannel: TaskReminderChannel;
+  emailReminderEnabled: boolean;
+  emailReminderStatus: TaskEmailReminderStatus;
+  emailReminderScheduledAt: string | null;
+  emailReminderSentAt: string | null;
+  emailReminderLastError: string | null;
   createdAt: string;
   updatedAt: string;
 };

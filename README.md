@@ -8,7 +8,7 @@ V3 phase 3 - CRM securise, Supabase source unique des biens, revue legacy applic
 
 Cette version conserve le socle V2.6, ajoute la securite admin V3 et branche le catalogue immobilier public sur Supabase comme source unique via la vue `public_properties`.
 
-La Phase 3 demarre cote applicatif avec un ecran de revue legacy dans `/admin`. Il permet de verifier les rapprochements entre anciennes demandes `contacts` et `estimations`, de journaliser une decision manuelle, puis de migrer les demandes validees vers `leads`. Elle ajoute maintenant un onglet `Pipeline` pour traiter les prospects normalises, assigner un responsable, creer des rappels, suivre les retards et piloter la charge par agent.
+La Phase 3 demarre cote applicatif avec un ecran de revue legacy dans `/admin`. Il permet de verifier les rapprochements entre anciennes demandes `contacts` et `estimations`, de journaliser une decision manuelle, puis de migrer les demandes validees vers `leads`. Elle ajoute maintenant un onglet `Pipeline` pour traiter les prospects normalises, assigner un responsable, creer des rappels, suivre les retards, consulter une vue hebdomadaire et preparer des relances email sans envoi automatique.
 
 ## Nouveautes V3 foundation
 
@@ -37,6 +37,8 @@ La Phase 3 demarre cote applicatif avec un ecran de revue legacy dans `/admin`. 
 - route admin `/api/admin/pipeline` protegee par session pour statuts, priorites, assignations et rappels ;
 - migration `202607160003_commercial_pipeline_foundation.sql` appliquee pour renforcer les taches, rappels et policies de lecture admin ;
 - vue quotidienne du pipeline : plan de journee, rappels en retard, assignation rapide, suivi par agent ;
+- vue hebdomadaire du pipeline, rappels recurrents et intention de notification email preparee ;
+- migration `202607160004_crm_reminder_automation.sql` pour persister recurrence et preparation email sur les taches ;
 - journal d'activite filtre par defaut pour masquer les traces de recette, avec option `Tout afficher`.
 
 ## Fonctionnalites V2.6
@@ -220,9 +222,11 @@ Il permet de :
 - traiter un plan de journee priorise ;
 - assigner rapidement les leads sans responsable ;
 - suivre la charge commerciale par agent ;
+- consulter une vue hebdomadaire des rappels ouverts ;
 - filtrer par statut, agent ou recherche libre ;
 - modifier statut, priorite, assignation et notes ;
-- creer un rappel lie a un lead ;
+- creer un rappel simple, recurrent hebdomadaire ou recurrent mensuel ;
+- preparer une relance email sans l'envoyer automatiquement ;
 - terminer ou rouvrir un rappel.
 
 Route API protegee :
@@ -233,13 +237,14 @@ POST /api/admin/pipeline
 PATCH /api/admin/pipeline
 ```
 
-Migration appliquee avant recette complete :
+Migrations appliquees avant recette complete :
 
 ```text
 supabase/migrations/202607160003_commercial_pipeline_foundation.sql
+supabase/migrations/202607160004_crm_reminder_automation.sql
 ```
 
-Cette migration est non destructive. Elle ajoute des colonnes de suivi sur `tasks`, des index de lecture et des policies de lecture admin pour `leads`, `tasks`, `communications`, `appointments` et `lead_status_history`.
+Ces migrations sont non destructives. Elles ajoutent des colonnes de suivi sur `tasks`, des index de lecture, des policies de lecture admin pour `leads`, `tasks`, `communications`, `appointments` et `lead_status_history`, puis les champs de recurrence et d'intention de notification email.
 
 ## Statut Phase 3
 
@@ -277,12 +282,14 @@ Resultat Phase 2 valide :
 - Vercel production redeploye et valide : `/admin` OK, pipeline OK, session admin OK.
 - Recette production pipeline OK : acces anonyme refuse, assignation temporaire, changement de statut, rappel cree, rappel termine, lead restaure.
 - Increment quotidien ajoute : plan de journee, rappels en retard, assignation rapide, suivi par agent, filtre des activites de recette.
+- Recette mobile iPhone du pipeline effectuee en largeur 390 px : aucun scroll horizontal global detecte, cartes Pipeline visibles, trace de recette masquee par defaut.
+- Increment rappels avance ajoute : vue hebdomadaire, rappels recurrents, preparation des notifications email sans envoi automatique.
 
 Actions restantes recommandees :
 
-1. Recetter la nouvelle vue quotidienne sur mobile dans `/admin > Pipeline`.
-2. Verifier que les traces de recette sont masquees par defaut dans `Activites`.
-3. Continuer vers rappels recurrents, vue hebdomadaire, notifications email et assignation automatique.
+1. Appliquer `supabase/migrations/202607160004_crm_reminder_automation.sql` sur Supabase production si ce n'est pas encore fait.
+2. Recetter un rappel recurrent et une relance email preparee dans `/admin > Pipeline`.
+3. Brancher un vrai fournisseur email avant tout envoi automatique.
 4. Authentifier GitHub CLI si le flux PR doit etre gere depuis le terminal :
 
 ```bash
@@ -367,6 +374,7 @@ npm run build
 ## Limites actuelles
 
 - aucun fournisseur email reel n'est active ;
+- les notifications email CRM sont seulement preparees, aucun email de rappel n'est envoye automatiquement ;
 - GA4 n'est pas connecte ;
 - Google Maps utilise des embeds iframe sans cle API ;
 - `src/data/properties.ts` reste seulement un seed d'import historique, pas une source publique de fallback ;
@@ -378,4 +386,4 @@ npm run build
 
 ## Prochaine amelioration
 
-La suite V3 devra brancher les ecrans sur le modele CRM normalise : leads, taches, rappels, mandats, matching acquereurs, emails transactionnels, statistiques GA4 et exports portails.
+La suite V3 devra brancher un fournisseur email reel, automatiser les relances recurrentes, puis avancer vers mandats, matching acquereurs, statistiques GA4 et exports portails.
