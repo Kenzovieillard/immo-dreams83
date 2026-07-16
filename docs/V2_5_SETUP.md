@@ -25,7 +25,7 @@ La V2.5 sert a rendre le site exploitable au quotidien avec un premier CRM : dem
 
 1. Creer ou ouvrir le projet Supabase.
 2. Copier `.env.example` vers `.env.local`.
-3. Remplir les variables Supabase et le code CRM local.
+3. Remplir les variables Supabase et le bootstrap admin V3 si le CRM doit etre utilise.
 4. Executer `supabase/schema.sql` dans l'editeur SQL Supabase.
 5. Verifier les tables :
    - `contacts`
@@ -44,7 +44,7 @@ NEXT_PUBLIC_SITE_URL=https://immo-dreams83.vercel.app
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
-NEXT_PUBLIC_ADMIN_LOCAL_CODE=
+ADMIN_BOOTSTRAP_EMAILS=
 CONTACT_RECEIVER_EMAIL=
 EMAIL_FROM=
 EMAIL_API_KEY=
@@ -52,9 +52,9 @@ EMAIL_API_KEY=
 
 Important : `SUPABASE_SERVICE_ROLE_KEY` ne doit jamais etre exposee cote client. Elle est utilisee uniquement dans les routes API serveur.
 
-## CRM V2.5
+## CRM V2.5 / V3 foundation
 
-Le CRM est disponible sur `/admin`.
+Le CRM est disponible sur `/admin` apres connexion via `/admin/login`.
 
 Il permet de :
 
@@ -69,7 +69,7 @@ Il permet de :
 - uploader des photos depuis un fichier local ;
 - reordonner les photos ;
 - choisir la photo principale ;
-- supprimer du Storage les photos retirees ;
+- placer en corbeille les photos retirees ;
 - changer le statut d'un bien ;
 - mettre ou retirer un bien de la selection a la une.
 
@@ -79,11 +79,11 @@ Dans le CRM, le champ "Prix affiche honoraires inclus" correspond au prix public
 
 ## Limites actuelles
 
-- La protection de `/admin` repose encore sur un code local.
-- Les roles utilisateurs ne sont pas encore disponibles.
+- La protection de `/admin` repose maintenant sur Supabase Auth.
+- Les roles utilisateurs sont prepares pour le socle V3.
 - L'envoi email est prepare mais aucun fournisseur n'est branche.
 - La suppression complete d'un bien n'est pas encore exposee dans le CRM.
-- La suppression photo est definitive, sans corbeille temporaire.
+- La suppression photo passe par une corbeille logique, mais l'ecran de restauration reste a finaliser.
 - Les biens initiaux restent versionnes dans `src/data/properties.ts`.
 
 ## Verifications

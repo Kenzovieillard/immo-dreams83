@@ -163,6 +163,13 @@
   --sidebar-accent-foreground: #111111;
   --sidebar-border: #fed7aa;
   --sidebar-ring: #f97316;
+  --bento-gap: 1rem;
+  --bento-card-radius: 1rem;
+  --bento-card-padding: 1rem;
+  --bento-card-border: #fed7aa;
+  --bento-card-background: #ffffff;
+  --bento-card-muted-background: #fff7ed;
+  --bento-card-shadow: 0 8px 24px rgb(249 115 22 / 0.08);
 }
 
 .dark {
@@ -233,6 +240,11 @@
 }
 
 @media (max-width: 767px) {
+  :root {
+    --bento-gap: 0.875rem;
+    --bento-card-padding: 1rem;
+  }
+
   input,
   textarea,
   select,
@@ -242,6 +254,20 @@
   [data-slot="select-item"] {
     font-size: 16px !important;
     line-height: 1.45;
+  }
+}
+
+@media (min-width: 768px) {
+  :root {
+    --bento-gap: 1.125rem;
+    --bento-card-padding: 1.125rem;
+  }
+}
+
+@media (min-width: 1280px) {
+  :root {
+    --bento-gap: 1.375rem;
+    --bento-card-padding: 1.375rem;
   }
 }
 

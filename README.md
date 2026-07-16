@@ -4,9 +4,9 @@ Plateforme immobiliere responsive de l'agence IMMO-DREAMS83, situee a Sollies-Po
 
 ## Version actuelle
 
-V3 foundation - CRM securise, roles admin et migrations Supabase versionnees.
+V3 phase 2 - CRM securise et Supabase source unique des biens.
 
-Cette version conserve le socle V2.6 et ajoute la premiere fondation V3 : authentification CRM avec Supabase Auth, sessions serveur, roles, audit logs, migrations versionnees, lecture publique des biens via la cle anon et corbeille logique pour les photos retirees.
+Cette version conserve le socle V2.6, ajoute la securite admin V3 et branche le catalogue immobilier public sur Supabase comme source unique via la vue `public_properties`.
 
 ## Nouveautes V3 foundation
 
@@ -21,6 +21,12 @@ Cette version conserve le socle V2.6 et ajoute la premiere fondation V3 : authen
 - table `property_photo_trash` pour eviter la suppression definitive immediate des photos ;
 - migration versionnee dans `supabase/migrations` ;
 - lecture publique des biens avec la cle anon et les policies RLS.
+- source unique Supabase pour les biens publics ;
+- vue publique `public_properties` sans colonnes internes ;
+- statuts separes commercial/publication ;
+- historique `property_history` ;
+- photos normalisees dans `property_photos` avec corbeille et restauration technique ;
+- script d'import idempotent des biens statiques historiques.
 
 ## Fonctionnalites V2.6
 
@@ -37,7 +43,7 @@ Cette version conserve le socle V2.6 et ajoute la premiere fondation V3 : authen
 ## Socle V2.5 deja en place
 
 - site vitrine premium avec pages Accueil, Agence, A vendre, Estimation, Biens et Contact ;
-- catalogue public de biens officiels, complete par les biens crees dans Supabase ;
+- catalogue public de biens lu depuis Supabase ;
 - fiches dynamiques avec galerie, diagnostics, partage, formulaire et biens similaires ;
 - formulaires Contact et Estimation relies aux routes API et a Supabase ;
 - mini-CRM sur `/admin` avec contacts, estimations, biens, activites et statistiques ;
@@ -73,8 +79,11 @@ Ouvrir ensuite `http://127.0.0.1:3000`.
 1. Creer un projet Supabase.
 2. Copier `.env.example` vers `.env.local`.
 3. Renseigner les variables sans commiter `.env.local`.
-4. Executer `supabase/schema.sql` dans l'editeur SQL Supabase.
-5. Verifier que les tables `contacts`, `estimations`, `properties`, `activities` et le bucket `property-photos` existent.
+4. Appliquer les migrations versionnees de `supabase/migrations` sur l'environnement de test.
+5. Ne pas rejouer aveuglement `supabase/schema.sql` sur une base existante : ce fichier sert de reference globale.
+6. Si Supabase CLI n'est pas disponible, appliquer uniquement les fichiers de migration necessaires dans SQL Editor.
+7. Verifier que `public_properties`, `property_photos`, `property_history`, les policies RLS et le bucket `property-photos` existent.
+8. Executer le dry-run d'import des biens, puis l'import reel si le rapport est correct.
 
 Variables attendues :
 
@@ -99,7 +108,7 @@ ADMIN_BOOTSTRAP_EMAILS=antoine.faridoni@immo-dreams83.fr
 
 ## Comment utiliser le CRM
 
-1. Executer `supabase/schema.sql` ou la migration V3 dans Supabase.
+1. Appliquer les migrations versionnees V3 necessaires dans Supabase.
 2. Creer un utilisateur dans Supabase Auth.
 3. Ajouter son email dans `ADMIN_BOOTSTRAP_EMAILS`.
 4. Ouvrir `/admin/login`.
@@ -111,6 +120,94 @@ ADMIN_BOOTSTRAP_EMAILS=antoine.faridoni@immo-dreams83.fr
 10. Verifier ensuite le rendu public sur Accueil, Biens et la fiche detail.
 
 Sans Supabase Auth configure, le CRM n'est pas accessible. Le site public reste disponible.
+
+## Importer les biens officiels
+
+Simulation :
+
+```bash
+npm run properties:import:dry-run
+```
+
+Application :
+
+```bash
+npm run properties:import
+```
+
+Le script conserve les references et les slugs existants, puis ecrit un rapport JSON dans `reports/`.
+
+## Preparer la Partie 3 CRM commercial
+
+Avant de migrer `contacts` et `estimations` vers le futur modele `contacts` + `leads`, executer le rapport lecture seule :
+
+```bash
+npm run crm:legacy-dry-run
+```
+
+Ce script ne modifie pas Supabase. Il produit les rapprochements `MATCH CERTAIN`, `MATCH PROBABLE`, `AMBIGU` et `AUCUN MATCH`, puis simule les futurs payloads `contacts`, `leads`, `lead_status_history` et `communications`.
+
+Pour conserver un rapport JSON local ignore par Git :
+
+```bash
+npm run crm:legacy-dry-run -- --write-report
+```
+
+## Statut de deblocage avant Partie 3
+
+Statut actuel : **pas encore pret a implementer la Partie 3**.
+
+La Partie 3 CRM commercial ne doit pas commencer tant que la Phase 2 n'est pas validee en environnement de test.
+
+Blocages actuels :
+
+- GitHub CLI `gh` est installe, mais pas encore authentifie : impossible de pousser la branche et d'ouvrir la PR depuis le terminal.
+- Supabase CLI est accessible via `npx supabase`, mais pas encore authentifiee : les migrations ne peuvent pas encore etre appliquees/verifiees via CLI.
+- `.env.local` est configure localement et ignore par Git, mais les appels Supabase depuis ce terminal echouent avec `fetch failed`.
+- Le push Git echoue depuis ce terminal avec un blocage reseau vers `github.com:443`.
+- La validation reelle RLS, import connecte et recette admin authentifiee doit etre relancee depuis un terminal ayant acces a Supabase et GitHub.
+
+Actions a faire avant de declarer la Partie 3 prete :
+
+1. Installer et connecter GitHub CLI, puis verifier :
+
+```bash
+gh auth status
+```
+
+Si le terminal courant ne retrouve pas encore `gh` apres installation Windows, ouvrir un nouveau terminal ou utiliser :
+
+```powershell
+& 'C:\Program Files\GitHub CLI\gh.exe' auth login
+& 'C:\Program Files\GitHub CLI\gh.exe' auth status
+```
+
+2. Connecter Supabase CLI ou prevoir l'application manuelle migration par migration via SQL Editor.
+
+```bash
+npx supabase login
+npx supabase projects list
+```
+
+3. Verifier `.env.local` a partir de `.env.example` avec les variables Supabase de test, sans jamais le commiter.
+4. Relancer les rapports :
+
+```bash
+npm run properties:import:dry-run
+npm run crm:legacy-dry-run -- --write-report
+```
+
+5. Appliquer l'import reel uniquement si le rapport biens ne signale aucun doublon reference, collision slug, perte photo ou statut inconnu.
+6. Faire la recette Phase 2 : public, CRM, RLS, photos, publication, archivage, restauration, responsive mobile.
+7. Pousser `feature/v3-supabase-property-source`, puis ouvrir la PR vers `main`.
+
+Critere de sortie :
+
+```text
+PRET A IMPLEMENTER LA PARTIE 3
+```
+
+Ce statut ne doit etre declare qu'apres lint, build, import connecte, recette Supabase et PR Phase 2 ouverte ou validee.
 
 ## Routes importantes
 
@@ -160,7 +257,7 @@ npm run build
 - aucun fournisseur email reel n'est active ;
 - GA4 n'est pas connecte ;
 - Google Maps utilise des embeds iframe sans cle API ;
-- le catalogue initial reste versionne dans `src/data/properties.ts`, meme si les nouveaux biens viennent de Supabase ;
+- `src/data/properties.ts` reste seulement un seed d'import historique, pas une source publique de fallback ;
 - la suppression definitive d'un bien complet n'est pas encore disponible dans le CRM ;
 - la restauration visuelle des photos en corbeille n'a pas encore d'ecran dedie ;
 - la carte presente une localisation indicative ;

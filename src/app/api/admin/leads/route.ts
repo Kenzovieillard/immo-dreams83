@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAdminSession, writeAdminAuditLog } from "@/lib/admin-auth";
 import { isLeadStatus, leadStatusLabels } from "@/lib/crm";
 import {
   FieldErrors,
@@ -11,19 +12,13 @@ import type { LeadStatus } from "@/types/crm";
 
 const requestTypes = ["Achat", "Vente", "Estimation", "Terrain", "Autre"] as const;
 
-function isAuthorized(request: NextRequest) {
-  const expectedCode = process.env.NEXT_PUBLIC_ADMIN_LOCAL_CODE;
-  return Boolean(expectedCode && request.headers.get("x-admin-code") === expectedCode);
-}
-
-export async function GET(request: NextRequest) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ success: false, message: "Accès refusé." }, { status: 401 });
-  }
+export async function GET() {
+  const auth = await requireAdminSession("crm.read");
+  if (auth.response) return auth.response;
 
   const supabase = getSupabaseAdminClient();
   if (!supabase) {
-    return NextResponse.json({ success: false, message: "Supabase serveur n'est pas configuré." }, { status: 503 });
+    return NextResponse.json({ success: false, message: "Supabase serveur n'est pas configure." }, { status: 503 });
   }
 
   const [contacts, estimations, activities] = await Promise.all([
@@ -34,7 +29,7 @@ export async function GET(request: NextRequest) {
   const error = contacts.error ?? estimations.error ?? activities.error;
   if (error) {
     console.error("[IMMO-DREAMS83] Admin data load failed", error.message);
-    return NextResponse.json({ success: false, message: "Les données CRM n'ont pas pu être chargées." }, { status: 500 });
+    return NextResponse.json({ success: false, message: "Les donnees CRM n'ont pas pu etre chargees." }, { status: 500 });
   }
 
   return NextResponse.json({ success: true, contacts: contacts.data, estimations: estimations.data, activities: activities.data });
@@ -61,23 +56,22 @@ function validateManualContactPayload(payload: unknown) {
 }
 
 export async function POST(request: NextRequest) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ success: false, message: "Accès refusé." }, { status: 401 });
-  }
+  const auth = await requireAdminSession("lead.write");
+  if (auth.response) return auth.response;
 
   const payload = await request.json().catch(() => null);
   const { data, fieldErrors } = validateManualContactPayload(payload);
 
   if (Object.keys(fieldErrors).length > 0) {
     return NextResponse.json(
-      { success: false, message: "Certains champs doivent être corrigés.", fieldErrors },
+      { success: false, message: "Certains champs doivent etre corriges.", fieldErrors },
       { status: 400 }
     );
   }
 
   const supabase = getSupabaseAdminClient();
   if (!supabase) {
-    return NextResponse.json({ success: false, message: "Supabase serveur n'est pas configuré." }, { status: 503 });
+    return NextResponse.json({ success: false, message: "Supabase serveur n'est pas configure." }, { status: 503 });
   }
 
   const { data: contact, error } = await supabase
@@ -97,23 +91,24 @@ export async function POST(request: NextRequest) {
 
   if (error) {
     console.error("[IMMO-DREAMS83] Admin contact creation failed", error.message);
-    return NextResponse.json({ success: false, message: "Le contact n'a pas pu être créé." }, { status: 500 });
+    return NextResponse.json({ success: false, message: "Le contact n'a pas pu etre cree." }, { status: 500 });
   }
 
+  const actorName = auth.session.profile.full_name ?? auth.session.user.email;
   await supabase.from("activities").insert({
     entity_type: "contact",
     entity_id: contact.id,
-    action: "Contact créé manuellement",
-    user_name: "Administration locale",
+    action: "Contact cree manuellement",
+    user_name: actorName,
   });
+  await writeAdminAuditLog(auth.session, "contact.create", "contact", contact.id);
 
-  return NextResponse.json({ success: true, message: "Contact créé.", contact });
+  return NextResponse.json({ success: true, message: "Contact cree.", contact });
 }
 
 export async function PATCH(request: NextRequest) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ success: false, message: "Accès refusé." }, { status: 401 });
-  }
+  const auth = await requireAdminSession("lead.write");
+  if (auth.response) return auth.response;
 
   const payload = (await request.json().catch(() => null)) as {
     table?: "contacts" | "estimations";
@@ -132,7 +127,7 @@ export async function PATCH(request: NextRequest) {
 
   const supabase = getSupabaseAdminClient();
   if (!supabase) {
-    return NextResponse.json({ success: false, message: "Supabase serveur n'est pas configuré." }, { status: 503 });
+    return NextResponse.json({ success: false, message: "Supabase serveur n'est pas configure." }, { status: 503 });
   }
 
   const updates = {
@@ -143,15 +138,24 @@ export async function PATCH(request: NextRequest) {
   const { error } = await supabase.from(payload.table).update(updates).eq("id", payload.id);
   if (error) {
     console.error("[IMMO-DREAMS83] Admin lead update failed", error.message);
-    return NextResponse.json({ success: false, message: "La mise à jour a échoué." }, { status: 500 });
+    return NextResponse.json({ success: false, message: "La mise a jour a echoue." }, { status: 500 });
   }
 
+  const actorName = auth.session.profile.full_name ?? auth.session.user.email;
   await supabase.from("activities").insert({
     entity_type: payload.table === "contacts" ? "contact" : "estimation",
     entity_id: payload.id,
-    action: payload.archived ? "Prospect archivé" : payload.status ? `Statut changé : ${leadStatusLabels[payload.status]}` : "Notes mises à jour",
-    user_name: "Administration locale",
+    action: payload.archived
+      ? "Prospect archive"
+      : payload.status
+        ? `Statut change : ${leadStatusLabels[payload.status]}`
+        : "Notes mises a jour",
+    user_name: actorName,
+  });
+  await writeAdminAuditLog(auth.session, "lead.update", payload.table, payload.id, {
+    status: payload.status,
+    archived: payload.archived,
   });
 
-  return NextResponse.json({ success: true, message: "Mise à jour enregistrée." });
+  return NextResponse.json({ success: true, message: "Mise a jour enregistree." });
 }

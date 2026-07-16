@@ -4,6 +4,20 @@ export type TransactionType = "sale";
 
 export type PropertyStatus = "available" | "under_offer" | "sold";
 
+export type PropertyCommercialStatus = "AVAILABLE" | "UNDER_OFFER" | "SOLD";
+
+export type PropertyPublicationStatus = "DRAFT" | "PUBLISHED" | "UNPUBLISHED" | "ARCHIVED";
+
+export type PropertyHistoryItem = {
+  id: string;
+  action: string;
+  changedFields: string[];
+  previousValue: Record<string, unknown> | null;
+  nextValue: Record<string, unknown> | null;
+  actorEmail: string | null;
+  createdAt: string;
+};
+
 export type Property = {
   id: string;
   reference: string;
@@ -12,6 +26,8 @@ export type Property = {
   type: PropertyType;
   transactionType: TransactionType;
   status: PropertyStatus;
+  commercialStatus?: PropertyCommercialStatus;
+  publicationStatus?: PropertyPublicationStatus;
   city: string;
   postalCode: string;
   price: number;
@@ -31,7 +47,10 @@ export type Property = {
   sourceUrl: string;
   createdAt: string;
   updatedAt: string;
+  publishedAt?: string | null;
+  archivedAt?: string | null;
   mandateNumber: string;
+  history?: PropertyHistoryItem[];
 };
 
 export const propertyTypeLabels: Record<PropertyType, string> = {
@@ -50,6 +69,26 @@ export const propertyStatusBadgeClasses: Record<PropertyStatus, string> = {
   available: "bg-orange-500 text-white",
   under_offer: "bg-yellow-300 text-[#111111]",
   sold: "bg-[#111111] text-white",
+};
+
+export const propertyCommercialStatusLabels: Record<PropertyCommercialStatus, string> = {
+  AVAILABLE: "Disponible",
+  UNDER_OFFER: "Sous offre",
+  SOLD: "Vendu",
+};
+
+export const propertyPublicationStatusLabels: Record<PropertyPublicationStatus, string> = {
+  DRAFT: "Brouillon",
+  PUBLISHED: "Publie",
+  UNPUBLISHED: "Depublie",
+  ARCHIVED: "Archive",
+};
+
+export const propertyPublicationStatusBadgeClasses: Record<PropertyPublicationStatus, string> = {
+  DRAFT: "bg-white text-gray-700 border border-orange-100",
+  PUBLISHED: "bg-emerald-600 text-white",
+  UNPUBLISHED: "bg-yellow-300 text-[#111111]",
+  ARCHIVED: "bg-[#111111] text-white",
 };
 
 const officialBase = "https://www.immo-dreams83.fr";

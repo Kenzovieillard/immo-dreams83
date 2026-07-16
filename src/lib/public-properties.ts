@@ -1,12 +1,13 @@
 import {
-  properties as staticProperties,
   type Property,
+  type PropertyCommercialStatus,
+  type PropertyPublicationStatus,
   type PropertyStatus,
   type PropertyType,
 } from "@/data/properties";
-import { getSupabaseAdminClient } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase";
 
-type PropertyRow = {
+type PublicPropertyRow = {
   id: string;
   reference: string;
   mandate_number: string | null;
@@ -14,7 +15,9 @@ type PropertyRow = {
   title: string;
   type: PropertyType;
   transaction_type: "sale";
-  status: PropertyStatus;
+  status: PropertyStatus | null;
+  commercial_status: PropertyCommercialStatus | null;
+  publication_status: PropertyPublicationStatus | null;
   city: string;
   postal_code: string;
   price: number | string;
@@ -31,9 +34,15 @@ type PropertyRow = {
   features: unknown;
   photos: unknown;
   featured: boolean;
-  source_url: string | null;
   created_at: string;
   updated_at: string;
+  published_at: string | null;
+  archived_at: string | null;
+};
+
+type SlugRedirectRow = {
+  old_slug: string;
+  new_slug: string;
 };
 
 function fromDatabaseNumber(value: number | string | null) {
@@ -43,10 +52,29 @@ function fromDatabaseNumber(value: number | string | null) {
 }
 
 function toStringArray(value: unknown) {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
 }
 
-function mapPropertyRow(row: PropertyRow): Property {
+function mapCommercialToLegacyStatus(status?: PropertyCommercialStatus | null): PropertyStatus {
+  if (status === "UNDER_OFFER") return "under_offer";
+  if (status === "SOLD") return "sold";
+  return "available";
+}
+
+function normalizePublicationStatus(
+  status?: PropertyPublicationStatus | null
+): PropertyPublicationStatus {
+  return status ?? "PUBLISHED";
+}
+
+function mapPublicPropertyRow(row: PublicPropertyRow): Property {
+  const commercialStatus = row.commercial_status ?? (
+    row.status === "under_offer" ? "UNDER_OFFER" : row.status === "sold" ? "SOLD" : "AVAILABLE"
+  );
+  const publicationStatus = normalizePublicationStatus(row.publication_status);
+
   return {
     id: row.id,
     reference: row.reference,
@@ -54,7 +82,9 @@ function mapPropertyRow(row: PropertyRow): Property {
     title: row.title,
     type: row.type,
     transactionType: row.transaction_type,
-    status: row.status,
+    status: mapCommercialToLegacyStatus(commercialStatus),
+    commercialStatus,
+    publicationStatus,
     city: row.city,
     postalCode: row.postal_code,
     price: fromDatabaseNumber(row.price) ?? 0,
@@ -64,54 +94,60 @@ function mapPropertyRow(row: PropertyRow): Property {
     rooms: fromDatabaseNumber(row.rooms),
     bedrooms: fromDatabaseNumber(row.bedrooms),
     bathrooms: fromDatabaseNumber(row.bathrooms),
-    energyClass: row.energy_class ?? "Non renseigné",
-    climateClass: row.climate_class ?? "Non renseigné",
+    energyClass: row.energy_class ?? "Non renseigne",
+    climateClass: row.climate_class ?? "Non renseigne",
     descriptionShort: row.description_short ?? "",
     descriptionLong: row.description_long ?? row.description_short ?? "",
     features: toStringArray(row.features),
     photos: toStringArray(row.photos),
     featured: row.featured,
-    sourceUrl: row.source_url ?? "",
+    sourceUrl: "",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    publishedAt: row.published_at,
+    archivedAt: row.archived_at,
     mandateNumber: row.mandate_number ?? row.reference,
   };
 }
 
-function mergePropertyCatalog(remoteProperties: Property[]) {
-  const seen = new Set<string>();
-
-  return [...remoteProperties, ...staticProperties].filter((property) => {
-    const key = property.reference || property.id;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-const legacyPropertySlugs: Record<string, string> = {
-  "appartement-t2-lumineux-toulon": "appartement-toulon-83000-ref-72",
-};
-
-export async function getPublicProperties() {
-  const supabase = getSupabaseAdminClient();
-  if (!supabase) return staticProperties;
+async function getCanonicalSlug(slug: string) {
+  const supabase = getSupabaseClient();
+  if (!supabase) return slug;
 
   const { data, error } = await supabase
-    .from("properties")
-    .select("*")
+    .from("public_property_slug_redirects")
+    .select("old_slug,new_slug")
+    .eq("old_slug", slug)
+    .maybeSingle();
+
+  if (error || !data) return slug;
+  return (data as SlugRedirectRow).new_slug || slug;
+}
+
+export async function getPublicProperties() {
+  const supabase = getSupabaseClient();
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from("public_properties")
+    .select(
+      "id,reference,mandate_number,slug,title,type,transaction_type,status,commercial_status,publication_status,city,postal_code,price,fees_included,surface,land_surface,rooms,bedrooms,bathrooms,energy_class,climate_class,description_short,description_long,features,photos,featured,created_at,updated_at,published_at,archived_at"
+    )
+    .order("featured", { ascending: false })
     .order("updated_at", { ascending: false });
 
   if (error) {
     console.error("[IMMO-DREAMS83] Public properties load failed", error.message);
-    return staticProperties;
+    return [];
   }
 
-  return mergePropertyCatalog(((data ?? []) as PropertyRow[]).map(mapPropertyRow));
+  return ((data ?? []) as PublicPropertyRow[]).map(mapPublicPropertyRow);
 }
 
 export async function getAvailablePublicProperties() {
-  return (await getPublicProperties()).filter((property) => property.status !== "sold");
+  return (await getPublicProperties()).filter(
+    (property) => property.publicationStatus === "PUBLISHED" && property.status !== "sold"
+  );
 }
 
 export async function getFeaturedPublicProperties() {
@@ -119,8 +155,14 @@ export async function getFeaturedPublicProperties() {
 }
 
 export async function getPublicPropertyBySlug(slug: string) {
-  const canonicalSlug = legacyPropertySlugs[slug] ?? slug;
-  return (await getPublicProperties()).find((property) => property.slug === canonicalSlug);
+  const properties = await getAvailablePublicProperties();
+  const directMatch = properties.find((property) => property.slug === slug);
+  if (directMatch) return directMatch;
+
+  const canonicalSlug = await getCanonicalSlug(slug);
+  if (canonicalSlug === slug) return undefined;
+
+  return properties.find((property) => property.slug === canonicalSlug);
 }
 
 export async function getSimilarPublicProperties(property: Property, limit = 3) {

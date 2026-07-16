@@ -80,6 +80,9 @@ Tables V3 foundation ajoutees ou preparees :
 - `profiles`
 - `audit_logs`
 - `property_versions`
+- `property_history`
+- `property_slug_history`
+- `property_photos`
 - `property_photo_trash`
 - `leads`
 - `lead_status_history`
@@ -101,6 +104,7 @@ Storage :
 Migration versionnee actuelle :
 
 - `supabase/migrations/202607150001_v3_secure_crm_foundation.sql`
+- `supabase/migrations/202607150002_property_source_of_truth.sql`
 
 Le fichier `supabase/schema.sql` reste le schema complet de reference, mais les futures evolutions doivent etre ajoutees dans `supabase/migrations`.
 
@@ -182,27 +186,29 @@ Risque : toute route utilisant `service_role` doit valider la session, le role, 
 
 ### Etat Actuel
 
-Le catalogue reste hybride :
+Le catalogue public est branche sur Supabase comme source unique :
 
-- `src/data/properties.ts` contient les biens statiques historiques.
-- `src/lib/public-properties.ts` lit Supabase avec la cle anon, puis fusionne avec les biens statiques.
-- `/admin` charge encore `properties` depuis `src/data/properties.ts` comme base initiale.
-- `/api/admin/properties` utilise les types et helpers de `src/data/properties.ts`.
-- `src/app/sitemap.ts` utilise encore le fichier statique.
+- `src/lib/public-properties.ts` lit la vue `public_properties`.
+- `/admin` charge les biens via `/api/admin/properties`.
+- `src/data/properties.ts` sert uniquement de seed d'import.
+- `src/app/sitemap.ts` lit les biens publics Supabase.
+- les anciennes URLs passent par `property_slug_history`.
 
 ### Risque
 
-Le doublon statique + Supabase peut creer des incoherences de reference, de slug, de statut et de mise a la une.
+Le site public depend maintenant de la migration Phase 2 et de la vue `public_properties`. Si la migration n'est pas appliquee, le catalogue public reste vide plutot que d'afficher de fausses donnees.
 
 ### Correction V3 Phase 2
 
-Supabase doit devenir source unique :
+Phase 2 implementee :
 
 - import idempotent des biens statiques ;
 - conservation des slugs ;
 - publication controlee ;
 - archivage ;
-- suppression du fallback statique apres validation.
+- suppression du fallback statique ;
+- photos normalisees dans `property_photos` ;
+- historique des actions dans `property_history`.
 
 ## Operations Sensibles Identifiees
 
@@ -241,7 +247,7 @@ Toutes les operations sensibles doivent etre journalisees dans `audit_logs` ou `
 | Critique | Session admin sans refresh robuste | Deconnexion ou session expiree mal geree | Phase 1 |
 | Critique | `service_role` encore central pour admin | Bypass RLS si une route est mal protegee | Phase 1 |
 | Elevee | Droits par role trop globaux | Un role peut faire plus que necessaire | Phase 1 |
-| Elevee | Catalogue hybride statique + Supabase | Incoherence des biens publics | Phase 2 |
+| Elevee | Migration Phase 2 non appliquee en production | Catalogue public vide | Phase 2 |
 | Elevee | `admin-dashboard.tsx` concentre trop de logique | Maintenance difficile et risque regression | Phase 4 |
 | Moyenne | Pas de tests API 401/403 automatises | Regression securite difficile a detecter | Phase 1 |
 | Moyenne | Photos en corbeille sans ecran de restauration | Recuperation manuelle uniquement | Phase 2 |
@@ -311,6 +317,19 @@ Retour arriere donnees :
 - Creer contact unique par personne.
 - Creer lead par projet.
 - Ajouter sources, UTM, dedoublonnage et historique de statut.
+- Avant implementation, executer le dry-run lecture seule :
+
+```bash
+npm run crm:legacy-dry-run
+```
+
+Ce rapport lit `contacts` et `estimations`, normalise email/telephone, classe les rapprochements en `MATCH CERTAIN`, `MATCH PROBABLE`, `AMBIGU` et `AUCUN MATCH`, puis simule les futurs payloads `contacts`, `leads`, `lead_status_history` et `communications` sans ecrire dans Supabase.
+
+Pour conserver un rapport JSON local non suivi par Git :
+
+```bash
+npm run crm:legacy-dry-run -- --write-report
+```
 
 ### Phase 4 - Pipeline Et Refactor
 
