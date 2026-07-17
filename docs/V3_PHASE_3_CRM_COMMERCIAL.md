@@ -24,7 +24,7 @@ Socle Phase 3 valide :
 - colonnes de normalisation disponibles sur `contacts` ;
 - colonnes Phase 3 disponibles sur `leads` ;
 - dry-run legacy relance sans ecriture.
-- ecran applicatif `/admin` > `Revue legacy` ajoute pour traiter les rapprochements avant migration reelle.
+- ecran applicatif `/admin` > `Anciennes demandes` ajoute pour traiter les rapprochements avant migration reelle.
 - route protegee `/api/admin/legacy-review` ajoutee pour charger les cas et journaliser les decisions humaines.
 - import reel legacy execute le 16/07/2026 : 9 leads crees, 9 historiques de statut crees, 9 communications initiales creees, 1 cas ignore.
 - dry-run post-import valide : 9 leads legacy deja presents, 0 lead a creer, 0 bloqueur.
@@ -202,7 +202,7 @@ Commande d'execution reelle, uniquement apres validation du rapport :
 npm run crm:legacy-migrate
 ```
 
-## Revue Applicative Legacy
+## Revue Des Anciennes Demandes
 
 Objectif : permettre une validation humaine avant toute migration reelle ou toute fusion definitive.
 
@@ -210,7 +210,7 @@ Ecran :
 
 ```text
 /admin
-Onglet : Revue legacy
+Onglet : Anciennes demandes
 ```
 
 Fonctionnement :

@@ -147,7 +147,7 @@ export async function GET() {
     const message = error instanceof Error ? error.message : "Erreur inconnue.";
     console.error("[IMMO-DREAMS83] Legacy review load failed", message);
     return NextResponse.json(
-      { success: false, message: "La revue legacy n'a pas pu etre chargee." },
+      { success: false, message: "La revue des anciennes demandes n'a pas pu etre chargee." },
       { status: 500 }
     );
   }
@@ -184,13 +184,13 @@ export async function PATCH(request: NextRequest) {
     const message = error instanceof Error ? error.message : "Erreur inconnue.";
     console.error("[IMMO-DREAMS83] Legacy review candidate reload failed", message);
     return NextResponse.json(
-      { success: false, message: "Le cas legacy n'a pas pu etre relu avant decision." },
+      { success: false, message: "L'ancienne demande n'a pas pu etre relue avant decision." },
       { status: 500 }
     );
   }
 
   if (!candidate) {
-    return NextResponse.json({ success: false, message: "Cas legacy introuvable." }, { status: 404 });
+    return NextResponse.json({ success: false, message: "Ancienne demande introuvable." }, { status: 404 });
   }
 
   const decisionPayload = {
@@ -233,7 +233,7 @@ export async function PATCH(request: NextRequest) {
   await supabase.from("activities").insert({
     entity_type: "legacy_review",
     entity_id: candidate.legacyId,
-    action: `Revue legacy : ${legacyReviewDecisionLabels[payload.decision]}`,
+    action: `Revue ancienne demande : ${legacyReviewDecisionLabels[payload.decision]}`,
     user_name: actorName,
   });
   await writeAdminAuditLog(auth.session, "legacy.review", "legacy_contact", candidate.legacyId, {
@@ -245,7 +245,7 @@ export async function PATCH(request: NextRequest) {
 
   return NextResponse.json({
     success: true,
-    message: "Decision de revue enregistree. Aucune migration legacy n'a ete executee.",
+    message: "Decision de revue enregistree. Aucune migration n'a ete executee.",
     decision: decisionPayload,
   });
 }

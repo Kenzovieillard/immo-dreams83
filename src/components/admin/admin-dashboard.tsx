@@ -3732,7 +3732,7 @@ function getLegacyCandidateKey(candidate: Pick<LegacyReviewCandidate, "legacySou
 }
 
 function getLegacySourceLabel(source: LegacyReviewCandidate["legacySource"]) {
-  return source === "contact" ? "Contact legacy" : "Estimation legacy";
+  return source === "contact" ? "Ancien contact" : "Ancienne estimation";
 }
 
 function getReviewStatusLabel(status: LegacyReviewStatusFilter) {
@@ -3775,7 +3775,7 @@ function LegacyReviewPanel({ connected }: { connected: boolean }) {
 
     if (!response?.ok || !payload?.success) {
       if (response?.status === 401) window.location.assign("/admin/login");
-      setError(payload?.message ?? "La revue legacy n'a pas pu etre chargee.");
+      setError(payload?.message ?? "La revue des anciennes demandes n'a pas pu etre chargee.");
       return;
     }
 
@@ -3819,7 +3819,7 @@ function LegacyReviewPanel({ connected }: { connected: boolean }) {
 
   async function recordDecision(candidate: LegacyReviewCandidate, decision: LegacyReviewDecision) {
     if (!connected) {
-      setFeedback("La revue legacy necessite Supabase connecte pour journaliser la decision.");
+      setFeedback("La revue des anciennes demandes necessite Supabase connecte pour journaliser la decision.");
       return;
     }
 
@@ -3858,13 +3858,13 @@ function LegacyReviewPanel({ connected }: { connected: boolean }) {
         <BentoCard
           span="full"
           variant="warning"
-          title="Revue legacy indisponible en mode local"
+          title="Anciennes demandes indisponibles en mode local"
           description="Connectez Supabase et ouvrez une session admin pour analyser les anciennes demandes avant migration."
         >
           <BentoEmptyState
             icon={<Info className="size-5" />}
             title="Aucune ecriture ne sera faite"
-            description="La revue legacy sert uniquement a preparer une future migration controlee."
+            description="Cet ecran sert uniquement a preparer une future migration controlee."
           />
         </BentoCard>
       </BentoGrid>
@@ -3877,7 +3877,7 @@ function LegacyReviewPanel({ connected }: { connected: boolean }) {
         span="full"
         variant="highlight"
         eyebrow="Phase 3"
-        title="Revue et fusion manuelle des contacts legacy"
+        title="Revue et fusion manuelle des anciennes demandes"
         description="Controle humain obligatoire avant de transformer les anciennes tables contacts et estimations en contacts + demandes CRM."
         action={
           <Button type="button" variant="outline" className="border-orange-200 bg-white" onClick={() => void loadReview()}>
@@ -3888,7 +3888,7 @@ function LegacyReviewPanel({ connected }: { connected: boolean }) {
         <div className="rounded-xl border border-orange-200 bg-white p-4 text-sm leading-6 text-gray-700">
           <p>
             Ce module journalise uniquement les decisions de revue. Il ne lance aucune migration,
-            ne fusionne aucun contact et ne supprime aucune donnee legacy.
+            ne fusionne aucun contact et ne supprime aucune ancienne donnee.
           </p>
           {review?.generatedAt ? (
             <p className="mt-2 text-xs text-gray-500">Derniere analyse : {formatDateTime(review.generatedAt)}</p>
@@ -3898,7 +3898,7 @@ function LegacyReviewPanel({ connected }: { connected: boolean }) {
 
       {review?.summary ? (
         <>
-          <BentoKpiCard label="Demandes legacy" value={review.summary.submissionsAnalyzed} description="Contacts + estimations lus." span="medium" />
+          <BentoKpiCard label="Anciennes demandes" value={review.summary.submissionsAnalyzed} description="Contacts + estimations lus." span="medium" />
           <BentoKpiCard label="Ambigus" value={review.summary.byCategory.AMBIGU} description="A arbitrer avant migration." tone="warning" span="medium" />
           <BentoKpiCard label="Deja revus" value={review.reviewSummary?.reviewed ?? 0} description="Decisions journalisees." tone="success" span="medium" />
         </>
@@ -3947,13 +3947,13 @@ function LegacyReviewPanel({ connected }: { connected: boolean }) {
       >
         {loading ? (
           <p className="rounded-xl border border-orange-100 bg-white p-5 text-sm font-semibold text-orange-800">
-            Chargement de la revue legacy...
+            Chargement des anciennes demandes...
           </p>
         ) : filteredCandidates.length === 0 ? (
           <BentoEmptyState
             icon={<ListChecks className="size-5" />}
             title="Aucun cas dans cette vue"
-            description="Modifiez les filtres ou relancez la revue legacy."
+            description="Modifiez les filtres ou relancez la revue des anciennes demandes."
             className="py-12"
           />
         ) : (
@@ -3982,7 +3982,7 @@ function LegacyReviewPanel({ connected }: { connected: boolean }) {
                         {candidate.futureLead.requestType} · {candidate.futureContact.city ?? "Ville non renseignee"} · statut futur {leadStatusLabels[candidate.futureLead.status as LeadStatus] ?? candidate.futureLead.status}
                       </p>
                     </div>
-                    <p className="text-xs text-gray-500 lg:text-right">ID legacy<br /><span className="font-mono">{candidate.legacyId}</span></p>
+                    <p className="text-xs text-gray-500 lg:text-right">ID source<br /><span className="font-mono">{candidate.legacyId}</span></p>
                   </div>
 
                   <div className="mt-5 grid gap-4 md:grid-cols-3">
@@ -4223,7 +4223,7 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
               <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="pipeline"><Target />Pipeline</TabsTrigger>
               <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="contacts"><ContactRound />Contacts</TabsTrigger>
               <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="estimations"><ClipboardCheck />Estimations</TabsTrigger>
-              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="legacyReview"><ListChecks />Revue legacy</TabsTrigger>
+              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="legacyReview"><ListChecks />Anciennes demandes</TabsTrigger>
               <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="properties"><Building2 />Biens</TabsTrigger>
               <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="activities"><ListChecks />Activités</TabsTrigger>
               <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="statistics"><BarChart3 />Statistiques</TabsTrigger>

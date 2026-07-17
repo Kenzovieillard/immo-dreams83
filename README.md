@@ -4,11 +4,11 @@ Plateforme immobiliere responsive de l'agence IMMO-DREAMS83, situee a Sollies-Po
 
 ## Version actuelle
 
-V3 phase 3 - CRM securise, Supabase source unique des biens, revue legacy applicative et pipeline commercial quotidien.
+V3 phase 3 - CRM securise, Supabase source unique des biens, revue des anciennes demandes et pipeline commercial quotidien.
 
 Cette version conserve le socle V2.6, ajoute la securite admin V3 et branche le catalogue immobilier public sur Supabase comme source unique via la vue `public_properties`.
 
-La Phase 3 demarre cote applicatif avec un ecran de revue legacy dans `/admin`. Il permet de verifier les rapprochements entre anciennes demandes `contacts` et `estimations`, de journaliser une decision manuelle, puis de migrer les demandes validees vers `leads`. Elle ajoute maintenant un onglet `Pipeline` pour traiter les prospects normalises, assigner un responsable, creer des rappels, suivre les retards, consulter une vue hebdomadaire et preparer des relances email sans envoi automatique.
+La Phase 3 demarre cote applicatif avec un ecran `Anciennes demandes` dans `/admin`. Il permet de verifier les rapprochements entre anciennes demandes `contacts` et `estimations`, de journaliser une decision manuelle, puis de migrer les demandes validees vers `leads`. Elle ajoute maintenant un onglet `Pipeline` pour traiter les prospects normalises, assigner un responsable, creer des rappels, suivre les retards, consulter une vue hebdomadaire et preparer des relances email sans envoi automatique.
 
 ## Nouveautes V3 foundation
 
@@ -29,7 +29,7 @@ La Phase 3 demarre cote applicatif avec un ecran de revue legacy dans `/admin`. 
 - historique `property_history` ;
 - photos normalisees dans `property_photos` avec corbeille et restauration technique ;
 - script d'import idempotent des biens statiques historiques.
-- onglet CRM `Revue legacy` pour controler les rapprochements avant migration contacts/leads ;
+- onglet CRM `Anciennes demandes` pour controler les rapprochements avant migration contacts/leads ;
 - route admin `/api/admin/legacy-review` protegee par session et permission CRM ;
 - journalisation des decisions de revue dans `lead_merge_logs` ;
 - migration controlee des anciennes demandes `contacts` et `estimations` vers `leads`, avec historique de statut et communication initiale.
@@ -316,7 +316,7 @@ npm run crm:legacy-dry-run -- --write-report
 Une revue visuelle est aussi disponible dans le CRM :
 
 1. ouvrir `/admin` avec un compte Supabase Auth autorise ;
-2. aller dans l'onglet `Revue legacy` ;
+2. aller dans l'onglet `Anciennes demandes` ;
 3. filtrer les cas par categorie de rapprochement ou statut de revue ;
 4. ajouter une note de revue ;
 5. enregistrer une decision : `Pret pour migration future`, `A revoir manuellement` ou `Ne pas fusionner`.
@@ -415,7 +415,7 @@ Resultat Phase 2 valide :
 - `npm run lint` OK.
 - `npm run build` OK.
 - Sur la branche `feature/v3-commercial-crm-foundation`, la migration Phase 3 non destructive a ete appliquee : `lead_sources`, `lead_import_runs`, `lead_merge_logs` et `crm_legacy_lead_candidates` sont disponibles.
-- L'ecran applicatif de revue legacy est disponible dans `/admin` via l'onglet `Revue legacy`.
+- L'ecran applicatif de revue des anciennes demandes est disponible dans `/admin` via l'onglet `Anciennes demandes`.
 - La route `/api/admin/legacy-review` permet de charger la revue et de journaliser une decision sans migration.
 - Le script `npm run crm:legacy-migrate:dry-run` prepare et controle la migration contacts/leads en excluant les cas `IGNORED`.
 - Import reel Phase 3 execute le 16/07/2026 : 9 leads crees, 9 historiques de statut crees, 9 communications initiales creees, 0 contact supplementaire cree, 1 cas legacy ignore.
