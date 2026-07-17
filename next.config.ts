@@ -13,6 +13,10 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: "https",
+        hostname: "immodreams.lesty.immo",
+      },
+      {
+        protocol: "https",
         hostname: "**.supabase.co",
       },
     ],

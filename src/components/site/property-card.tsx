@@ -17,6 +17,7 @@ import {
   propertyStatusLabels,
   propertyTypeLabels,
 } from "@/data/properties";
+import { DiagnosticBar } from "@/components/site/diagnostic-bar";
 import { cn } from "@/lib/utils";
 
 type PropertyCardProps = {
@@ -96,6 +97,10 @@ export function PropertyCard({ property, priority = false }: PropertyCardProps) 
             <BedDouble className="mb-1 size-4 text-orange-500" aria-hidden="true" />
             {property.bedrooms ?? "-"} ch.
           </span>
+        </div>
+        <div className="mt-4 grid gap-3 rounded-lg border border-orange-100 bg-orange-50/60 p-3">
+          <DiagnosticBar kind="energy" value={property.energyClass} compact />
+          <DiagnosticBar kind="climate" value={property.climateClass} compact />
         </div>
       </CardContent>
 

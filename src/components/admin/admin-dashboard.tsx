@@ -9,6 +9,8 @@ import {
   BarChart3,
   Building2,
   CalendarClock,
+  ChevronDown,
+  ChevronUp,
   CheckCircle2,
   ClipboardCheck,
   ContactRound,
@@ -40,6 +42,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { DiagnosticBar } from "@/components/site/diagnostic-bar";
 import {
   formatNumber,
   formatPrice,
@@ -323,6 +326,8 @@ type PropertyFormState = {
   landOptions: string[];
   featured: boolean;
 };
+
+type PropertyDisplayMode = "list" | "grid";
 
 const emptyPropertyForm: PropertyFormState = {
   title: "",
@@ -1440,6 +1445,7 @@ function CreateContactCard({
   setLeads: React.Dispatch<React.SetStateAction<AdminLead[]>>;
   connected: boolean;
 }) {
+  const [open, setOpen] = useState(false);
   const [form, setForm] = useState<ContactFormState>(emptyContactForm);
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -1525,8 +1531,32 @@ function CreateContactCard({
       span="full"
       title="Créer un contact"
       description="Ajoutez manuellement un prospect reçu par téléphone, email ou passage agence."
+      action={
+        <Button
+          type="button"
+          variant="outline"
+          className="h-10 border-orange-200 bg-white"
+          onClick={() => setOpen((current) => !current)}
+          aria-expanded={open}
+        >
+          {open ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+          {open ? "Replier" : "Créer"}
+        </Button>
+      }
     >
-      <form onSubmit={(event) => void submitContact(event)} className="grid gap-5">
+      {feedback ? (
+        <p
+          className={
+            feedback.type === "success"
+              ? "rounded-md bg-emerald-50 p-3 text-sm font-medium text-emerald-800"
+              : "rounded-md bg-red-50 p-3 text-sm font-medium text-red-700"
+          }
+        >
+          {feedback.message}
+        </p>
+      ) : null}
+      {open ? (
+        <form onSubmit={(event) => void submitContact(event)} className="grid gap-5">
           <div className="grid gap-5 sm:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor="contact-full-name">Nom complet</Label>
@@ -1595,17 +1625,6 @@ function CreateContactCard({
               placeholder="Besoin exprimé, budget, délai, informations utiles..."
             />
           </div>
-          {feedback ? (
-            <p
-              className={
-                feedback.type === "success"
-                  ? "rounded-md bg-emerald-50 p-3 text-sm font-medium text-emerald-800"
-                  : "rounded-md bg-red-50 p-3 text-sm font-medium text-red-700"
-              }
-            >
-              {feedback.message}
-            </p>
-          ) : null}
           <Button
             type="submit"
             disabled={submitting}
@@ -1614,7 +1633,12 @@ function CreateContactCard({
             <ContactRound className="size-4" />
             {submitting ? "Création..." : "Créer le contact"}
           </Button>
-      </form>
+        </form>
+      ) : (
+        <div className="rounded-xl border border-orange-100 bg-orange-50/60 p-4 text-sm leading-6 text-gray-600">
+          Le formulaire est replié pour garder la vue Contacts lisible. Cliquez sur Créer pour ajouter un contact manuellement.
+        </div>
+      )}
     </BentoCard>
   );
 }
@@ -1628,6 +1652,7 @@ function CreatePropertyCard({
   setProperties: React.Dispatch<React.SetStateAction<Property[]>>;
   connected: boolean;
 }) {
+  const [open, setOpen] = useState(false);
   const [form, setForm] = useState<PropertyFormState>(emptyPropertyForm);
   const [selectedPhotos, setSelectedPhotos] = useState<File[]>([]);
   const [uploadedPhotos, setUploadedPhotos] = useState<UploadedPropertyPhoto[]>([]);
@@ -1790,12 +1815,36 @@ function CreatePropertyCard({
       title="Créer un bien"
       description="La référence sera attribuée automatiquement au moment de l'enregistrement."
       action={
-        <Badge className="w-fit border-0 bg-orange-100 text-orange-800">
-          Prochaine réf. {nextReference}
-        </Badge>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Badge className="w-fit border-0 bg-orange-100 text-orange-800">
+            Prochaine réf. {nextReference}
+          </Badge>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 border-orange-200 bg-white"
+            onClick={() => setOpen((current) => !current)}
+            aria-expanded={open}
+          >
+            {open ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+            {open ? "Replier" : "Créer"}
+          </Button>
+        </div>
       }
     >
-      <form onSubmit={(event) => void submitProperty(event)} className="grid gap-5">
+      {feedback ? (
+        <p
+          className={
+            feedback.type === "success"
+              ? "rounded-md bg-emerald-50 p-3 text-sm font-medium text-emerald-800"
+              : "rounded-md bg-red-50 p-3 text-sm font-medium text-red-700"
+          }
+        >
+          {feedback.message}
+        </p>
+      ) : null}
+      {open ? (
+        <form onSubmit={(event) => void submitProperty(event)} className="grid gap-5">
           <div className="grid gap-4 lg:grid-cols-3">
             <div className="grid gap-2 lg:col-span-2">
               <Label htmlFor="property-title">Titre de l&apos;annonce</Label>
@@ -2042,28 +2091,10 @@ function CreatePropertyCard({
               </div>
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="rounded-lg border border-orange-100 bg-white p-3">
-                  <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
-                    Énergie
-                  </p>
-                  {energyAssessment ? (
-                    <p className="mt-1 text-sm font-semibold text-[#111111]">
-                      {energyAssessment.value} {energyAssessment.unit} · classe {energyAssessment.letter}
-                    </p>
-                  ) : (
-                    <p className="mt-1 text-sm text-gray-600">Valeur énergie non renseignée.</p>
-                  )}
+                  <DiagnosticBar kind="energy" value={form.energyClass} />
                 </div>
                 <div className="rounded-lg border border-orange-100 bg-white p-3">
-                  <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
-                    Climat
-                  </p>
-                  {climateAssessment ? (
-                    <p className="mt-1 text-sm font-semibold text-[#111111]">
-                      {climateAssessment.value} {climateAssessment.unit} · classe {climateAssessment.letter}
-                    </p>
-                  ) : (
-                    <p className="mt-1 text-sm text-gray-600">Valeur climat non renseignée.</p>
-                  )}
+                  <DiagnosticBar kind="climate" value={form.climateClass} />
                 </div>
               </div>
             </div>
@@ -2195,17 +2226,6 @@ function CreatePropertyCard({
             />
             Mettre ce bien à la une
           </label>
-          {feedback ? (
-            <p
-              className={
-                feedback.type === "success"
-                  ? "rounded-md bg-emerald-50 p-3 text-sm font-medium text-emerald-800"
-                  : "rounded-md bg-red-50 p-3 text-sm font-medium text-red-700"
-              }
-            >
-              {feedback.message}
-            </p>
-          ) : null}
           <Button
             type="submit"
             disabled={submitting}
@@ -2214,7 +2234,12 @@ function CreatePropertyCard({
             <Plus className="size-4" />
             {submitting ? "Création..." : "Créer le bien"}
           </Button>
-      </form>
+        </form>
+      ) : (
+        <div className="rounded-xl border border-orange-100 bg-orange-50/60 p-4 text-sm leading-6 text-gray-600">
+          Le formulaire de création est replié pour faciliter la lecture du catalogue. Cliquez sur Créer pour ajouter un bien avec ses photos.
+        </div>
+      )}
     </BentoCard>
   );
 }
@@ -2223,10 +2248,12 @@ function PropertyEditorCard({
   property,
   connected,
   onPersist,
+  displayMode,
 }: {
   property: Property;
   connected: boolean;
   onPersist: (property: Property) => Promise<boolean>;
+  displayMode: PropertyDisplayMode;
 }) {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<PropertyFormState>(() => propertyToForm(property));
@@ -2237,6 +2264,7 @@ function PropertyEditorCard({
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const isLand = form.type === "land";
+  const mainPhoto = property.photos[0] ?? null;
 
   function updateField(field: keyof PropertyFormState, value: string | boolean) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -2404,7 +2432,30 @@ function PropertyEditorCard({
   }
 
   return (
-    <Card className="border-orange-100 bg-white">
+    <Card className={cn("border-orange-100 bg-white", displayMode === "grid" && "overflow-hidden")}>
+      {displayMode === "grid" ? (
+        <div className="relative aspect-[4/3] bg-orange-50">
+          {mainPhoto ? (
+            <Image
+              src={mainPhoto}
+              alt={property.title}
+              fill
+              sizes="(min-width: 1280px) 30vw, (min-width: 640px) 45vw, 95vw"
+              className="object-cover"
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center text-orange-600">
+              <ImagePlus className="size-10" />
+            </div>
+          )}
+          <div className="absolute left-3 top-3 flex flex-wrap gap-2">
+            <Badge className="border-0 bg-orange-100 text-orange-800">{propertyStatusLabels[property.status]}</Badge>
+            <Badge className={cn("w-fit", propertyPublicationStatusBadgeClasses[property.publicationStatus ?? "DRAFT"])}>
+              {propertyPublicationStatusLabels[property.publicationStatus ?? "DRAFT"]}
+            </Badge>
+          </div>
+        </div>
+      ) : null}
       <CardContent className="grid gap-4 p-4 sm:p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -2412,7 +2463,7 @@ function PropertyEditorCard({
             <p className="mt-1 font-bold text-[#111111]">{property.title}</p>
             <p className="mt-1 text-sm text-gray-600">{property.city} · {formatNumber(property.surface)} m² · {propertyTypeLabels[property.type]}</p>
           </div>
-          <div className="flex flex-col gap-2 sm:items-end">
+          <div className={cn("flex-col gap-2 sm:items-end", displayMode === "grid" ? "hidden" : "flex")}>
             <Badge className="border-0 bg-orange-100 text-orange-800">{propertyStatusLabels[property.status]}</Badge>
             <Badge className={cn("w-fit", propertyPublicationStatusBadgeClasses[property.publicationStatus ?? "DRAFT"])}>
               {propertyPublicationStatusLabels[property.publicationStatus ?? "DRAFT"]}
@@ -2420,12 +2471,25 @@ function PropertyEditorCard({
           </div>
         </div>
 
-        <div className="grid gap-2 text-sm text-gray-700 sm:grid-cols-5">
+        <div className={cn(
+          "grid gap-2 text-sm text-gray-700",
+          displayMode === "grid" ? "grid-cols-2" : "sm:grid-cols-5"
+        )}>
           <p><strong>Prix</strong><br />{formatPrice(property.price)}</p>
           <p><strong>Pièces</strong><br />{property.rooms ?? "Non renseigné"}</p>
           <p><strong>Photos</strong><br />{property.photos.length}</p>
           <p><strong>Publication</strong><br />{propertyPublicationStatusLabels[property.publicationStatus ?? "DRAFT"]}</p>
           <p><strong>Mise en avant</strong><br />{property.featured ? "Oui" : "Non"}</p>
+        </div>
+
+        <div
+          className={cn(
+            "grid gap-3 rounded-lg border border-orange-100 bg-orange-50/60 p-3",
+            displayMode === "list" ? "sm:grid-cols-2" : "grid-cols-1"
+          )}
+        >
+          <DiagnosticBar kind="energy" value={property.energyClass} compact />
+          <DiagnosticBar kind="climate" value={property.climateClass} compact />
         </div>
 
         <div className="grid gap-3 rounded-lg border border-orange-100 bg-orange-50 p-3 sm:grid-cols-[1fr_auto] sm:items-end">
@@ -2755,6 +2819,7 @@ function PropertyManager({
   connected: boolean;
 }) {
   const [search, setSearch] = useState("");
+  const [displayMode, setDisplayMode] = useState<PropertyDisplayMode>("list");
   const [feedback, setFeedback] = useState<string | null>(null);
   const propertyInventoryMetrics = useMemo(() => getPropertyInventoryMetrics(properties), [properties]);
   const propertyStatusBreakdown = useMemo(() => getPropertyStatusBreakdown(properties), [properties]);
@@ -2870,14 +2935,44 @@ function PropertyManager({
         description="Recherche, disponibilité, mise à la une et édition rapide des biens."
         contentClassName="gap-5"
       >
-        <div className="relative">
-          <Search className="absolute left-3 top-2.5 size-4 text-gray-400" />
-          <Input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Rechercher un bien par référence, ville, titre ou statut"
-            className="pl-9"
-          />
+        <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 size-4 text-gray-400" />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Rechercher un bien par référence, ville, titre ou statut"
+              className="pl-9"
+            />
+          </div>
+          <div className="grid grid-cols-2 rounded-lg border border-orange-100 bg-white p-1">
+            <Button
+              type="button"
+              variant={displayMode === "list" ? "default" : "ghost"}
+              className={cn(
+                "h-10",
+                displayMode === "list" ? "bg-[#111111] text-white hover:bg-[#111111]" : "text-gray-700 hover:bg-orange-50"
+              )}
+              onClick={() => setDisplayMode("list")}
+              aria-pressed={displayMode === "list"}
+            >
+              <ListChecks className="size-4" />
+              Liste
+            </Button>
+            <Button
+              type="button"
+              variant={displayMode === "grid" ? "default" : "ghost"}
+              className={cn(
+                "h-10",
+                displayMode === "grid" ? "bg-[#111111] text-white hover:bg-[#111111]" : "text-gray-700 hover:bg-orange-50"
+              )}
+              onClick={() => setDisplayMode("grid")}
+              aria-pressed={displayMode === "grid"}
+            >
+              <LayoutDashboard className="size-4" />
+              Cartes
+            </Button>
+          </div>
         </div>
 
         {feedback ? (
@@ -2894,13 +2989,19 @@ function PropertyManager({
             className="py-12"
           />
         ) : (
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div
+            className={cn(
+              "grid gap-4",
+              displayMode === "grid" ? "sm:grid-cols-2 xl:grid-cols-3" : "grid-cols-1"
+            )}
+          >
             {filteredProperties.map((property) => (
               <PropertyEditorCard
                 key={`${property.reference}-${property.updatedAt}`}
                 property={property}
                 connected={connected}
                 onPersist={persistProperty}
+                displayMode={displayMode}
               />
             ))}
           </div>

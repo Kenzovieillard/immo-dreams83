@@ -53,7 +53,10 @@ export function parseDiagnosticValue(value: string | number | null | undefined) 
   if (typeof value === "number") return Number.isFinite(value) && value >= 0 ? value : null;
   if (!value) return null;
 
-  const parsed = Number(value.replace(",", ".").replace(/\s/g, ""));
+  const numericPart = value.replace(",", ".").match(/\d+(?:\.\d+)?/);
+  if (!numericPart) return null;
+
+  const parsed = Number(numericPart[0]);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 

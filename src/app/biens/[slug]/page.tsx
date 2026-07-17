@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { PropertyLeadForm } from "@/components/forms/property-lead-form";
 import { PropertyCard } from "@/components/site/property-card";
+import { DiagnosticBar } from "@/components/site/diagnostic-bar";
 import { PropertyGallery } from "@/components/site/property-gallery";
 import { GoogleMapEmbed } from "@/components/site/google-map-embed";
 import { PropertyShare } from "@/components/site/property-share";
@@ -162,8 +163,8 @@ export default async function PropertyPage({ params }: PropertyPageProps) {
               <Card className="border-orange-100 bg-[#111111] text-white">
                 <CardHeader><CardTitle className="flex items-center gap-2 text-lg sm:text-xl"><Leaf className="size-5 text-orange-300" />Performance énergétique</CardTitle></CardHeader>
                 <CardContent className="grid gap-4">
-                  <div className="flex items-center justify-between gap-4"><span className="text-white/60">DPE</span><strong className="text-orange-300">{property.energyClass}</strong></div>
-                  <div className="flex items-center justify-between gap-4"><span className="text-white/60">GES</span><strong className="text-orange-300">{property.climateClass}</strong></div>
+                  <DiagnosticBar kind="energy" value={property.energyClass} dark />
+                  <DiagnosticBar kind="climate" value={property.climateClass} dark />
                 </CardContent>
               </Card>
               <Card className="border-orange-100 bg-white">
