@@ -266,6 +266,37 @@ Resultat constate :
 - 52 biens conserves dans le CRM en non publie ;
 - 2 photos conservees en URL externe car trop volumineuses pour Supabase Storage.
 
+### Importer les contacts Lesty
+
+L'export `ged_contact*.csv` du site mere peut etre importe dans la table CRM `contacts`.
+
+Dry-run sans ecriture :
+
+```bash
+npm.cmd run lesty:contacts:dry-run -- --write-report
+```
+
+Import reel :
+
+```bash
+npm.cmd run lesty:contacts:import -- --write-report
+```
+
+Avec fichier precis :
+
+```bash
+npm.cmd run lesty:contacts:import -- --contacts "C:\Users\Kenzo\Downloads\ged_contact (2026-07-16 220737).csv" --write-report
+```
+
+Regles retenues :
+
+- chaque contact est identifie par le marqueur technique `LESTY_GED_CONTACT:{ref}` dans ses notes CRM ;
+- les relances ulterieures mettent a jour le contact existant au lieu de le dupliquer ;
+- les emails reels sont normalises quand ils existent ;
+- les contacts sans email recoivent une adresse technique locale `lesty-{ref}@legacy.immo-dreams83.local`, a ne pas utiliser pour un envoi client ;
+- les telephones sont normalises en format francais quand c'est possible ;
+- les informations Lesty utiles restent visibles uniquement dans le CRM, pas dans les pages publiques.
+
 ## Partie 3 CRM commercial
 
 Pour auditer `contacts` et `estimations` avant toute action, executer le rapport lecture seule :
