@@ -49,6 +49,16 @@ export const dpeBadgeClasses: Record<DpeLetter, string> = {
   G: "bg-red-700 text-white",
 };
 
+export const climateBadgeClasses: Record<DpeLetter, string> = {
+  A: "bg-[#d8f1fb] text-[#111111]",
+  B: "bg-[#add8ec] text-[#111111]",
+  C: "bg-[#7fa7c8] text-[#111111]",
+  D: "bg-[#57799e] text-white",
+  E: "bg-[#373f65] text-white",
+  F: "bg-[#27234f] text-white",
+  G: "bg-[#15122f] text-white",
+};
+
 export function parseDiagnosticValue(value: string | number | null | undefined) {
   if (typeof value === "number") return Number.isFinite(value) && value >= 0 ? value : null;
   if (!value) return null;

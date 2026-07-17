@@ -2,6 +2,7 @@ import {
   type DpeAssessment,
   type DpeLetter,
   climateUnit,
+  climateBadgeClasses,
   dpeBadgeClasses,
   dpeLetters,
   energyUnit,
@@ -30,6 +31,10 @@ function getAssessment(kind: DiagnosticBarKind, value: DiagnosticBarProps["value
 
 function getUnit(kind: DiagnosticBarKind) {
   return kind === "energy" ? energyUnit : climateUnit;
+}
+
+function getBadgeClasses(kind: DiagnosticBarKind, letter: DpeLetter) {
+  return kind === "energy" ? dpeBadgeClasses[letter] : climateBadgeClasses[letter];
 }
 
 function getLetterWidth(letter: DpeLetter) {
@@ -77,7 +82,7 @@ export function DiagnosticBar({ kind, value, compact = false, dark = false }: Di
         <div className="flex items-center gap-2">
           <span className={cn("font-black", dark ? "text-white" : "text-[#111111]")}>{diagnosticLabels[kind]}</span>
           {assessment ? (
-            <span className={cn("rounded px-2 py-0.5 text-xs font-black", dpeBadgeClasses[assessment.letter])}>
+            <span className={cn("rounded px-2 py-0.5 text-xs font-black", getBadgeClasses(kind, assessment.letter))}>
               {assessment.letter}
             </span>
           ) : null}
@@ -88,12 +93,15 @@ export function DiagnosticBar({ kind, value, compact = false, dark = false }: Di
       <div className={cn("relative h-3 overflow-hidden rounded-full", dark ? "bg-white/15" : "bg-gray-100")}>
         <div className="grid h-full grid-cols-7">
           {dpeLetters.map((letter) => (
-            <span key={letter} className={cn("h-full", dpeBadgeClasses[letter])} />
+            <span key={letter} className={cn("h-full", getBadgeClasses(kind, letter))} />
           ))}
         </div>
         {assessment ? (
           <span
-            className="absolute inset-y-0 w-1 rounded-full bg-[#111111] ring-2 ring-white"
+            className={cn(
+              "absolute inset-y-0 w-1 rounded-full ring-2",
+              kind === "energy" ? "bg-[#111111] ring-white" : "bg-white ring-[#111111]/30"
+            )}
             style={{ left: `calc(${getLetterWidth(assessment.letter)} - 4px)` }}
             aria-hidden="true"
           />
