@@ -17,23 +17,23 @@ type DiagnosticThreshold = {
 };
 
 const energyThresholds = [
-  { letter: "A", max: 70, range: "≤ 70" },
-  { letter: "B", max: 110, range: "71 à 110" },
-  { letter: "C", max: 180, range: "111 à 180" },
-  { letter: "D", max: 250, range: "181 à 250" },
-  { letter: "E", max: 330, range: "251 à 330" },
-  { letter: "F", max: 420, range: "331 à 420" },
-  { letter: "G", max: Infinity, range: "> 420" },
+  { letter: "A", max: 70, range: "< 70" },
+  { letter: "B", max: 110, range: "70 à < 110" },
+  { letter: "C", max: 180, range: "110 à < 180" },
+  { letter: "D", max: 250, range: "180 à < 250" },
+  { letter: "E", max: 330, range: "250 à < 330" },
+  { letter: "F", max: 420, range: "330 à < 420" },
+  { letter: "G", max: Infinity, range: "≥ 420" },
 ] satisfies DiagnosticThreshold[];
 
 const climateThresholds = [
-  { letter: "A", max: 6, range: "≤ 6" },
-  { letter: "B", max: 11, range: "7 à 11" },
-  { letter: "C", max: 30, range: "12 à 30" },
-  { letter: "D", max: 50, range: "31 à 50" },
-  { letter: "E", max: 70, range: "51 à 70" },
-  { letter: "F", max: 100, range: "71 à 100" },
-  { letter: "G", max: Infinity, range: "> 100" },
+  { letter: "A", max: 6, range: "< 6" },
+  { letter: "B", max: 11, range: "6 à < 11" },
+  { letter: "C", max: 30, range: "11 à < 30" },
+  { letter: "D", max: 50, range: "30 à < 50" },
+  { letter: "E", max: 70, range: "50 à < 70" },
+  { letter: "F", max: 100, range: "70 à < 100" },
+  { letter: "G", max: Infinity, range: "≥ 100" },
 ] satisfies DiagnosticThreshold[];
 
 export const energyUnit = "kWhEP/m².an";
@@ -78,7 +78,7 @@ function getAssessment(
   const parsed = parseDiagnosticValue(value);
   if (parsed === null) return null;
 
-  const threshold = thresholds.find((item) => parsed <= item.max) ?? thresholds[thresholds.length - 1];
+  const threshold = thresholds.find((item) => parsed < item.max) ?? thresholds[thresholds.length - 1];
   return {
     letter: threshold.letter,
     value: parsed,
