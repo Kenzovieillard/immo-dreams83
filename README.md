@@ -151,6 +151,121 @@ npm run properties:import
 
 Le script conserve les references et les slugs existants, puis ecrit un rapport JSON dans `reports/`.
 
+## Auditer les exports Lesty
+
+Les exports du site mere Lesty doivent etre verifies avant tout import reel vers Supabase.
+
+Pages Lesty utiles pour les futures verifications :
+
+```text
+https://immodreams.lesty.immo/modspec/statsActivite.php
+https://immodreams.lesty.immo/annu/annu.php?modRef=35
+https://immodreams.lesty.immo/modspec/passerelles.php
+https://immodreams.lesty.immo/modspec/passerellesAdmin.php
+```
+
+Placer ou conserver les CSV dans `Downloads`, puis lancer :
+
+```bash
+npm run lesty:audit -- --write-report
+```
+
+Le script cherche automatiquement les derniers fichiers `biens*.csv` et `ged_contact*.csv` dans le dossier `Downloads`.
+
+Il est aussi possible de cibler des fichiers precis :
+
+```bash
+npm run lesty:audit -- --biens "C:\Users\Kenzo\Downloads\biens (2026-07-16 220751).csv" --contacts "C:\Users\Kenzo\Downloads\ged_contact (2026-07-16 220737).csv" --write-report
+```
+
+Cet audit ne modifie aucune donnee. Il verifie :
+
+- volume et colonnes disponibles ;
+- doublons de references et de mandats ;
+- repartition des statuts Lesty ;
+- couverture des champs publics : titre, texte, prix, surface, DPE, GES ;
+- presence des contacts et doublons email/telephone sans afficher les donnees privees ;
+- points bloquants avant import.
+
+Les photos ne sont pas incluses dans le CSV principal. Elles devront etre recuperees separement depuis la galerie Lesty ou via la convention publique `/photo/immodreams/biens/{ref}-{index}.jpg`, toujours en dry-run avant import.
+
+### Preparer un dry-run de biens Lesty vers Supabase
+
+Le dry-run suivant transforme le CSV Lesty en payloads compatibles avec la table `properties` et les futures lignes `property_photos`, sans ecrire en base :
+
+```bash
+npm run lesty:properties:dry-run -- --write-report
+```
+
+Avec detection legere des photos :
+
+```bash
+npm run lesty:properties:dry-run -- --probe-photos --max-photo-index 20 --write-report
+```
+
+Pour sonder davantage de photos avant import reel :
+
+```bash
+npm.cmd run lesty:properties:dry-run -- --probe-photos --max-photo-index 40 --write-report
+```
+
+Avec fichier precis :
+
+```bash
+npm run lesty:properties:dry-run -- --biens "C:\Users\Kenzo\Downloads\biens (2026-07-16 220751).csv" --probe-photos --write-report
+```
+
+Regle de reference retenue pour le dry-run :
+
+- `properties.reference` = reference interne Lesty `ref`, unique dans l'export ;
+- `properties.mandate_number` = numero de mandat Lesty `nummandat`, conserve pour le suivi commercial ;
+- les statuts Lesty sont normalises vers `commercial_status` et `publication_status` ;
+- les types Lesty sont normalises vers `apartment`, `house`, `land`, `commercial`, `parking` ou `other` ;
+- les donnees proprietaires, adresses precises et commentaires internes ne sont jamais exposees dans le payload public.
+
+Avant l'import reel Lesty, appliquer la migration non destructive :
+
+```text
+supabase/migrations/202607160005_lesty_property_types.sql
+```
+
+Elle autorise les nouveaux types `commercial`, `parking` et `other` dans `properties.type`.
+
+Import reel protege :
+
+```bash
+npm.cmd run lesty:properties:import -- --probe-photos --max-photo-index 40 --copy-photos --write-report
+```
+
+Cette commande :
+
+- exige un dry-run sans bloqueur avant ecriture ;
+- cree ou met a jour les biens par reference Lesty ;
+- archive les anciens doublons de transition sans suppression definitive ;
+- copie les photos detectees dans Supabase Storage quand le fichier est accepte ;
+- conserve l'URL externe d'une photo si Supabase Storage la refuse, par exemple si elle depasse la limite de taille ;
+- ecrit un rapport JSON local dans `reports/`.
+
+Dernier import Lesty valide le 17/07/2026 :
+
+```text
+reports/lesty-properties-import-2026-07-17T01-18-06-646Z.json
+```
+
+Resultat constate :
+
+- 88 lignes CSV Lesty analysees ;
+- 88 payloads valides ;
+- 7 creations ;
+- 81 mises a jour ;
+- 0 bien bloque ;
+- 0 bien en revue manuelle ;
+- 782 photos detectees pendant l'import ;
+- 9 anciens doublons archives sans suppression ;
+- 36 biens visibles dans `public_properties` apres import ;
+- 52 biens conserves dans le CRM en non publie ;
+- 2 photos conservees en URL externe car trop volumineuses pour Supabase Storage.
+
 ## Partie 3 CRM commercial
 
 Pour auditer `contacts` et `estimations` avant toute action, executer le rapport lecture seule :

@@ -84,11 +84,19 @@ export function getPropertyPublicationBreakdown(properties: Property[]): Propert
 }
 
 export function getPropertyTypeBreakdown(properties: Property[]): PropertyBreakdownItem[] {
-  const types: PropertyType[] = ["apartment", "house", "land"];
+  const types: PropertyType[] = ["apartment", "house", "land", "commercial", "parking", "other"];
 
   return types.map((type) => ({
     key: type,
-    label: type === "apartment" ? "Appartements" : `${propertyTypeLabels[type]}s`,
+    label: type === "apartment"
+      ? "Appartements"
+      : type === "commercial"
+        ? "Locaux commerciaux"
+        : type === "parking"
+          ? "Stationnements"
+          : type === "other"
+            ? "Autres biens"
+          : `${propertyTypeLabels[type]}s`,
     count: properties.filter((property) => property.type === type).length,
   }));
 }

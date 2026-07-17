@@ -23,6 +23,9 @@ const propertyTypeFilters: Array<"all" | PropertyType> = [
   "apartment",
   "house",
   "land",
+  "commercial",
+  "parking",
+  "other",
 ];
 
 type Filters = {

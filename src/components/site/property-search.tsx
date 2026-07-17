@@ -16,6 +16,9 @@ const propertySearchTypeLabels = {
   apartment: "Appartement",
   house: "Maison",
   land: "Terrain",
+  commercial: "Local commercial",
+  parking: "Stationnement",
+  other: "Autre bien",
 } as const;
 
 type PropertySearchType = keyof typeof propertySearchTypeLabels;
@@ -54,6 +57,9 @@ export function PropertySearch() {
             <SelectItem value="apartment">Appartement</SelectItem>
             <SelectItem value="house">Maison</SelectItem>
             <SelectItem value="land">Terrain</SelectItem>
+            <SelectItem value="commercial">Local commercial</SelectItem>
+            <SelectItem value="parking">Stationnement</SelectItem>
+            <SelectItem value="other">Autre bien</SelectItem>
           </SelectContent>
         </Select>
       </label>

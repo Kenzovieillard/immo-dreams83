@@ -8,7 +8,7 @@ import {
 } from "@/data/properties";
 import { getAvailablePublicProperties } from "@/lib/public-properties";
 
-const categories: PropertyType[] = ["apartment", "house", "land"];
+const categories: PropertyType[] = ["apartment", "house", "land", "commercial", "parking", "other"];
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
@@ -40,6 +40,12 @@ export default async function BiensPage() {
                 <TabsTrigger key={category} value={category} className="h-11 px-5 sm:h-10">
                   {category === "apartment"
                     ? "Appartements"
+                    : category === "commercial"
+                      ? "Locaux commerciaux"
+                    : category === "parking"
+                      ? "Stationnements"
+                    : category === "other"
+                      ? "Autres biens"
                     : `${propertyTypeLabels[category]}s`}
                 </TabsTrigger>
               ))}

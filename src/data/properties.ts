@@ -1,4 +1,4 @@
-export type PropertyType = "apartment" | "house" | "land";
+export type PropertyType = "apartment" | "house" | "land" | "commercial" | "parking" | "other";
 
 export type TransactionType = "sale";
 
@@ -57,6 +57,9 @@ export const propertyTypeLabels: Record<PropertyType, string> = {
   apartment: "Appartement",
   house: "Maison",
   land: "Terrain",
+  commercial: "Local commercial",
+  parking: "Stationnement",
+  other: "Autre bien",
 };
 
 export const propertyStatusLabels: Record<PropertyStatus, string> = {
@@ -622,6 +625,9 @@ export const propertyTypeFilters: Array<"all" | PropertyType> = [
   "apartment",
   "house",
   "land",
+  "commercial",
+  "parking",
+  "other",
 ];
 
 export const propertyCities = [

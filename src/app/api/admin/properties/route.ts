@@ -18,7 +18,7 @@ import { formatClimateDiagnostic, formatEnergyDiagnostic, parseDiagnosticValue }
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import type { AdminSession } from "@/types/admin";
 
-const propertyTypes = ["apartment", "house", "land"] as const satisfies PropertyType[];
+const propertyTypes = ["apartment", "house", "land", "commercial", "parking", "other"] as const satisfies PropertyType[];
 const propertyStatuses = ["available", "under_offer", "sold"] as const satisfies PropertyStatus[];
 const publicationStatuses = ["DRAFT", "PUBLISHED", "UNPUBLISHED", "ARCHIVED"] as const satisfies PropertyPublicationStatus[];
 const bucketName = "property-photos";
@@ -255,10 +255,11 @@ function validatePropertyPayload(payload: unknown) {
   if (!hasRequiredValue(postalCode)) fieldErrors.postalCode = "Le code postal est obligatoire.";
   if (!isPositiveNumberLike(price)) fieldErrors.price = "Le prix doit etre superieur a 0.";
   if (!isPositiveNumberLike(surface)) fieldErrors.surface = "La surface doit etre superieure a 0.";
-  if (type !== "land" && energyClass && parseDiagnosticValue(energyClass) === null) {
+  const skipsDiagnostics = type === "land" || type === "parking";
+  if (!skipsDiagnostics && energyClass && parseDiagnosticValue(energyClass) === null) {
     fieldErrors.energyClass = "La consommation energie doit etre un nombre.";
   }
-  if (type !== "land" && climateClass && parseDiagnosticValue(climateClass) === null) {
+  if (!skipsDiagnostics && climateClass && parseDiagnosticValue(climateClass) === null) {
     fieldErrors.climateClass = "La classe climat doit etre un nombre.";
   }
   if (!hasRequiredValue(descriptionShort)) {
@@ -353,6 +354,7 @@ function buildPropertyRecord(
   existing?: PropertyRow | null
 ) {
   const isLand = data.type === "land";
+  const skipsDiagnostics = data.type === "land" || data.type === "parking";
   const publicationPatch = getPublicationPatch(data.publicationStatus, existing);
 
   return {
@@ -373,8 +375,8 @@ function buildPropertyRecord(
     rooms: isLand ? null : toNullableNumber(data.rooms),
     bedrooms: isLand ? null : toNullableNumber(data.bedrooms),
     bathrooms: isLand ? null : toNullableNumber(data.bathrooms),
-    energy_class: isLand ? "Non soumis" : formatEnergyDiagnostic(data.energyClass),
-    climate_class: isLand ? "Non soumis" : formatClimateDiagnostic(data.climateClass),
+    energy_class: skipsDiagnostics ? "Non soumis" : formatEnergyDiagnostic(data.energyClass),
+    climate_class: skipsDiagnostics ? "Non soumis" : formatClimateDiagnostic(data.climateClass),
     description_short: data.descriptionShort,
     description_long: data.descriptionLong || data.descriptionShort,
     features: data.features,

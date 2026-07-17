@@ -109,7 +109,7 @@ begin
   if not exists (select 1 from pg_constraint where conname = 'properties_type_check') then
     alter table properties
       add constraint properties_type_check
-      check (type in ('apartment', 'house', 'land'));
+      check (type in ('apartment', 'house', 'land', 'commercial', 'parking', 'other'));
   end if;
 
   if not exists (select 1 from pg_constraint where conname = 'properties_transaction_type_check') then

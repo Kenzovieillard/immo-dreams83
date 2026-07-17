@@ -101,7 +101,7 @@ import type {
 } from "@/types/crm";
 
 const contactRequestTypes = ["Achat", "Vente", "Estimation", "Terrain", "Autre"] as const;
-const propertyTypes = ["apartment", "house", "land"] as const satisfies PropertyType[];
+const propertyTypes = ["apartment", "house", "land", "commercial", "parking", "other"] as const satisfies PropertyType[];
 const propertyStatuses = ["available", "under_offer", "sold"] as const satisfies PropertyStatus[];
 const propertyPublicationStatuses = ["DRAFT", "PUBLISHED", "UNPUBLISHED", "ARCHIVED"] as const satisfies PropertyPublicationStatus[];
 type AdminTab = "overview" | "pipeline" | "contacts" | "estimations" | "legacyReview" | "properties" | "activities" | "statistics";
@@ -926,6 +926,9 @@ function buildAdminMetrics(
     apartments: propertyItems.filter((property) => property.type === "apartment").length,
     houses: propertyItems.filter((property) => property.type === "house").length,
     lands: propertyItems.filter((property) => property.type === "land").length,
+    commercialProperties: propertyItems.filter((property) => property.type === "commercial").length,
+    parkingProperties: propertyItems.filter((property) => property.type === "parking").length,
+    otherProperties: propertyItems.filter((property) => property.type === "other").length,
     averagePrice,
     averageSurface,
     averagePricePerSquareMeter,
@@ -1213,6 +1216,9 @@ function BentoStatisticsPanel({ metrics }: { metrics: AdminMetrics }) {
         <MetricLine label="Appartements" value={metrics.apartments} max={propertyMax} />
         <MetricLine label="Maisons" value={metrics.houses} max={propertyMax} />
         <MetricLine label="Terrains" value={metrics.lands} max={propertyMax} />
+        <MetricLine label="Locaux commerciaux" value={metrics.commercialProperties} max={propertyMax} />
+        <MetricLine label="Stationnements" value={metrics.parkingProperties} max={propertyMax} />
+        <MetricLine label="Autres biens" value={metrics.otherProperties} max={propertyMax} />
         <MetricLine label="Surface moyenne" value={`${Math.round(metrics.averageSurface)} m2`} />
       </BentoCard>
 

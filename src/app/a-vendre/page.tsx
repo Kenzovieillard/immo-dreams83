@@ -22,7 +22,15 @@ type AVendrePageProps = {
 };
 
 function normalizeType(type?: string): "all" | PropertyType | undefined {
-  if (type === "apartment" || type === "house" || type === "land" || type === "all") {
+  if (
+    type === "apartment" ||
+    type === "house" ||
+    type === "land" ||
+    type === "commercial" ||
+    type === "parking" ||
+    type === "other" ||
+    type === "all"
+  ) {
     return type;
   }
   return undefined;
