@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminSession, writeAdminAuditLog } from "@/lib/admin-auth";
-import { isLeadStatus, leadStatusLabels } from "@/lib/crm";
+import {
+  contactQualificationStatusLabels,
+  contactRoleLabels,
+  deriveContactRole,
+  hasUsableContactMethod,
+  isContactQualificationStatus,
+  isContactRole,
+  isLeadStatus,
+  leadStatusLabels,
+} from "@/lib/crm";
 import {
   FieldErrors,
   getStringField,
@@ -8,7 +17,11 @@ import {
   isValidEmail,
 } from "@/lib/lead-validation";
 import { getSupabaseAdminClient } from "@/lib/supabase";
-import type { LeadStatus } from "@/types/crm";
+import type {
+  ContactQualificationStatus,
+  ContactRole,
+  LeadStatus,
+} from "@/types/crm";
 
 const requestTypes = ["Achat", "Vente", "Estimation", "Terrain", "Autre"] as const;
 
@@ -85,6 +98,10 @@ export async function POST(request: NextRequest) {
       message: data.message,
       status: "NEW",
       archived: false,
+      contact_role: deriveContactRole(data.requestType),
+      qualification_status: hasUsableContactMethod(data.email, data.phone) ? "TO_REVIEW" : "NO_CONTACT",
+      qualification_source: "AUTO",
+      active_prospect: hasUsableContactMethod(data.email, data.phone),
     })
     .select("*")
     .single();
@@ -116,6 +133,9 @@ export async function PATCH(request: NextRequest) {
     status?: LeadStatus;
     notes?: string;
     archived?: boolean;
+    contactRole?: ContactRole;
+    qualificationStatus?: ContactQualificationStatus;
+    activeProspect?: boolean;
   } | null;
 
   if (!payload?.id || !payload.table || !["contacts", "estimations"].includes(payload.table)) {
@@ -124,18 +144,78 @@ export async function PATCH(request: NextRequest) {
   if (payload.status && !isLeadStatus(payload.status)) {
     return NextResponse.json({ success: false, message: "Statut invalide." }, { status: 400 });
   }
+  const includesQualification =
+    "contactRole" in payload ||
+    "qualificationStatus" in payload ||
+    "activeProspect" in payload;
+  if (includesQualification && payload.table !== "contacts") {
+    return NextResponse.json({ success: false, message: "La qualification concerne uniquement les contacts." }, { status: 400 });
+  }
+  if ("contactRole" in payload && !isContactRole(payload.contactRole)) {
+    return NextResponse.json({ success: false, message: "Rôle commercial invalide." }, { status: 400 });
+  }
+  if ("qualificationStatus" in payload && !isContactQualificationStatus(payload.qualificationStatus)) {
+    return NextResponse.json({ success: false, message: "État de qualification invalide." }, { status: 400 });
+  }
+  if ("activeProspect" in payload && typeof payload.activeProspect !== "boolean") {
+    return NextResponse.json({ success: false, message: "État du prospect invalide." }, { status: 400 });
+  }
 
   const supabase = getSupabaseAdminClient();
   if (!supabase) {
     return NextResponse.json({ success: false, message: "Supabase serveur n'est pas configure." }, { status: 503 });
   }
 
-  const updates = {
+  const updates: Record<string, unknown> = {
     ...(payload.status ? { status: payload.status } : {}),
     ...(typeof payload.notes === "string" ? { notes: payload.notes } : {}),
     ...(typeof payload.archived === "boolean" ? { archived: payload.archived } : {}),
   };
-  const { error } = await supabase.from(payload.table).update(updates).eq("id", payload.id);
+
+  let qualificationAction: string | null = null;
+  if (includesQualification && payload.table === "contacts") {
+    const { data: currentContact, error: currentContactError } = await supabase
+      .from("contacts")
+      .select("contact_role,qualification_status,active_prospect")
+      .eq("id", payload.id)
+      .single();
+
+    if (currentContactError || !currentContact) {
+      console.error("[IMMO-DREAMS83] Contact qualification read failed", currentContactError?.message);
+      return NextResponse.json({ success: false, message: "Le contact n'a pas pu être relu." }, { status: 500 });
+    }
+
+    const nextRole = payload.contactRole ?? (currentContact.contact_role as ContactRole);
+    const nextQualification =
+      payload.qualificationStatus ??
+      (currentContact.qualification_status as ContactQualificationStatus);
+    const qualificationDisablesProspect = ["DUPLICATE", "NO_CONTACT", "INACTIVE"].includes(nextQualification);
+    const nextActiveProspect = qualificationDisablesProspect
+      ? false
+      : payload.activeProspect ?? Boolean(currentContact.active_prospect);
+
+    if (nextQualification === "QUALIFIED" && nextRole === "UNKNOWN") {
+      return NextResponse.json(
+        { success: false, message: "Choisissez Acquéreur, Vendeur, Mixte ou Autre avant de valider." },
+        { status: 400 }
+      );
+    }
+
+    updates.contact_role = nextRole;
+    updates.qualification_status = nextQualification;
+    updates.qualification_source = "MANUAL";
+    updates.active_prospect = nextActiveProspect;
+    updates.qualified_at = nextQualification === "QUALIFIED" ? new Date().toISOString() : null;
+    updates.qualified_by = nextQualification === "QUALIFIED" ? auth.session.user.id : null;
+    qualificationAction = `Qualification : ${contactRoleLabels[nextRole]} · ${contactQualificationStatusLabels[nextQualification]}`;
+  }
+
+  const { data: updatedLead, error } = await supabase
+    .from(payload.table)
+    .update(updates)
+    .eq("id", payload.id)
+    .select("*")
+    .single();
   if (error) {
     console.error("[IMMO-DREAMS83] Admin lead update failed", error.message);
     return NextResponse.json({ success: false, message: "La mise a jour a echoue." }, { status: 500 });
@@ -145,17 +225,25 @@ export async function PATCH(request: NextRequest) {
   await supabase.from("activities").insert({
     entity_type: payload.table === "contacts" ? "contact" : "estimation",
     entity_id: payload.id,
-    action: payload.archived
+    action: qualificationAction ??
+      (payload.archived
       ? "Prospect archive"
       : payload.status
         ? `Statut change : ${leadStatusLabels[payload.status]}`
-        : "Notes mises a jour",
+        : "Notes mises a jour"),
     user_name: actorName,
   });
   await writeAdminAuditLog(auth.session, "lead.update", payload.table, payload.id, {
     status: payload.status,
     archived: payload.archived,
+    contactRole: payload.contactRole,
+    qualificationStatus: payload.qualificationStatus,
+    activeProspect: payload.activeProspect,
   });
 
-  return NextResponse.json({ success: true, message: "Mise a jour enregistree." });
+  return NextResponse.json({
+    success: true,
+    message: qualificationAction ? "Qualification enregistrée." : "Mise a jour enregistree.",
+    lead: updatedLead,
+  });
 }

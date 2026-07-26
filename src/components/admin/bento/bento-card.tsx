@@ -7,12 +7,12 @@ import { bentoSpanClasses, type BentoSpan } from "./bento-grid";
 export type BentoVariant = "default" | "highlight" | "success" | "warning" | "danger" | "muted";
 
 const variantClasses: Record<BentoVariant, string> = {
-  default: "border-orange-100 bg-white text-[#111111]",
-  highlight: "border-orange-200 bg-orange-50/90 text-[#111111]",
+  default: "border-[var(--bento-card-border)] bg-[var(--bento-card-background)] text-[var(--riviera-ink)]",
+  highlight: "border-[#e8d4b7] bg-[#fff5e9] text-[var(--riviera-ink)]",
   success: "border-emerald-100 bg-emerald-50 text-emerald-950",
   warning: "border-yellow-200 bg-yellow-50 text-yellow-950",
   danger: "border-red-100 bg-red-50 text-red-950",
-  muted: "border-orange-100 bg-[#fffaf3] text-[#111111]",
+  muted: "border-[var(--bento-card-border)] bg-[var(--bento-card-muted-background)] text-[var(--riviera-ink)]",
 };
 
 export function BentoCard({
@@ -20,6 +20,7 @@ export function BentoCard({
   description,
   eyebrow,
   action,
+  id,
   children,
   className,
   contentClassName,
@@ -30,6 +31,7 @@ export function BentoCard({
   description?: ReactNode;
   eyebrow?: string;
   action?: ReactNode;
+  id?: string;
   children: ReactNode;
   className?: string;
   contentClassName?: string;
@@ -38,28 +40,28 @@ export function BentoCard({
 }) {
   return (
     <Card
+      id={id}
       className={cn(
         bentoSpanClasses[span],
         "min-w-0 rounded-(--bento-card-radius) border shadow-(--bento-card-shadow)",
-        "transition-shadow duration-200 hover:shadow-sm motion-reduce:transition-none",
         variantClasses[variant],
         className
       )}
     >
       <CardHeader className="gap-2 px-(--bento-card-padding)">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             {eyebrow ? (
-              <Badge className="mb-2 w-fit border-0 bg-white text-orange-700">{eyebrow}</Badge>
+              <Badge className="mb-2 w-fit border-0 bg-white text-orange-800">{eyebrow}</Badge>
             ) : null}
-            <CardTitle className="text-lg font-black leading-tight text-inherit sm:text-xl">
+            <CardTitle className="text-base font-bold leading-snug text-inherit sm:text-lg">
               {title}
             </CardTitle>
             {description ? (
-              <p className="mt-2 text-sm leading-6 text-gray-600">{description}</p>
+              <p className="mt-1.5 text-sm leading-5 text-gray-600">{description}</p>
             ) : null}
           </div>
-          {action ? <div className="shrink-0">{action}</div> : null}
+          {action ? <div className="self-end sm:shrink-0">{action}</div> : null}
         </div>
       </CardHeader>
       <CardContent className={cn("grid gap-4 px-(--bento-card-padding)", contentClassName)}>

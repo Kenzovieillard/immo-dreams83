@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Menu } from "lucide-react";
+import { Menu } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Sheet,
@@ -16,41 +16,106 @@ import {
 import { cn } from "@/lib/utils";
 import { navLinks } from "./site-config";
 
+const headerLinks = [
+  { href: "/a-vendre", label: "Biens" },
+  { href: "/contact", label: "Vendre" },
+  { href: "/estimation", label: "Estimer" },
+  { href: "/agence", label: "L'agence" },
+];
+
+const imageHeroRoutes = new Set([
+  "/a-vendre",
+  "/biens",
+  "/agence",
+  "/estimation",
+  "/contact",
+]);
+
+type RivieraHeroThemeEvent = CustomEvent<{
+  dark?: boolean;
+  complete?: boolean;
+}>;
+
 export function Navbar() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [homeHeroDark, setHomeHeroDark] = useState(false);
+  const [homeHeroComplete, setHomeHeroComplete] = useState(false);
+  const isHome = pathname === "/";
+  const overlaysImageHero = imageHeroRoutes.has(pathname);
+  const isPropertyDetail = pathname.startsWith("/biens/");
+  const isLegalRoute =
+    pathname === "/mentions-legales" || pathname.startsWith("/legal/");
+  const isOverlayHeader = isHome || overlaysImageHero;
+  const usesDarkHeader =
+    overlaysImageHero ||
+    isPropertyDetail ||
+    isLegalRoute ||
+    (isHome && (homeHeroDark || homeHeroComplete));
+  const showsSolidDarkHeader =
+    (!isOverlayHeader && usesDarkHeader) || (isHome && homeHeroComplete);
+
+  useEffect(() => {
+    if (!isHome) return;
+
+    const syncTheme = (event: Event) => {
+      const detail = (event as RivieraHeroThemeEvent).detail;
+      setHomeHeroDark(Boolean(detail?.dark));
+      setHomeHeroComplete(Boolean(detail?.complete));
+    };
+
+    window.addEventListener("riviera-hero-theme", syncTheme);
+    return () => window.removeEventListener("riviera-hero-theme", syncTheme);
+  }, [isHome]);
 
   const closeMobileMenu = () => setMobileMenuOpen(false);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-orange-100/80 bg-white/95 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:h-20 sm:px-6 lg:px-8">
-        <Link href="/" className="flex items-center gap-3" aria-label="Accueil IMMO-DREAMS83">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-[#111111] text-orange-400 shadow-sm">
-            <Home className="size-5" aria-hidden="true" />
-          </span>
-          <span className="leading-tight">
-            <span className="block text-sm font-black tracking-[0.08em] text-[#111111] sm:text-base">
-              IMMO-DREAMS83
-            </span>
-            <span className="block text-[11px] font-medium uppercase tracking-[0.18em] text-orange-600 sm:text-xs">
-              Solliès-Pont
-            </span>
-          </span>
+    <header
+      className={cn(
+        "top-0 z-50 w-full transition-colors duration-300",
+        isOverlayHeader ? "fixed inset-x-0" : "sticky",
+        showsSolidDarkHeader
+          ? "border-b border-white/10 bg-[#111111]/92 text-white backdrop-blur-md"
+          : usesDarkHeader
+            ? "border-b border-transparent bg-transparent text-white"
+            : isOverlayHeader
+              ? "border-b border-transparent bg-transparent text-[#111111]"
+              : "border-b border-orange-100 bg-white text-[#111111]",
+        isHome && !homeHeroComplete && "backdrop-blur-none"
+      )}
+    >
+      <div className="mx-auto grid h-[4.5rem] max-w-[90rem] grid-cols-[1fr_auto] items-center px-5 sm:h-[5.5rem] sm:px-8 xl:grid-cols-[16rem_1fr_16rem] xl:px-12">
+        <Link
+          href="/"
+          className="w-fit text-sm font-black leading-none sm:text-lg"
+          aria-label="Accueil IMMO DREAMS"
+        >
+          IMMO DREAMS
         </Link>
 
-        <nav className="hidden items-center gap-1 xl:flex" aria-label="Navigation principale">
-          {navLinks.map((link) => {
+        <nav
+          className="hidden items-center justify-center gap-8 xl:flex"
+          aria-label="Navigation principale"
+        >
+          {headerLinks.map((link) => {
+            const baseHref = link.href.split("#")[0];
             const active =
-              link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
+              baseHref === "/a-vendre"
+                ? pathname === "/a-vendre" || pathname.startsWith("/biens")
+                : pathname === baseHref;
 
             return (
               <Link
-                key={link.href}
+                key={`${link.href}-${link.label}`}
                 href={link.href}
+                aria-current={active ? "page" : undefined}
                 className={cn(
-                  "rounded-lg px-3 py-2 text-sm font-semibold text-gray-700 transition hover:bg-orange-50 hover:text-orange-700",
-                  active && "bg-orange-50 text-orange-700"
+                  "text-xs font-bold uppercase transition",
+                  usesDarkHeader
+                    ? "text-white/72 hover:text-white"
+                    : "text-[#111111]/72 hover:text-[#111111]",
+                  active && (usesDarkHeader ? "text-white" : "text-[#111111]")
                 )}
               >
                 {link.label}
@@ -59,15 +124,17 @@ export function Navbar() {
           })}
         </nav>
 
-        <div className="hidden items-center gap-3 xl:flex">
+        <div className="hidden justify-end xl:flex">
           <Link
-            href="/estimation"
+            href="/contact"
             className={buttonVariants({
-              className:
-                "h-10 bg-orange-500 px-4 text-white shadow-sm shadow-orange-200 hover:bg-orange-600",
+              variant: usesDarkHeader ? "outline" : undefined,
+              className: usesDarkHeader
+                ? "h-12 w-40 border-white/30 bg-white/10 text-[0.7rem] font-bold uppercase text-white backdrop-blur hover:bg-white hover:text-[#111111]"
+                : "h-12 w-40 !bg-[#111111] text-[0.7rem] font-bold uppercase !text-white hover:!bg-orange-600",
             })}
           >
-            Estimer mon bien
+            Nous contacter
           </Link>
         </div>
 
@@ -77,19 +144,26 @@ export function Navbar() {
               <Button
                 variant="outline"
                 size="icon-lg"
-                className="border-orange-200 text-gray-900 xl:hidden"
+                className={cn(
+                  "justify-self-end xl:hidden",
+                  usesDarkHeader
+                    ? "border-white/30 bg-white/10 text-white backdrop-blur"
+                    : "border-[#111111]/20 bg-white/40 text-[#111111] backdrop-blur"
+                )}
                 aria-label="Ouvrir le menu"
               />
             }
           >
             <Menu className="size-5" aria-hidden="true" />
           </SheetTrigger>
-          <SheetContent className="w-[min(92vw,24rem)] bg-white" side="right">
-            <SheetHeader>
-              <SheetTitle>IMMO-DREAMS83</SheetTitle>
+          <SheetContent className="w-[min(92vw,24rem)] bg-[#fbf9f4]" side="right">
+            <SheetHeader className="border-b border-orange-100 pb-5">
+              <SheetTitle className="text-xl font-black text-[#111111]">
+                IMMO DREAMS
+              </SheetTitle>
               <SheetDescription>Agence immobilière à Solliès-Pont</SheetDescription>
             </SheetHeader>
-            <div className="grid gap-2 px-4">
+            <div className="grid gap-1 px-4 py-3">
               {navLinks.map((link) => (
                 <Link
                   key={link.href}
@@ -101,15 +175,15 @@ export function Navbar() {
                 </Link>
               ))}
             </div>
-            <div className="p-4">
+            <div className="mt-auto p-4">
               <Link
-                href="/estimation"
+                href="/contact"
                 onClick={closeMobileMenu}
                 className={buttonVariants({
-                  className: "h-11 w-full bg-orange-500 text-white hover:bg-orange-600",
+                  className: "h-12 w-full bg-orange-500 text-white hover:bg-orange-600",
                 })}
               >
-                Estimer mon bien
+                Nous contacter
               </Link>
             </div>
           </SheetContent>

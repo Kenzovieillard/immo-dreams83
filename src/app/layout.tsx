@@ -1,10 +1,7 @@
 import type { Metadata, Viewport } from "next";
-import { Footer } from "@/components/site/footer";
 import { MobileViewportGuard } from "@/components/site/mobile-viewport-guard";
-import { Navbar } from "@/components/site/navbar";
 import { siteUrl } from "@/components/site/site-config";
-import { StructuredData } from "@/components/site/structured-data";
-import { agencySchema } from "@/lib/schema";
+import { SiteChrome } from "@/components/site/site-chrome";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -30,15 +27,19 @@ export const metadata: Metadata = {
     locale: "fr_FR",
     url: siteUrl,
     siteName: "IMMO-DREAMS83",
+    images: [{ url: "/images/riviera/interior-hero.jpg", width: 1600, height: 1067, alt: "Intérieur d'une villa contemporaine dans le Var" }],
   },
-  twitter: { card: "summary_large_image", title: "IMMO-DREAMS83", description: "L'immobilier local dans le Var." },
+  twitter: {
+    card: "summary_large_image",
+    title: "IMMO-DREAMS83",
+    description: "L'immobilier local dans le Var.",
+    images: ["/images/riviera/interior-hero.jpg"],
+  },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   viewportFit: "cover",
   themeColor: "#f97316",
 };
@@ -48,10 +49,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="fr">
       <body className="min-h-dvh bg-background">
         <MobileViewportGuard />
-        <StructuredData data={agencySchema} />
-        <Navbar />
-        <main>{children}</main>
-        <Footer />
+        <SiteChrome>{children}</SiteChrome>
       </body>
     </html>
   );

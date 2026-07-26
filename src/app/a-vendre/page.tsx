@@ -1,15 +1,16 @@
 import type { Metadata } from "next";
 import { PropertyListingBrowser } from "@/components/site/property-listing-browser";
-import { SectionTitle } from "@/components/site/section-title";
+import { RivieraCtaBand } from "@/components/site/riviera-cta-band";
+import { RivieraPageHero } from "@/components/site/riviera-page-hero";
 import { PropertyType } from "@/data/properties";
 import { getAvailablePublicProperties } from "@/lib/public-properties";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Biens à vendre dans le Var | IMMO-DREAMS83",
+  title: "Biens à vendre dans le Var | IMMO DREAMS",
   description:
-    "Découvrez les maisons à vendre dans le Var, appartements à vendre à Toulon et terrains à vendre autour de Solliès-Pont avec IMMO-DREAMS83.",
+    "Découvrez les maisons, appartements et terrains à vendre autour de Solliès-Pont avec IMMO DREAMS.",
 };
 
 type AVendrePageProps = {
@@ -42,18 +43,14 @@ export default async function AVendrePage({ searchParams }: AVendrePageProps) {
 
   return (
     <>
-      <section className="bg-orange-50 px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
-        <div className="mx-auto max-w-7xl">
-          <SectionTitle
-            eyebrow="Nos biens à vendre"
-            title="Biens disponibles dans le Var"
-            description="Parcourez notre sélection de maisons, appartements et terrains, avec des filtres simples pour affiner votre recherche immobilière."
-          />
-        </div>
-      </section>
+      <RivieraPageHero
+        eyebrow="Nos biens à vendre"
+        title="Biens disponibles dans le Var"
+        description="Maisons, appartements et terrains sélectionnés localement, avec une lecture simple des informations essentielles."
+      />
 
-      <section className="px-4 py-10 sm:px-6 sm:py-12 lg:px-8">
-        <div className="mx-auto max-w-7xl">
+      <section className="bg-[#fbf9f4] px-5 pb-16 sm:px-8 sm:pb-24">
+        <div className="mx-auto max-w-[80rem]">
           <PropertyListingBrowser
             properties={properties}
             initialFilters={{
@@ -63,6 +60,25 @@ export default async function AVendrePage({ searchParams }: AVendrePageProps) {
               surface: params.surface || undefined,
             }}
           />
+        </div>
+      </section>
+
+      <RivieraCtaBand />
+
+      <section className="bg-[#fbf9f4] px-5 pb-16 sm:px-8 sm:pb-24">
+        <div className="mx-auto grid max-w-[80rem] gap-7 border-t-2 border-orange-500 pt-10 lg:grid-cols-2 lg:gap-20">
+          <h2 className="max-w-[32rem] text-3xl font-black leading-tight text-[#111111] sm:text-4xl">
+            Une sélection exigeante, un accompagnement local.
+          </h2>
+          <div>
+            <p className="max-w-[34rem] text-base leading-7 text-gray-600">
+              Présentation claire, diagnostics visibles et échanges directs avec
+              l’agence pour comprendre chaque bien avant de se déplacer.
+            </p>
+            <p className="mt-7 text-xs font-bold uppercase text-[#111111]">
+              Solliès-Pont · Toulon · Hyères · Carqueiranne
+            </p>
+          </div>
         </div>
       </section>
     </>

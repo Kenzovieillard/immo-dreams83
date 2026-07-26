@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 type EstimationFormState = {
   fullName: string;
@@ -47,7 +48,7 @@ const initialFormState: EstimationFormState = {
   message: "",
 };
 
-export function EstimationForm() {
+export function EstimationForm({ embedded = false }: { embedded?: boolean }) {
   const [form, setForm] = useState<EstimationFormState>(initialFormState);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<ApiResult | null>(null);
@@ -98,7 +99,11 @@ export function EstimationForm() {
   return (
     <form
       onSubmit={handleSubmit}
-      className="grid gap-5 rounded-xl border border-orange-100 bg-white p-4 shadow-xl shadow-orange-100/60 sm:p-6"
+      className={cn(
+        "grid gap-5 bg-white",
+        !embedded &&
+          "rounded-lg border border-orange-100 p-4 shadow-xl shadow-orange-100/60 sm:p-6"
+      )}
     >
       {result ? (
         <div
@@ -127,6 +132,7 @@ export function EstimationForm() {
           <Input
             id="estimate-fullName"
             name="fullName"
+            className="h-12 border-0 bg-orange-50"
             required
             disabled={disabled}
             value={form.fullName}
@@ -143,6 +149,7 @@ export function EstimationForm() {
             id="estimate-email"
             name="email"
             type="email"
+            className="h-12 border-0 bg-orange-50"
             required
             disabled={disabled}
             value={form.email}
@@ -161,6 +168,7 @@ export function EstimationForm() {
           <Input
             id="estimate-phone"
             name="phone"
+            className="h-12 border-0 bg-orange-50"
             required
             disabled={disabled}
             value={form.phone}
@@ -178,7 +186,7 @@ export function EstimationForm() {
             value={form.propertyType}
             onValueChange={(value) => updateField("propertyType", value ?? "")}
           >
-            <SelectTrigger className="h-12 w-full sm:h-10" disabled={disabled}>
+            <SelectTrigger className="h-12 w-full border-0 bg-orange-50" disabled={disabled}>
               <SelectValue placeholder="Sélectionner" />
             </SelectTrigger>
             <SelectContent>
@@ -203,6 +211,7 @@ export function EstimationForm() {
           <Input
             id="estimate-city"
             name="city"
+            className="h-12 border-0 bg-orange-50"
             required
             disabled={disabled}
             value={form.city}
@@ -218,6 +227,7 @@ export function EstimationForm() {
           <Input
             id="estimate-postalCode"
             name="postalCode"
+            className="h-12 border-0 bg-orange-50"
             inputMode="numeric"
             disabled={disabled}
             value={form.postalCode}
@@ -233,6 +243,7 @@ export function EstimationForm() {
           <Input
             id="estimate-surface"
             name="surface"
+            className="h-12 border-0 bg-orange-50"
             required
             inputMode="numeric"
             disabled={disabled}
@@ -249,6 +260,7 @@ export function EstimationForm() {
           <Input
             id="estimate-rooms"
             name="rooms"
+            className="h-12 border-0 bg-orange-50"
             inputMode="numeric"
             disabled={disabled}
             value={form.rooms}
@@ -261,6 +273,7 @@ export function EstimationForm() {
           <Input
             id="estimate-estimatedPrice"
             name="estimatedPrice"
+            className="h-12 border-0 bg-orange-50"
             inputMode="numeric"
             disabled={disabled}
             value={form.estimatedPrice}
@@ -275,6 +288,7 @@ export function EstimationForm() {
         <Textarea
           id="estimate-message"
           name="message"
+          className="min-h-32 border-0 bg-orange-50"
           disabled={disabled}
           value={form.message}
           onChange={(event) => updateField("message", event.target.value)}

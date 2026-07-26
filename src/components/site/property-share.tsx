@@ -4,12 +4,11 @@ import { useState } from "react";
 import { Check, Copy, Mail, MessageCircle } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 
-export function PropertyShare({ title }: { title: string }) {
+export function PropertyShare({ title, url }: { title: string; url: string }) {
   const [copied, setCopied] = useState(false);
-  const url = typeof window === "undefined" ? "" : window.location.href;
 
   async function copyUrl() {
-    await navigator.clipboard.writeText(window.location.href);
+    await navigator.clipboard.writeText(url);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1800);
   }

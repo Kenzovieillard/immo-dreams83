@@ -26,13 +26,13 @@ export function GoogleMapEmbed({
   return (
     <section
       className={cn(
-        "overflow-hidden rounded-2xl border border-orange-100 bg-white shadow-xl shadow-orange-100/60",
+        "overflow-hidden rounded-lg border border-orange-100 bg-white shadow-sm",
         className
       )}
     >
       <div className="flex flex-col gap-3 border-b border-orange-100 bg-orange-50/70 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
         <div className="flex items-start gap-3">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#111111] text-orange-300 shadow-sm">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-[#111111] text-orange-300 shadow-sm">
             <MapPin className="size-5" aria-hidden="true" />
           </span>
           <div>
@@ -62,7 +62,7 @@ export function GoogleMapEmbed({
           src={mapUrl}
           loading="lazy"
           referrerPolicy="no-referrer-when-downgrade"
-          className="h-full w-full rounded-xl border border-orange-100 bg-white"
+          className="h-full w-full rounded-md border border-orange-100 bg-white"
         />
       </div>
     </section>

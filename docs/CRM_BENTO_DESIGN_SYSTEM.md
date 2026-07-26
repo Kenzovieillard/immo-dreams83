@@ -67,6 +67,14 @@ Ne pas multiplier les couleurs par carte. La palette reste celle d'IMMO-DREAMS83
 
 Tokens principaux dans `src/app/globals.css` :
 
+- `--riviera-ink`
+- `--riviera-white`
+- `--riviera-sand`
+- `--riviera-sand-strong`
+- `--riviera-orange`
+- `--riviera-orange-deep`
+- `--riviera-gold`
+- `--riviera-mist`
 - `--bento-gap`
 - `--bento-card-radius`
 - `--bento-card-padding`
@@ -111,6 +119,17 @@ Sur mobile :
 - ne pas tronquer les textes importants ;
 - garder les boutons accessibles au pouce ;
 - ne jamais creer de scroll horizontal global.
+
+## Navigation Mobile A Une Main
+
+- le CRM masque la navigation publique du site ;
+- le dock inferieur expose Accueil, Contacts, Biens et Pipeline ;
+- Pipeline reste dans la zone droite, plus facile a atteindre avec le pouce droit ;
+- le bouton Plus ouvre Estimations, Anciennes demandes, Activites et Statistiques ;
+- les actions contextuelles Nouveau, Nouveau bien, A traiter et Actualiser restent au-dessus du dock ;
+- une action contextuelle disparait quand son formulaire est ouvert pour ne pas masquer les champs ;
+- chaque cible principale mesure au moins 48 px, et les boutons du dock mesurent 52 px ;
+- la zone basse tient compte de `env(safe-area-inset-bottom)`.
 
 ## Accessibilite
 

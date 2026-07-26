@@ -1,52 +1,58 @@
 import type { Metadata } from "next";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PropertyCard } from "@/components/site/property-card";
-import { SectionTitle } from "@/components/site/section-title";
-import {
-  PropertyType,
-  propertyTypeLabels,
-} from "@/data/properties";
+import { RivieraCtaBand } from "@/components/site/riviera-cta-band";
+import { RivieraPageHero } from "@/components/site/riviera-page-hero";
+import { PropertyType, propertyTypeLabels } from "@/data/properties";
 import { getAvailablePublicProperties } from "@/lib/public-properties";
 
-const categories: PropertyType[] = ["apartment", "house", "land", "commercial", "parking", "other"];
+const categories: PropertyType[] = [
+  "apartment",
+  "house",
+  "land",
+  "commercial",
+  "parking",
+  "other",
+];
+
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Biens immobiliers Var | IMMO-DREAMS83",
+  title: "Biens immobiliers dans le Var | IMMO DREAMS",
   description:
-    "Catalogue IMMO-DREAMS83 : appartements, maisons et terrains à vendre dans le Var, à Solliès-Pont, Toulon, Hyères, Cuers et Carqueiranne.",
+    "Explorez le catalogue IMMO DREAMS : appartements, maisons, terrains et locaux à vendre dans le Var.",
 };
+
+function getCategoryLabel(category: PropertyType) {
+  if (category === "apartment") return "Appartements";
+  if (category === "commercial") return "Locaux";
+  if (category === "parking") return "Stationnements";
+  if (category === "other") return "Autres";
+  return `${propertyTypeLabels[category]}s`;
+}
 
 export default async function BiensPage() {
   const availableProperties = await getAvailablePublicProperties();
 
   return (
     <>
-      <section className="bg-orange-50 px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
-        <div className="mx-auto max-w-7xl">
-          <SectionTitle
-            eyebrow="Biens"
-            title="Explorer notre sélection par catégorie"
-            description="Un catalogue clair pour distinguer les appartements, les maisons et les terrains disponibles dans le Var."
-          />
-        </div>
-      </section>
+      <RivieraPageHero
+        eyebrow="Catalogue"
+        title="Explorer les biens par catégorie"
+        description="Un accès direct aux appartements, maisons, terrains et autres opportunités disponibles dans le Var."
+      />
 
-      <section className="px-4 py-10 sm:px-6 sm:py-12 lg:px-8">
-        <div className="mx-auto max-w-7xl">
-          <Tabs defaultValue="apartment" className="gap-8">
-            <TabsList className="h-auto w-full justify-start overflow-x-auto bg-orange-50 p-1 md:w-fit">
+      <section className="bg-[#fbf9f4] px-5 py-14 sm:px-8 sm:py-20">
+        <div className="mx-auto max-w-[80rem]">
+          <Tabs defaultValue="apartment" className="gap-9">
+            <TabsList className="no-scrollbar h-auto w-full justify-start overflow-x-auto rounded-lg bg-white p-1 shadow-sm ring-1 ring-orange-100">
               {categories.map((category) => (
-                <TabsTrigger key={category} value={category} className="h-11 px-5 sm:h-10">
-                  {category === "apartment"
-                    ? "Appartements"
-                    : category === "commercial"
-                      ? "Locaux commerciaux"
-                    : category === "parking"
-                      ? "Stationnements"
-                    : category === "other"
-                      ? "Autres biens"
-                    : `${propertyTypeLabels[category]}s`}
+                <TabsTrigger
+                  key={category}
+                  value={category}
+                  className="h-11 shrink-0 px-5 text-sm"
+                >
+                  {getCategoryLabel(category)}
                 </TabsTrigger>
               ))}
             </TabsList>
@@ -59,18 +65,19 @@ export default async function BiensPage() {
               return (
                 <TabsContent key={category} value={category}>
                   {categoryProperties.length > 0 ? (
-                    <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
                       {categoryProperties.map((property) => (
                         <PropertyCard key={property.id} property={property} />
                       ))}
                     </div>
                   ) : (
-                    <div className="rounded-xl border border-dashed border-orange-200 bg-orange-50 p-10 text-center">
+                    <div className="rounded-lg border border-dashed border-orange-200 bg-white p-10 text-center">
                       <h2 className="text-xl font-black text-[#111111]">
                         Aucun bien disponible dans cette catégorie
                       </h2>
                       <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-gray-600">
-                        Contactez l&apos;agence pour être informé des prochaines nouveautés.
+                        Contactez l’agence pour être informé des prochaines
+                        nouveautés.
                       </p>
                     </div>
                   )}
@@ -80,6 +87,8 @@ export default async function BiensPage() {
           </Tabs>
         </div>
       </section>
+
+      <RivieraCtaBand />
     </>
   );
 }

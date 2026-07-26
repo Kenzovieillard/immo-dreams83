@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminSession, writeAdminAuditLog } from "@/lib/admin-auth";
 import {
+  contactRoleLabels,
+  isContactQualificationStatus,
+  isContactRole,
   isLeadPriority,
   isLeadStatus,
   leadPriorityLabels,
@@ -8,6 +11,8 @@ import {
 } from "@/lib/crm";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import type {
+  ContactQualificationStatus,
+  ContactRole,
   LeadPriority,
   LeadStatus,
   TaskEmailReminderStatus,
@@ -53,6 +58,18 @@ type ContactRow = {
   phone: string | null;
   city: string | null;
   request_type: string | null;
+};
+
+type QualifiedContactRow = ContactRow & {
+  message: string | null;
+  notes: string | null;
+  archived: boolean;
+  status: string | null;
+  contact_source: string | null;
+  contact_role: string | null;
+  qualification_status: string | null;
+  active_prospect: boolean | null;
+  pipeline_lead_id: string | null;
 };
 
 type PropertyRow = {
@@ -102,6 +119,14 @@ function safeStatus(value: unknown): LeadStatus {
 
 function safePriority(value: unknown): LeadPriority {
   return isLeadPriority(value) ? value : "normal";
+}
+
+function safeContactRole(value: unknown): ContactRole {
+  return isContactRole(value) ? value : "UNKNOWN";
+}
+
+function safeContactQualificationStatus(value: unknown): ContactQualificationStatus {
+  return isContactQualificationStatus(value) ? value : "TO_REVIEW";
 }
 
 function safeRecurrenceRule(value: unknown): TaskRecurrenceRule {
@@ -409,34 +434,306 @@ async function createPipelineTask(payload: JsonRecord, actorId: string) {
   return { task: result.data as TaskRow, response: null };
 }
 
+function getLeadSourceCode(contactSource: string | null) {
+  if (contactSource === "PHONE" || contactSource === "AGENCY" || contactSource === "EMAIL") {
+    return contactSource;
+  }
+  if (contactSource?.startsWith("LESTY") || contactSource === "LEGACY_IMPORT") {
+    return "LEGACY_IMPORT";
+  }
+  return "CONTACT_FORM";
+}
+
+function getProjectType(role: ContactRole) {
+  if (role === "BUYER") return "buyer";
+  if (role === "SELLER") return "seller";
+  if (role === "BOTH") return "mixed";
+  return "general";
+}
+
+async function createLeadFromContact(payload: JsonRecord, actorId: string) {
+  const contactId = getNullableString(payload.contactId);
+  if (!contactId) {
+    return {
+      response: NextResponse.json({ success: false, message: "Contact introuvable." }, { status: 400 }),
+    };
+  }
+
+  const supabase = getSupabaseAdminClient();
+  if (!supabase) {
+    return {
+      response: NextResponse.json({ success: false, message: "Supabase serveur n'est pas configure." }, { status: 503 }),
+    };
+  }
+
+  const { data: rawContact, error: contactError } = await supabase
+    .from("contacts")
+    .select([
+      "id",
+      "name",
+      "email",
+      "phone",
+      "city",
+      "request_type",
+      "message",
+      "notes",
+      "archived",
+      "status",
+      "contact_source",
+      "contact_role",
+      "qualification_status",
+      "active_prospect",
+      "pipeline_lead_id",
+    ].join(","))
+    .eq("id", contactId)
+    .single();
+
+  if (contactError || !rawContact) {
+    console.error("[IMMO-DREAMS83] Contact-to-pipeline read failed", contactError?.message);
+    return {
+      response: NextResponse.json({ success: false, message: "Le contact n'a pas pu être relu." }, { status: 500 }),
+    };
+  }
+
+  const contact = rawContact as unknown as QualifiedContactRow;
+  const role = safeContactRole(contact.contact_role);
+  const qualificationStatus = safeContactQualificationStatus(contact.qualification_status);
+
+  if (contact.archived || qualificationStatus !== "QUALIFIED" || !contact.active_prospect || role === "UNKNOWN") {
+    return {
+      response: NextResponse.json(
+        {
+          success: false,
+          message: "Le contact doit être qualifié, actif et associé à un rôle commercial avant sa création dans le pipeline.",
+        },
+        { status: 409 }
+      ),
+    };
+  }
+
+  if (contact.pipeline_lead_id) {
+    return {
+      leadId: contact.pipeline_lead_id,
+      contactName: contact.name,
+      role,
+      created: false,
+      task: null,
+      response: null,
+    };
+  }
+
+  const { data: existingLead, error: existingLeadError } = await supabase
+    .from("leads")
+    .select("id")
+    .eq("contact_id", contactId)
+    .eq("archived", false)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existingLeadError) {
+    console.error("[IMMO-DREAMS83] Existing contact lead lookup failed", existingLeadError.message);
+    return {
+      response: NextResponse.json({ success: false, message: "Le pipeline n'a pas pu être vérifié." }, { status: 500 }),
+    };
+  }
+
+  if (existingLead?.id) {
+    const { error: existingLinkError } = await supabase
+      .from("contacts")
+      .update({ pipeline_lead_id: existingLead.id })
+      .eq("id", contactId);
+    if (existingLinkError) {
+      console.error("[IMMO-DREAMS83] Existing contact lead link failed", existingLinkError.message);
+      return {
+        response: NextResponse.json(
+          { success: false, message: "Le prospect existe, mais le contact n'a pas pu être relié." },
+          { status: 500 }
+        ),
+      };
+    }
+
+    return {
+      leadId: existingLead.id,
+      contactName: contact.name,
+      role,
+      created: false,
+      task: null,
+      response: null,
+    };
+  }
+
+  const { data: createdLead, error: createError } = await supabase
+    .from("leads")
+    .insert({
+      contact_id: contactId,
+      source_table: "contacts",
+      source_id: contactId,
+      lead_type: getProjectType(role),
+      source: contact.contact_source ?? "crm_contact",
+      source_code: getLeadSourceCode(contact.contact_source),
+      title: `${contact.request_type ?? contactRoleLabels[role]} · ${contact.name}`,
+      request_type: contact.request_type ?? contactRoleLabels[role],
+      project_type: getProjectType(role),
+      city: contact.city,
+      priority: "normal",
+      assigned_to: actorId,
+      status: "NEW",
+      notes: contact.notes ?? contact.message,
+      archived: false,
+      dedupe_status: "READY",
+      source_payload: {
+        qualificationRole: role,
+        qualificationStatus,
+        createdFrom: "contact-qualification",
+      },
+    })
+    .select("id")
+    .single();
+
+  if (createError || !createdLead) {
+    console.error("[IMMO-DREAMS83] Contact-to-pipeline creation failed", createError?.message);
+    return {
+      response: NextResponse.json({ success: false, message: "Le prospect n'a pas pu être créé." }, { status: 500 }),
+    };
+  }
+
+  const { data: linkedContact, error: linkError } = await supabase
+    .from("contacts")
+    .update({ pipeline_lead_id: createdLead.id })
+    .eq("id", contactId)
+    .is("pipeline_lead_id", null)
+    .select("pipeline_lead_id")
+    .maybeSingle();
+
+  if (linkError) {
+    console.error("[IMMO-DREAMS83] Contact-to-pipeline link failed", linkError.message);
+    await supabase.from("leads").delete().eq("id", createdLead.id);
+    return {
+      response: NextResponse.json({ success: false, message: "Le lien avec le pipeline n'a pas pu être enregistré." }, { status: 500 }),
+    };
+  }
+
+  if (!linkedContact?.pipeline_lead_id) {
+    const { data: concurrentContact } = await supabase
+      .from("contacts")
+      .select("pipeline_lead_id")
+      .eq("id", contactId)
+      .single();
+    await supabase.from("leads").delete().eq("id", createdLead.id);
+
+    if (concurrentContact?.pipeline_lead_id) {
+      return {
+        leadId: concurrentContact.pipeline_lead_id,
+        contactName: contact.name,
+        role,
+        created: false,
+        task: null,
+        response: null,
+      };
+    }
+
+    return {
+      response: NextResponse.json({ success: false, message: "Le contact a changé pendant la création. Réessayez." }, { status: 409 }),
+    };
+  }
+
+  const dueAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  const taskResult = await createPipelineTask(
+    {
+      leadId: createdLead.id,
+      title: `Première relance · ${contact.name}`,
+      description: `Prospect créé depuis un contact qualifié (${contactRoleLabels[role]}).`,
+      dueAt,
+      assignedTo: actorId,
+      priority: "normal",
+      taskType: "CALL",
+      recurrenceRule: "NONE",
+      reminderChannel: "NONE",
+    },
+    actorId
+  );
+
+  return {
+    leadId: createdLead.id,
+    contactName: contact.name,
+    role,
+    created: true,
+    task: taskResult.task ?? null,
+    taskWarning: taskResult.response ? "Le prospect est créé, mais le rappel doit être ajouté manuellement." : null,
+    response: null,
+  };
+}
+
 export async function POST(request: NextRequest) {
   const auth = await requireAdminSession("lead.write");
   if (auth.response) return auth.response;
 
   const payload = (await request.json().catch(() => null)) as JsonRecord | null;
-  if (!payload || payload.action !== "create-task") {
+  if (!payload?.action) {
     return NextResponse.json({ success: false, message: "Action pipeline invalide." }, { status: 400 });
   }
 
-  const { task, response } = await createPipelineTask(payload, auth.session.user.id);
-  if (response) return response;
+  if (payload.action === "create-lead-from-contact") {
+    const result = await createLeadFromContact(payload, auth.session.user.id);
+    if (result.response) return result.response;
 
-  const actorName = auth.session.profile.full_name ?? auth.session.user.email;
-  const supabase = getSupabaseAdminClient();
-  await supabase?.from("activities").insert({
-    entity_type: "lead",
-    entity_id: task?.lead_id ?? task?.id,
-    action: `Rappel cree : ${task?.title}`,
-    user_name: actorName,
-  });
-  await writeAdminAuditLog(auth.session, "pipeline.task.create", "task", task?.id ?? null, {
-    leadId: task?.lead_id,
-    priority: task?.priority,
-    recurrenceRule: task?.recurrence_rule ?? "NONE",
-    reminderChannel: task?.reminder_channel ?? "NONE",
-  });
+    const actorName = auth.session.profile.full_name ?? auth.session.user.email;
+    const supabase = getSupabaseAdminClient();
+    await supabase?.from("activities").insert({
+      entity_type: "lead",
+      entity_id: result.leadId,
+      action: result.created
+        ? `Prospect créé depuis Contact : ${result.contactName}`
+        : `Prospect déjà présent dans le pipeline : ${result.contactName}`,
+      user_name: actorName,
+    });
+    await writeAdminAuditLog(
+      auth.session,
+      result.created ? "pipeline.lead.create_from_contact" : "pipeline.lead.reuse_from_contact",
+      "lead",
+      result.leadId,
+      {
+        contactId: getNullableString(payload.contactId),
+        contactRole: result.role,
+        taskId: result.task?.id ?? null,
+      }
+    );
 
-  return NextResponse.json({ success: true, message: "Rappel cree.", task });
+    return NextResponse.json({
+      success: true,
+      message: result.created
+        ? result.taskWarning ?? "Prospect créé dans le pipeline avec une première relance."
+        : "Ce contact est déjà présent dans le pipeline.",
+      leadId: result.leadId,
+      created: result.created,
+      task: result.task,
+    });
+  }
+
+  if (payload.action === "create-task") {
+    const { task, response } = await createPipelineTask(payload, auth.session.user.id);
+    if (response) return response;
+
+    const actorName = auth.session.profile.full_name ?? auth.session.user.email;
+    const supabase = getSupabaseAdminClient();
+    await supabase?.from("activities").insert({
+      entity_type: "lead",
+      entity_id: task?.lead_id ?? task?.id,
+      action: `Rappel cree : ${task?.title}`,
+      user_name: actorName,
+    });
+    await writeAdminAuditLog(auth.session, "pipeline.task.create", "task", task?.id ?? null, {
+      leadId: task?.lead_id,
+      priority: task?.priority,
+      recurrenceRule: task?.recurrence_rule ?? "NONE",
+      reminderChannel: task?.reminder_channel ?? "NONE",
+    });
+
+    return NextResponse.json({ success: true, message: "Rappel cree.", task });
+  }
+
+  return NextResponse.json({ success: false, message: "Action pipeline inconnue." }, { status: 400 });
 }
 
 export async function PATCH(request: NextRequest) {

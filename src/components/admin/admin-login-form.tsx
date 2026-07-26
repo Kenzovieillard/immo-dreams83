@@ -43,62 +43,73 @@ export function AdminLoginForm() {
   }
 
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-[#111111] px-4 py-12">
-      <Card className="w-full max-w-md border-white/10 bg-white text-[#111111] shadow-2xl">
-        <CardHeader className="gap-3">
-          <Badge className="w-fit border-0 bg-orange-100 text-orange-800">Accès sécurisé V3</Badge>
-          <KeyRound className="size-9 text-orange-600" />
-          <CardTitle className="text-2xl font-black">Connexion CRM</CardTitle>
-          <p className="text-sm leading-6 text-gray-600">
-            Connectez-vous avec un compte autorisé IMMO-DREAMS83.
-          </p>
-        </CardHeader>
-        <CardContent>
-          <form className="grid gap-4" onSubmit={submitLogin}>
-            <div className="grid gap-2">
-              <Label htmlFor="admin-email">Email</Label>
-              <Input
-                id="admin-email"
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                className="bg-white text-gray-900 placeholder:text-gray-400"
-                placeholder="prenom@immo-dreams83.fr"
-                required
-              />
+    <main className="crm-riviera flex min-h-dvh items-center justify-center bg-[#fbf9f4] px-4 py-8">
+      <div className="w-full max-w-md">
+        <div className="mb-5 border-l-4 border-orange-500 pl-4">
+          <p className="text-xs font-bold uppercase text-orange-700">IMMO DREAMS · Riviera</p>
+          <p className="mt-1 text-sm text-gray-600">Espace réservé à l&apos;équipe de l&apos;agence.</p>
+        </div>
+        <Card className="w-full rounded-lg border-[#e8e3da] bg-white text-[#111111] shadow-[0_18px_50px_rgb(17_17_17/0.1)]">
+          <CardHeader className="gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex size-10 items-center justify-center rounded-lg bg-[#111111] text-white">
+                <KeyRound className="size-5" />
+              </div>
+              <Badge className="w-fit border-0 bg-[#fff1df] text-orange-800">Accès sécurisé</Badge>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="admin-password">Mot de passe</Label>
-              <Input
-                id="admin-password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                className="bg-white text-gray-900 placeholder:text-gray-400"
-                placeholder="Mot de passe Supabase Auth"
-                required
-              />
-            </div>
-            {feedback ? (
-              <p
-                className={
-                  feedback.type === "success"
-                    ? "rounded-md bg-emerald-50 p-3 text-sm font-semibold text-emerald-800"
-                    : "rounded-md bg-red-50 p-3 text-sm font-semibold text-red-700"
-                }
-              >
-                {feedback.message}
-              </p>
-            ) : null}
-            <Button type="submit" disabled={loading} className="h-11 bg-orange-500 text-white hover:bg-orange-600">
-              <LogIn className="size-4" />
-              {loading ? "Connexion..." : "Se connecter"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+            <CardTitle className="text-2xl font-black">Cockpit commercial</CardTitle>
+            <p className="text-sm leading-6 text-gray-600">
+              Connectez-vous avec un compte autorisé IMMO-DREAMS83.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <form className="grid gap-4" onSubmit={submitLogin}>
+              <div className="grid gap-2">
+                <Label htmlFor="admin-email">Email</Label>
+                <Input
+                  id="admin-email"
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  className="bg-white text-gray-900 placeholder:text-gray-400"
+                  placeholder="prenom@immo-dreams83.fr"
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="admin-password">Mot de passe</Label>
+                <Input
+                  id="admin-password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  className="bg-white text-gray-900 placeholder:text-gray-400"
+                  placeholder="Mot de passe Supabase Auth"
+                  required
+                />
+              </div>
+              {feedback ? (
+                <p
+                  className={
+                    feedback.type === "success"
+                      ? "rounded-md bg-emerald-50 p-3 text-sm font-semibold text-emerald-800"
+                      : "rounded-md bg-red-50 p-3 text-sm font-semibold text-red-700"
+                  }
+                  aria-live="polite"
+                >
+                  {feedback.message}
+                </p>
+              ) : null}
+              <Button type="submit" disabled={loading} className="h-12 bg-orange-500 font-bold text-white hover:bg-orange-600">
+                <LogIn className="size-4" />
+                {loading ? "Connexion..." : "Se connecter"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
     </main>
   );
 }

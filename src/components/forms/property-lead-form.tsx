@@ -6,10 +6,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 type Result = { success: boolean; message: string };
 
-export function PropertyLeadForm({ title, reference, city }: { title: string; reference: string; city: string }) {
+export function PropertyLeadForm({
+  title,
+  reference,
+  city,
+  dark = false,
+}: {
+  title: string;
+  reference: string;
+  city: string;
+  dark?: boolean;
+}) {
   const [form, setForm] = useState({ fullName: "", email: "", phone: "", message: `Bonjour, je souhaite en savoir plus sur le bien « ${title} » (réf. ${reference}).` });
   const [result, setResult] = useState<Result | null>(null);
   const [loading, setLoading] = useState(false);
@@ -42,22 +53,22 @@ export function PropertyLeadForm({ title, reference, city }: { title: string; re
         </p>
       ) : null}
       <div className="grid gap-2">
-        <Label htmlFor="property-name">Nom complet</Label>
-        <Input id="property-name" required value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} />
+        <Label htmlFor="property-name" className={dark ? "text-white" : undefined}>Nom complet</Label>
+        <Input className={cn(dark && "border-white/10 bg-white text-[#111111]")} id="property-name" required value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} />
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
         <div className="grid gap-2">
-          <Label htmlFor="property-email">Email</Label>
-          <Input id="property-email" type="email" required value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
+          <Label htmlFor="property-email" className={dark ? "text-white" : undefined}>Email</Label>
+          <Input className={cn(dark && "border-white/10 bg-white text-[#111111]")} id="property-email" type="email" required value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
         </div>
         <div className="grid gap-2">
-          <Label htmlFor="property-phone">Téléphone</Label>
-          <Input id="property-phone" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
+          <Label htmlFor="property-phone" className={dark ? "text-white" : undefined}>Téléphone</Label>
+          <Input className={cn(dark && "border-white/10 bg-white text-[#111111]")} id="property-phone" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
         </div>
       </div>
       <div className="grid gap-2">
-        <Label htmlFor="property-message">Message</Label>
-        <Textarea id="property-message" required rows={4} value={form.message} onChange={(event) => setForm({ ...form, message: event.target.value })} />
+        <Label htmlFor="property-message" className={dark ? "text-white" : undefined}>Message</Label>
+        <Textarea className={cn(dark && "border-white/10 bg-white text-[#111111]")} id="property-message" required rows={4} value={form.message} onChange={(event) => setForm({ ...form, message: event.target.value })} />
       </div>
       <Button disabled={loading} className="h-12 bg-orange-500 text-white hover:bg-orange-600">
         {loading ? <LoaderCircle className="size-4 animate-spin" /> : <Send className="size-4" />}

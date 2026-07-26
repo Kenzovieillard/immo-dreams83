@@ -30,12 +30,12 @@ const stats = [
 export function StatsSection() {
   return (
     <section className="bg-[#111111] py-12 text-white sm:py-16">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-[80rem] px-5 sm:px-8">
         <div className="mb-8 max-w-2xl">
-          <p className="text-sm font-bold uppercase tracking-[0.2em] text-orange-400">
+          <p className="text-xs font-bold uppercase text-orange-400">
             Pourquoi nous faire confiance
           </p>
-          <h2 className="mt-3 text-2xl font-black tracking-tight sm:text-4xl">
+          <h2 className="mt-4 text-3xl font-black leading-tight sm:text-4xl">
             Une méthode locale, simple et rassurante
           </h2>
         </div>

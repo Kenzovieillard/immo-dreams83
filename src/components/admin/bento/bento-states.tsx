@@ -14,8 +14,8 @@ export function BentoEmptyState({
   className?: string;
 }) {
   return (
-    <div className={cn("rounded-xl border border-dashed border-orange-200 bg-orange-50/70 p-5 text-center", className)}>
-      <div className="mx-auto flex size-10 items-center justify-center rounded-full bg-white text-orange-600">
+    <div className={cn("rounded-lg border border-dashed border-[#e8d4b7] bg-[#f6f2e9] p-5 text-center", className)}>
+      <div className="mx-auto flex size-10 items-center justify-center rounded-full bg-white text-orange-700">
         {icon ?? <CheckCircle2 className="size-5" />}
       </div>
       <p className="mt-3 font-bold text-[#111111]">{title}</p>
@@ -26,7 +26,7 @@ export function BentoEmptyState({
 
 export function BentoErrorState({ message }: { message: string }) {
   return (
-    <div className="rounded-xl border border-red-100 bg-red-50 p-4 text-sm font-semibold text-red-700">
+    <div className="rounded-lg border border-red-100 bg-red-50 p-4 text-sm font-semibold text-red-700">
       <AlertCircle className="mr-2 inline size-4" />
       {message}
     </div>
@@ -35,7 +35,7 @@ export function BentoErrorState({ message }: { message: string }) {
 
 export function BentoPermissionState({ message = "Vous n'avez pas la permission de consulter ce bloc." }: { message?: string }) {
   return (
-    <div className="rounded-xl border border-orange-100 bg-orange-50 p-4 text-sm font-semibold text-orange-800">
+    <div className="rounded-lg border border-[#e8d4b7] bg-[#fff5e9] p-4 text-sm font-semibold text-orange-800">
       <LockKeyhole className="mr-2 inline size-4" />
       {message}
     </div>

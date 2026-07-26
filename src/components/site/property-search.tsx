@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Search } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -29,75 +30,132 @@ export function PropertySearch() {
   return (
     <form
       action="/a-vendre"
-      className="grid w-full max-w-full gap-5 rounded-xl border border-orange-100 bg-white p-4 shadow-2xl shadow-black/15 sm:p-5 md:grid-cols-[1fr_1fr_1fr_1fr_auto] md:items-end"
+      className="w-full max-w-full rounded-lg border border-orange-100 bg-white p-4 shadow-[0_20px_38px_-12px_rgba(17,17,17,0.24)] sm:p-5"
     >
-      <div className="md:col-span-5">
-        <p className="text-sm font-bold uppercase tracking-[0.18em] text-orange-600">
-          Recherche immobilière
-        </p>
-        <p className="mt-1 text-sm text-gray-500">
+      <p className="text-xs font-bold uppercase text-orange-600 sm:text-sm">
+        Recherche immobilière
+      </p>
+      <p className="mt-2 max-w-[48rem] text-sm leading-5 text-gray-500">
+        <span className="sm:hidden">
+          Précisez votre projet, nous ciblons les biens adaptés.
+        </span>
+        <span className="hidden sm:inline">
           Précisez votre projet, nous vous guidons vers les biens les plus adaptés.
-        </p>
+        </span>
+      </p>
+
+      <div className="mt-4 grid gap-3 md:hidden">
+        <label>
+          <span className="sr-only">Type de bien recherché</span>
+          <Select
+            name="type"
+            value={selectedType}
+            onValueChange={(value) =>
+              setSelectedType((value as PropertySearchType) ?? "all")
+            }
+          >
+            <SelectTrigger className="h-12 w-full border-orange-200 bg-orange-50">
+              <span className="flex flex-1 text-left font-medium text-[#111111]">
+                {propertySearchTypeLabels[selectedType]}
+              </span>
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(propertySearchTypeLabels).map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </label>
+
+        <div className="grid grid-cols-[1fr_4rem] gap-3">
+          <label>
+            <span className="sr-only">Ville ou secteur</span>
+            <Input
+              name="city"
+              className="h-12 border-orange-200 bg-orange-50"
+              placeholder="Solliès-Pont, Toulon..."
+            />
+          </label>
+          <Button
+            type="submit"
+            aria-label="Rechercher les biens"
+            className="h-12 w-16 bg-orange-500 p-0 text-white hover:bg-orange-600"
+          >
+            <Search className="size-5" aria-hidden="true" />
+          </Button>
+        </div>
+
+        <Link
+          href="/a-vendre"
+          className="flex items-center justify-between py-1 text-xs font-semibold text-gray-500 hover:text-orange-600"
+        >
+          Filtres avancés
+          <ArrowRight className="size-4 text-orange-500" aria-hidden="true" />
+        </Link>
       </div>
 
-      <label className="grid min-w-0 gap-2 text-base font-semibold text-gray-800 sm:text-sm">
-        Type de bien recherché
-        <Select
-          name="type"
-          value={selectedType}
-          onValueChange={(value) => setSelectedType((value as PropertySearchType) ?? "all")}
+      <div className="mt-5 hidden gap-4 md:grid md:grid-cols-[1fr_1fr_1fr_1fr_auto] md:items-end">
+        <label className="grid min-w-0 gap-2 text-sm font-semibold text-gray-800">
+          Type de bien recherché
+          <Select
+            name="type"
+            value={selectedType}
+            onValueChange={(value) =>
+              setSelectedType((value as PropertySearchType) ?? "all")
+            }
+          >
+            <SelectTrigger className="h-12 w-full border-orange-200 bg-orange-50">
+              <span className="flex flex-1 text-left text-gray-900">
+                {propertySearchTypeLabels[selectedType]}
+              </span>
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(propertySearchTypeLabels).map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </label>
+
+        <label className="grid min-w-0 gap-2 text-sm font-semibold text-gray-800">
+          Ville ou secteur
+          <Input
+            name="city"
+            className="h-12 border-orange-200 bg-orange-50"
+            placeholder="Solliès-Pont, Toulon..."
+          />
+        </label>
+
+        <label className="grid min-w-0 gap-2 text-sm font-semibold text-gray-800">
+          Budget maximum
+          <Input
+            name="budget"
+            className="h-12 border-orange-200 bg-orange-50"
+            placeholder="Ex. 450 000 €"
+          />
+        </label>
+
+        <label className="grid min-w-0 gap-2 text-sm font-semibold text-gray-800">
+          Surface souhaitée
+          <Input
+            name="surface"
+            className="h-12 border-orange-200 bg-orange-50"
+            placeholder="Ex. 90 m²"
+          />
+        </label>
+
+        <Button
+          type="submit"
+          className="h-12 w-full bg-orange-500 px-6 text-white shadow-lg shadow-orange-200 hover:bg-orange-600 md:w-auto"
         >
-          <SelectTrigger className="h-12 w-full border-orange-200 bg-orange-50/40">
-            <span className="flex flex-1 text-left text-gray-900">
-              {propertySearchTypeLabels[selectedType]}
-            </span>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tous les biens</SelectItem>
-            <SelectItem value="apartment">Appartement</SelectItem>
-            <SelectItem value="house">Maison</SelectItem>
-            <SelectItem value="land">Terrain</SelectItem>
-            <SelectItem value="commercial">Local commercial</SelectItem>
-            <SelectItem value="parking">Stationnement</SelectItem>
-            <SelectItem value="other">Autre bien</SelectItem>
-          </SelectContent>
-        </Select>
-      </label>
-
-      <label className="grid min-w-0 gap-2 text-base font-semibold text-gray-800 sm:text-sm">
-        Ville ou secteur
-        <Input
-          name="city"
-          className="h-12 border-orange-200 bg-orange-50/40"
-          placeholder="Solliès-Pont, Toulon..."
-        />
-      </label>
-
-      <label className="grid min-w-0 gap-2 text-base font-semibold text-gray-800 sm:text-sm">
-        Budget maximum
-        <Input
-          name="budget"
-          className="h-12 border-orange-200 bg-orange-50/40"
-          placeholder="Ex. 450 000 €"
-        />
-      </label>
-
-      <label className="grid min-w-0 gap-2 text-base font-semibold text-gray-800 sm:text-sm">
-        Surface souhaitée
-        <Input
-          name="surface"
-          className="h-12 border-orange-200 bg-orange-50/40"
-          placeholder="Ex. 90 m2"
-        />
-      </label>
-
-      <Button
-        type="submit"
-        className="h-12 w-full bg-orange-500 px-6 text-white shadow-lg shadow-orange-200 hover:bg-orange-600 md:w-auto"
-      >
-        <Search className="size-4" aria-hidden="true" />
-        Rechercher
-      </Button>
+          <Search className="size-4" aria-hidden="true" />
+          Rechercher
+        </Button>
+      </div>
     </form>
   );
 }

@@ -1,71 +1,60 @@
 import Link from "next/link";
-import { Mail, MapPin, Phone } from "lucide-react";
-import { Separator } from "@/components/ui/separator";
-import { agencyContact, legalLinks, navLinks } from "./site-config";
+import { agencyContact, legalLinks } from "./site-config";
+
+const footerNavigation = [
+  { href: "/a-vendre", label: "Biens" },
+  { href: "/estimation", label: "Estimation" },
+  { href: "/agence", label: "Agence" },
+  { href: "/contact", label: "Contact" },
+];
 
 export function Footer() {
   return (
     <footer className="bg-[#111111] text-white">
-      <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:px-6 lg:grid-cols-[1.4fr_1fr_1fr_1fr] lg:px-8">
+      <div className="mx-auto grid max-w-[90rem] gap-9 px-5 py-10 sm:px-8 sm:py-12 lg:grid-cols-[1fr_auto_1fr] lg:items-end lg:px-12">
         <div>
-          <p className="text-xl font-black tracking-[0.08em] text-orange-400">
-            {agencyContact.name}
+          <p className="text-lg font-black">IMMO DREAMS</p>
+          <p className="mt-3 text-sm leading-6 text-white/65">
+            {agencyContact.city} · Var
+            <br />
+            <a
+              className="transition hover:text-orange-300"
+              href={agencyContact.phoneHref}
+            >
+              {agencyContact.phone}
+            </a>
           </p>
-          <p className="mt-4 max-w-sm text-sm leading-7 text-white/70">
-            Conseil immobilier local à Solliès-Pont pour vendre, acheter ou faire
-            estimer une maison, un appartement ou un terrain dans le Var.
-          </p>
         </div>
 
-        <div>
-          <p className="font-semibold text-white">Navigation</p>
-          <ul className="mt-4 grid gap-3 text-sm text-white/70">
-            {navLinks.map((link) => (
-              <li key={link.href}>
-                <Link className="transition hover:text-orange-300" href={link.href}>
-                  {link.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <nav
+          className="flex flex-wrap gap-x-6 gap-y-3 text-xs font-bold uppercase"
+          aria-label="Navigation du pied de page"
+        >
+          {footerNavigation.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="text-white/72 transition hover:text-white"
+            >
+              {link.label}
+            </Link>
+          ))}
+        </nav>
 
-        <div>
-          <p className="font-semibold text-white">Contact</p>
-          <ul className="mt-4 grid gap-3 text-sm text-white/70">
-            <li className="flex gap-2">
-              <MapPin className="mt-0.5 size-4 shrink-0 text-orange-400" />
-              <span>{agencyContact.address}</span>
-            </li>
-            <li className="flex gap-2">
-              <Phone className="mt-0.5 size-4 shrink-0 text-orange-400" />
-              <a className="transition hover:text-orange-300" href={agencyContact.phoneHref}>
-                {agencyContact.phone}
-              </a>
-            </li>
-            <li className="flex gap-2">
-              <Mail className="mt-0.5 size-4 shrink-0 text-orange-400" />
-              <a className="break-all transition hover:text-orange-300" href={agencyContact.emailHref}>
-                {agencyContact.email}
-              </a>
-            </li>
-          </ul>
-        </div>
-
-        <div>
-          <p className="font-semibold text-white">Informations légales</p>
-          <div className="mt-4 grid gap-3 text-sm text-white/60">
-            {legalLinks.map((link) => (
-              <Link key={link.href} href={link.href} className="transition hover:text-orange-300">
-                {link.label}
-              </Link>
-            ))}
-          </div>
+        <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-white/55 lg:justify-end">
+          {legalLinks.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="transition hover:text-orange-300"
+            >
+              {link.label}
+            </Link>
+          ))}
         </div>
       </div>
-      <Separator className="bg-white/10" />
-      <div className="mx-auto max-w-7xl px-4 py-5 text-xs text-white/50 sm:px-6 lg:px-8">
-        © 2026 IMMO-DREAMS83. Tous droits réservés. SIRET {agencyContact.siret}.
+      <div className="border-t border-white/10 px-5 py-4 text-center text-[0.68rem] text-white/45 sm:px-8">
+        © 2026 IMMO DREAMS. Tous droits réservés. SIRET {agencyContact.siret}.
       </div>
     </footer>
   );

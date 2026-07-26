@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 type ContactFormState = {
   fullName: string;
@@ -39,7 +40,7 @@ const initialFormState: ContactFormState = {
   message: "",
 };
 
-export function ContactForm() {
+export function ContactForm({ embedded = false }: { embedded?: boolean }) {
   const [form, setForm] = useState<ContactFormState>(initialFormState);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<ApiResult | null>(null);
@@ -90,7 +91,11 @@ export function ContactForm() {
   return (
     <form
       onSubmit={handleSubmit}
-      className="grid gap-5 rounded-xl border border-orange-100 bg-white p-4 shadow-xl shadow-orange-100/60 sm:p-6"
+      className={cn(
+        "grid gap-5 bg-white",
+        !embedded &&
+          "rounded-lg border border-orange-100 p-4 shadow-xl shadow-orange-100/60 sm:p-6"
+      )}
     >
       {result ? (
         <div
@@ -118,6 +123,7 @@ export function ContactForm() {
         <Input
           id="contact-fullName"
           name="fullName"
+          className="h-12 border-0 bg-orange-50"
           required
           disabled={disabled}
           value={form.fullName}
@@ -136,6 +142,7 @@ export function ContactForm() {
             id="contact-email"
             name="email"
             type="email"
+            className="h-12 border-0 bg-orange-50"
             required
             disabled={disabled}
             value={form.email}
@@ -151,6 +158,7 @@ export function ContactForm() {
           <Input
             id="contact-phone"
             name="phone"
+            className="h-12 border-0 bg-orange-50"
             disabled={disabled}
             value={form.phone}
             onChange={(event) => updateField("phone", event.target.value)}
@@ -168,7 +176,7 @@ export function ContactForm() {
             value={form.requestType}
             onValueChange={(value) => updateField("requestType", value ?? "")}
           >
-            <SelectTrigger className="h-12 w-full sm:h-10" disabled={disabled}>
+            <SelectTrigger className="h-12 w-full border-0 bg-orange-50" disabled={disabled}>
               <SelectValue placeholder="Sélectionner" />
             </SelectTrigger>
             <SelectContent>
@@ -190,6 +198,7 @@ export function ContactForm() {
           <Input
             id="contact-city"
             name="city"
+            className="h-12 border-0 bg-orange-50"
             disabled={disabled}
             value={form.city}
             onChange={(event) => updateField("city", event.target.value)}
@@ -203,6 +212,7 @@ export function ContactForm() {
         <Textarea
           id="contact-message"
           name="message"
+          className="min-h-44 border-0 bg-orange-50"
           required
           disabled={disabled}
           value={form.message}
@@ -218,7 +228,7 @@ export function ContactForm() {
       <Button
         type="submit"
         disabled={disabled}
-        className="h-12 bg-orange-500 text-white hover:bg-orange-600"
+        className="h-12 w-full bg-orange-500 px-8 text-white hover:bg-orange-600 sm:ml-auto sm:w-auto"
       >
         {isSubmitting ? (
           <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />

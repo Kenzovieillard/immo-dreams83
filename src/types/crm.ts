@@ -2,6 +2,17 @@ export type LeadStatus = "NEW" | "CONTACTED" | "APPOINTMENT" | "MANDATE_SIGNED" 
 
 export type LeadPriority = "low" | "normal" | "high" | "urgent";
 
+export type ContactRole = "UNKNOWN" | "BUYER" | "SELLER" | "BOTH" | "OTHER";
+
+export type ContactQualificationStatus =
+  | "TO_REVIEW"
+  | "QUALIFIED"
+  | "DUPLICATE"
+  | "NO_CONTACT"
+  | "INACTIVE";
+
+export type ContactQualificationSource = "AUTO" | "MANUAL";
+
 export type TaskRecurrenceRule = "NONE" | "WEEKLY" | "MONTHLY";
 
 export type TaskReminderChannel = "NONE" | "EMAIL";
@@ -20,6 +31,12 @@ export type ContactLead = {
   status: LeadStatus;
   notes: string | null;
   archived: boolean;
+  contact_role: ContactRole;
+  qualification_status: ContactQualificationStatus;
+  qualification_source: ContactQualificationSource;
+  active_prospect: boolean;
+  qualified_at: string | null;
+  pipeline_lead_id: string | null;
 };
 
 export type EstimationLead = {

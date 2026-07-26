@@ -22,6 +22,7 @@ import {
   LogOut,
   Pencil,
   Plus,
+  RefreshCw,
   Save,
   Search,
   Star,
@@ -34,7 +35,16 @@ import { Badge } from "@/components/ui/badge";
 import { BentoCard } from "@/components/admin/bento/bento-card";
 import { BentoGrid } from "@/components/admin/bento/bento-grid";
 import { BentoKpiCard } from "@/components/admin/bento/bento-kpi-card";
-import { BentoEmptyState } from "@/components/admin/bento/bento-states";
+import {
+  BentoCardSkeleton,
+  BentoEmptyState,
+  BentoErrorState,
+} from "@/components/admin/bento/bento-states";
+import {
+  CrmMobileNavigation,
+  crmTabMeta,
+  type CrmTab,
+} from "@/components/admin/crm-mobile-navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -56,6 +66,12 @@ import {
   propertyTypeLabels,
 } from "@/data/properties";
 import {
+  contactQualificationStatuses,
+  contactQualificationStatusLabels,
+  contactRoleLabels,
+  contactRoles,
+  deriveContactRole,
+  hasUsableContactMethod,
   leadPriorities,
   leadPriorityBadgeClasses,
   leadPriorityLabels,
@@ -92,7 +108,10 @@ import { adminRoleLabels, type AdminRole } from "@/types/admin";
 import type {
   Activity,
   AdminTeamMember,
+  ContactQualificationSource,
+  ContactQualificationStatus,
   ContactLead,
+  ContactRole,
   EstimationLead,
   LeadPriority,
   LeadStatus,
@@ -107,7 +126,7 @@ const contactRequestTypes = ["Achat", "Vente", "Estimation", "Terrain", "Autre"]
 const propertyTypes = ["apartment", "house", "land", "commercial", "parking", "other"] as const satisfies PropertyType[];
 const propertyStatuses = ["available", "under_offer", "sold"] as const satisfies PropertyStatus[];
 const propertyPublicationStatuses = ["DRAFT", "PUBLISHED", "UNPUBLISHED", "ARCHIVED"] as const satisfies PropertyPublicationStatus[];
-type AdminTab = "overview" | "pipeline" | "contacts" | "estimations" | "legacyReview" | "properties" | "activities" | "statistics";
+type AdminTab = CrmTab;
 type ActivityEntityTypeFilter = "ALL" | "contact" | "estimation" | "property" | "other";
 type ActivityActionFilter = "ALL" | "created" | "updated" | "archived" | "uploaded" | "deleted" | "other";
 type ActivityPeriodFilter = "ALL" | "today" | "last7days" | "last30days";
@@ -285,6 +304,12 @@ type AdminLead = {
   status: LeadStatus;
   notes: string;
   archived: boolean;
+  contactRole: ContactRole | null;
+  qualificationStatus: ContactQualificationStatus | null;
+  qualificationSource: ContactQualificationSource | null;
+  activeProspect: boolean;
+  qualifiedAt: string | null;
+  pipelineLeadId: string | null;
 };
 
 type ContactFormState = {
@@ -328,6 +353,7 @@ type PropertyFormState = {
 };
 
 type PropertyDisplayMode = "list" | "grid";
+type PropertySortMode = "site" | "quality";
 
 const emptyPropertyForm: PropertyFormState = {
   title: "",
@@ -770,6 +796,45 @@ function hasMissingDiagnostics(property: Property) {
   );
 }
 
+function getPropertyQualityIssues(property: Property) {
+  const issues: string[] = [];
+  const isPublic = property.publicationStatus === "PUBLISHED" && property.status !== "sold";
+
+  if (!property.title.trim()) issues.push("Titre");
+  if (property.photos.length === 0) issues.push("Photo principale");
+  if (!Number.isFinite(property.price) || property.price <= 0) issues.push("Prix");
+  if (!property.status) issues.push("Statut");
+  if (!property.publicationStatus) issues.push("Publication");
+  if (hasMissingDiagnostics(property)) issues.push("DPE/GES");
+  if (property.featured && !isPublic) issues.push("A la une non publiee");
+
+  return issues;
+}
+
+function getPropertySortTimestamp(property: Property) {
+  const value = property.publishedAt ?? property.createdAt ?? property.updatedAt;
+  const date = value ? new Date(value) : null;
+  return date && !Number.isNaN(date.getTime()) ? date.getTime() : 0;
+}
+
+function comparePropertiesForSiteDisplay(a: Property, b: Property) {
+  const aVisible = a.publicationStatus === "PUBLISHED" && a.status !== "sold";
+  const bVisible = b.publicationStatus === "PUBLISHED" && b.status !== "sold";
+  if (aVisible !== bVisible) return aVisible ? -1 : 1;
+  if (a.featured !== b.featured) return a.featured ? -1 : 1;
+
+  const dateDiff = getPropertySortTimestamp(b) - getPropertySortTimestamp(a);
+  if (dateDiff !== 0) return dateDiff;
+
+  return a.reference.localeCompare(b.reference, "fr", { numeric: true });
+}
+
+function comparePropertiesForQualityCleanup(a: Property, b: Property) {
+  const issueDiff = getPropertyQualityIssues(b).length - getPropertyQualityIssues(a).length;
+  if (issueDiff !== 0) return issueDiff;
+  return comparePropertiesForSiteDisplay(a, b);
+}
+
 function getCityStats(properties: Property[], leads: AdminLead[]) {
   const propertyMap = new Map<string, { city: string; count: number; totalPrice: number }>();
   const leadMap = new Map<string, { city: string; count: number }>();
@@ -886,6 +951,19 @@ function buildAdminMetrics(
 ) {
   const activeContacts = getActiveLeads(contactLeads);
   const activeEstimations = getActiveLeads(estimationLeads);
+  const contactsToQualify = activeContacts.filter(
+    (lead) => lead.qualificationStatus === "TO_REVIEW"
+  ).length;
+  const contactsReadyForPipeline = activeContacts.filter(
+    (lead) =>
+      lead.qualificationStatus === "QUALIFIED" &&
+      lead.activeProspect &&
+      lead.contactRole !== "UNKNOWN" &&
+      !lead.pipelineLeadId
+  ).length;
+  const contactsWithoutMethod = activeContacts.filter(
+    (lead) => lead.qualificationStatus === "NO_CONTACT"
+  ).length;
   const activeLeads = [...activeContacts, ...activeEstimations];
   const allLeads = [...contactLeads, ...estimationLeads];
   const statusCounts = leadStatuses.reduce(
@@ -916,6 +994,9 @@ function buildAdminMetrics(
   return {
     totalLeads,
     contacts: activeContacts.length,
+    contactsToQualify,
+    contactsReadyForPipeline,
+    contactsWithoutMethod,
     estimations: activeEstimations.length,
     newLeads: statusCounts.NEW,
     contactedLeads: statusCounts.CONTACTED,
@@ -1033,9 +1114,36 @@ function BentoDesignDashboard({
   metrics: AdminMetrics;
   setActiveTab: React.Dispatch<React.SetStateAction<AdminTab>>;
 }) {
-  const pipelineMax = Math.max(metrics.newLeads, metrics.contactedLeads, metrics.appointments, metrics.mandateSigned, metrics.lostLeads, 1);
+  const pipelineMax = Math.max(
+    metrics.contactsToQualify,
+    metrics.contactsReadyForPipeline,
+    metrics.newLeads,
+    metrics.contactedLeads,
+    metrics.appointments,
+    metrics.mandateSigned,
+    metrics.lostLeads,
+    1
+  );
   const propertyMax = Math.max(metrics.availableProperties, metrics.underOfferProperties, metrics.soldProperties, metrics.featuredProperties, 1);
   const priorityItems = [
+    {
+      label: "Contacts à qualifier",
+      value: metrics.contactsToQualify,
+      description: "Rôle et potentiel commercial à confirmer.",
+      action: () => setActiveTab("contacts"),
+    },
+    {
+      label: "Prêts pour le pipeline",
+      value: metrics.contactsReadyForPipeline,
+      description: "Contacts qualifiés à transformer en prospects.",
+      action: () => setActiveTab("contacts"),
+    },
+    {
+      label: "Sans moyen de contact",
+      value: metrics.contactsWithoutMethod,
+      description: "Coordonnées à retrouver ou dossier à classer.",
+      action: () => setActiveTab("contacts"),
+    },
     {
       label: "Nouveaux leads",
       value: metrics.newLeads,
@@ -1062,23 +1170,23 @@ function BentoDesignDashboard({
       <BentoCard
         span="wide"
         variant="highlight"
-        eyebrow="Priorite"
-        title="Que doit faire l'agence aujourd'hui ?"
-        description="Les actions operationnelles les plus utiles sont regroupees ici pour eviter de chercher dans tout le CRM."
+        eyebrow="Aujourd'hui"
+        title="À traiter aujourd'hui"
+        description="Les actions opérationnelles les plus utiles, classées avant les statistiques secondaires."
         action={
-          <Button type="button" size="sm" className="bg-orange-500 text-white hover:bg-orange-600" onClick={() => setActiveTab("pipeline")}>
+          <Button type="button" size="sm" className="hidden bg-orange-500 text-white hover:bg-orange-600 sm:inline-flex" onClick={() => setActiveTab("pipeline")}>
             Traiter les leads
           </Button>
         }
       >
         {activePriorityItems.length ? (
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {activePriorityItems.map((item) => (
               <button
                 key={item.label}
                 type="button"
                 onClick={item.action}
-                className="rounded-xl border border-orange-200 bg-white p-4 text-left transition-colors hover:border-orange-300 hover:bg-orange-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 motion-reduce:transition-none"
+                className="rounded-lg border border-[#e8d4b7] bg-white p-4 text-left transition-colors hover:border-orange-300 hover:bg-orange-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 motion-reduce:transition-none"
               >
                 <span className="text-sm font-semibold text-gray-600">{item.label}</span>
                 <span className="mt-2 block text-3xl font-black text-orange-600">{item.value}</span>
@@ -1089,21 +1197,14 @@ function BentoDesignDashboard({
         ) : (
           <BentoEmptyState
             title="Aucune priorite bloquante"
-            description="Les nouveaux leads, photos manquantes et diagnostics incomplets sont sous controle."
+            description="Qualifications, conversions, nouveaux leads et qualité des biens sont sous contrôle."
           />
         )}
       </BentoCard>
 
-      <BentoCard span="medium" title="Resume de performance" description="Lecture rapide de l'activite commerciale.">
-        <div className="grid grid-cols-2 gap-3">
-          <KpiCard label="Leads actifs" value={metrics.totalLeads} />
-          <KpiCard label="Conversion" value={formatPercentage(metrics.conversionRate)} tone="orange" />
-        </div>
-        <MetricLine label="Derniere demande" value={formatDateTime(metrics.latestSubmissionDate)} />
-        <MetricLine label="Derniere activite" value={formatDateTime(metrics.latestActivityDate)} />
-      </BentoCard>
-
       <BentoCard span="medium" title="Leads urgents" description="Demandes non traitees ou a recontacter.">
+        <MetricLine label="Contacts à qualifier" value={metrics.contactsToQualify} max={pipelineMax} />
+        <MetricLine label="Prêts pour le pipeline" value={metrics.contactsReadyForPipeline} max={pipelineMax} />
         <MetricLine label="Nouveaux" value={metrics.newLeads} max={pipelineMax} />
         <MetricLine label="Contactes" value={metrics.contactedLeads} max={pipelineMax} />
         <MetricLine label="Rendez-vous" value={metrics.appointments} max={pipelineMax} />
@@ -1139,6 +1240,15 @@ function BentoDesignDashboard({
         <MetricLine label="Mandats signes" value={metrics.mandateSigned} max={pipelineMax} />
       </BentoCard>
 
+      <BentoCard span="medium" title="Résumé de performance" description="Lecture secondaire de l'activité commerciale.">
+        <div className="grid grid-cols-2 gap-3">
+          <KpiCard label="Leads actifs" value={metrics.totalLeads} />
+          <KpiCard label="Conversion" value={formatPercentage(metrics.conversionRate)} tone="orange" />
+        </div>
+        <MetricLine label="Dernière demande" value={formatDateTime(metrics.latestSubmissionDate)} />
+        <MetricLine label="Dernière activité" value={formatDateTime(metrics.latestActivityDate)} />
+      </BentoCard>
+
       <BentoCard span="medium" title="Sources de leads" description="Origine des demandes actuellement structurees.">
         <MetricLine label="Formulaire contact" value={metrics.contactSubmissions} />
         <MetricLine label="Formulaire estimation" value={metrics.estimationSubmissions} />
@@ -1166,7 +1276,7 @@ function BentoDesignDashboard({
       </BentoCard>
 
       <BentoCard span="full" variant="muted" title="Statistiques secondaires" description="Ces indicateurs restent utiles, mais ne doivent pas prendre le dessus sur les actions du jour.">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <MetricLine label="Biens sans photos" value={metrics.propertiesWithoutPhotos} />
           <MetricLine label="Biens sans DPE/GES" value={metrics.propertiesWithoutDiagnostics} />
           <MetricLine label="Biens non mis a la une" value={metrics.propertiesNotFeatured} />
@@ -1186,7 +1296,7 @@ function BentoStatisticsPanel({ metrics }: { metrics: AdminMetrics }) {
 
   return (
     <BentoGrid>
-      <div className="grid gap-4 md:col-span-6 md:grid-cols-2 xl:col-span-12 xl:grid-cols-4">
+      <div className="grid gap-4 md:col-span-6 md:grid-cols-2 lg:col-span-12 lg:grid-cols-4">
         <KpiCard label="Leads actifs" value={metrics.totalLeads} description="Contacts et estimations non archives." />
         <KpiCard label="Conversion mandat" value={formatPercentage(metrics.conversionRate)} tone="orange" />
         <KpiCard label="Prix moyen" value={formatPrice(Math.round(metrics.averagePrice))} />
@@ -1418,6 +1528,16 @@ function normalizeContacts(items: ContactLead[]): AdminLead[] {
     status: lead.status,
     notes: lead.notes ?? "",
     archived: lead.archived,
+    contactRole: lead.contact_role ?? deriveContactRole(lead.request_type),
+    qualificationStatus:
+      lead.qualification_status ??
+      (hasUsableContactMethod(lead.email, lead.phone) ? "TO_REVIEW" : "NO_CONTACT"),
+    qualificationSource: lead.qualification_source ?? "AUTO",
+    activeProspect:
+      lead.active_prospect ??
+      (!lead.archived && lead.status !== "LOST" && hasUsableContactMethod(lead.email, lead.phone)),
+    qualifiedAt: lead.qualified_at ?? null,
+    pipelineLeadId: lead.pipeline_lead_id ?? null,
   }));
 }
 
@@ -1435,17 +1555,26 @@ function normalizeEstimations(items: EstimationLead[]): AdminLead[] {
     status: lead.status,
     notes: lead.notes ?? "",
     archived: lead.archived,
+    contactRole: null,
+    qualificationStatus: null,
+    qualificationSource: null,
+    activeProspect: false,
+    qualifiedAt: null,
+    pipelineLeadId: null,
   }));
 }
 
 function CreateContactCard({
   setLeads,
   connected,
+  open,
+  onOpenChange,
 }: {
   setLeads: React.Dispatch<React.SetStateAction<AdminLead[]>>;
   connected: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [form, setForm] = useState<ContactFormState>(emptyContactForm);
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -1475,6 +1604,12 @@ function CreateContactCard({
         status: "NEW",
         notes: "",
         archived: false,
+        contactRole: deriveContactRole(form.requestType),
+        qualificationStatus: hasUsableContactMethod(form.email, form.phone) ? "TO_REVIEW" : "NO_CONTACT",
+        qualificationSource: "AUTO",
+        activeProspect: hasUsableContactMethod(form.email, form.phone),
+        qualifiedAt: null,
+        pipelineLeadId: null,
       },
       ...current,
     ]);
@@ -1528,6 +1663,7 @@ function CreateContactCard({
 
   return (
     <BentoCard
+      id="crm-create-contact"
       span="full"
       title="Créer un contact"
       description="Ajoutez manuellement un prospect reçu par téléphone, email ou passage agence."
@@ -1536,8 +1672,9 @@ function CreateContactCard({
           type="button"
           variant="outline"
           className="h-10 border-orange-200 bg-white"
-          onClick={() => setOpen((current) => !current)}
+          onClick={() => onOpenChange(!open)}
           aria-expanded={open}
+          aria-controls="crm-create-contact-form"
         >
           {open ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
           {open ? "Replier" : "Créer"}
@@ -1556,7 +1693,7 @@ function CreateContactCard({
         </p>
       ) : null}
       {open ? (
-        <form onSubmit={(event) => void submitContact(event)} className="grid gap-5">
+        <form id="crm-create-contact-form" onSubmit={(event) => void submitContact(event)} className="grid gap-5">
           <div className="grid gap-5 sm:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor="contact-full-name">Nom complet</Label>
@@ -1647,12 +1784,15 @@ function CreatePropertyCard({
   properties,
   setProperties,
   connected,
+  open,
+  onOpenChange,
 }: {
   properties: Property[];
   setProperties: React.Dispatch<React.SetStateAction<Property[]>>;
   connected: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [form, setForm] = useState<PropertyFormState>(emptyPropertyForm);
   const [selectedPhotos, setSelectedPhotos] = useState<File[]>([]);
   const [uploadedPhotos, setUploadedPhotos] = useState<UploadedPropertyPhoto[]>([]);
@@ -1811,6 +1951,7 @@ function CreatePropertyCard({
 
   return (
     <BentoCard
+      id="crm-create-property"
       span="full"
       title="Créer un bien"
       description="La référence sera attribuée automatiquement au moment de l'enregistrement."
@@ -1823,8 +1964,9 @@ function CreatePropertyCard({
             type="button"
             variant="outline"
             className="h-10 border-orange-200 bg-white"
-            onClick={() => setOpen((current) => !current)}
+            onClick={() => onOpenChange(!open)}
             aria-expanded={open}
+            aria-controls="crm-create-property-form"
           >
             {open ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
             {open ? "Replier" : "Créer"}
@@ -1844,7 +1986,7 @@ function CreatePropertyCard({
         </p>
       ) : null}
       {open ? (
-        <form onSubmit={(event) => void submitProperty(event)} className="grid gap-5">
+        <form id="crm-create-property-form" onSubmit={(event) => void submitProperty(event)} className="grid gap-5">
           <div className="grid gap-4 lg:grid-cols-3">
             <div className="grid gap-2 lg:col-span-2">
               <Label htmlFor="property-title">Titre de l&apos;annonce</Label>
@@ -2056,7 +2198,7 @@ function CreatePropertyCard({
             <div className="grid gap-4 rounded-xl border border-orange-100 bg-orange-50/60 p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <p className="text-sm font-bold text-[#111111]">Baromètre DPE automatique</p>
+                  <p className="text-sm font-bold text-[#111111]">Baromètre DPE / GES automatique</p>
                   <p className="mt-1 text-sm leading-6 text-gray-600">
                     La position retenue correspond au résultat le plus défavorable entre énergie et climat.
                   </p>
@@ -2265,6 +2407,8 @@ function PropertyEditorCard({
   const [feedback, setFeedback] = useState<string | null>(null);
   const isLand = form.type === "land";
   const mainPhoto = property.photos[0] ?? null;
+  const qualityIssues = getPropertyQualityIssues(property);
+  const isQualityReady = qualityIssues.length === 0;
 
   function updateField(field: keyof PropertyFormState, value: string | boolean) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -2457,7 +2601,24 @@ function PropertyEditorCard({
         </div>
       ) : null}
       <CardContent className="grid gap-4 p-4 sm:p-5">
-        <div className="flex items-start justify-between gap-4">
+        <div className={cn("flex items-start justify-between gap-4", displayMode === "list" && "sm:grid sm:grid-cols-[96px_1fr_auto]")}>
+          {displayMode === "list" ? (
+            <div className="relative hidden aspect-[4/3] overflow-hidden rounded-lg border border-orange-100 bg-orange-50 sm:block">
+              {mainPhoto ? (
+                <Image
+                  src={mainPhoto}
+                  alt={property.title}
+                  fill
+                  sizes="96px"
+                  className="object-cover"
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center text-orange-600">
+                  <ImagePlus className="size-6" />
+                </div>
+              )}
+            </div>
+          ) : null}
           <div>
             <p className="font-mono text-xs text-gray-500">Réf. {property.reference} · Mandat {property.mandateNumber}</p>
             <p className="mt-1 font-bold text-[#111111]">{property.title}</p>
@@ -2490,6 +2651,34 @@ function PropertyEditorCard({
         >
           <DiagnosticBar kind="energy" value={property.energyClass} compact />
           <DiagnosticBar kind="climate" value={property.climateClass} compact />
+        </div>
+
+        <div className="grid gap-3 rounded-lg border border-orange-100 bg-white p-3 text-sm">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-bold text-[#111111]">Controle qualite affichage site</p>
+              <p className="mt-1 text-xs leading-5 text-gray-500">
+                Verifie titre, photo principale, prix, statut, publication, DPE/GES et mise en avant.
+              </p>
+            </div>
+            <Badge
+              className={cn(
+                "w-fit border-0",
+                isQualityReady ? "bg-emerald-100 text-emerald-800" : "bg-orange-100 text-orange-800"
+              )}
+            >
+              {isQualityReady ? "Pret site" : `${qualityIssues.length} point(s) a corriger`}
+            </Badge>
+          </div>
+          {!isQualityReady ? (
+            <div className="flex flex-wrap gap-2">
+              {qualityIssues.map((issue) => (
+                <Badge key={issue} variant="outline" className="border-orange-200 bg-orange-50 text-orange-800">
+                  {issue}
+                </Badge>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         <div className="grid gap-3 rounded-lg border border-orange-100 bg-orange-50 p-3 sm:grid-cols-[1fr_auto] sm:items-end">
@@ -2813,34 +3002,49 @@ function PropertyManager({
   properties,
   setProperties,
   connected,
+  createOpen,
+  onCreateOpenChange,
 }: {
   properties: Property[];
   setProperties: React.Dispatch<React.SetStateAction<Property[]>>;
   connected: boolean;
+  createOpen: boolean;
+  onCreateOpenChange: (open: boolean) => void;
 }) {
   const [search, setSearch] = useState("");
   const [displayMode, setDisplayMode] = useState<PropertyDisplayMode>("list");
+  const [sortMode, setSortMode] = useState<PropertySortMode>("site");
   const [feedback, setFeedback] = useState<string | null>(null);
   const propertyInventoryMetrics = useMemo(() => getPropertyInventoryMetrics(properties), [properties]);
   const propertyStatusBreakdown = useMemo(() => getPropertyStatusBreakdown(properties), [properties]);
   const propertyPublicationBreakdown = useMemo(() => getPropertyPublicationBreakdown(properties), [properties]);
   const propertyTypeBreakdown = useMemo(() => getPropertyTypeBreakdown(properties), [properties]);
-  const filteredProperties = properties.filter((property) => {
-    const haystack = [
-      property.reference,
-      property.mandateNumber,
-      property.title,
-      property.city,
-      property.postalCode,
-      propertyTypeLabels[property.type],
-      propertyStatusLabels[property.status],
-      propertyPublicationStatusLabels[property.publicationStatus ?? "DRAFT"],
-    ]
-      .join(" ")
-      .toLowerCase();
+  const filteredProperties = useMemo(() => {
+    const query = search.toLowerCase();
 
-    return haystack.includes(search.toLowerCase());
-  });
+    return properties
+      .filter((property) => {
+        const haystack = [
+          property.reference,
+          property.mandateNumber,
+          property.title,
+          property.city,
+          property.postalCode,
+          propertyTypeLabels[property.type],
+          propertyStatusLabels[property.status],
+          propertyPublicationStatusLabels[property.publicationStatus ?? "DRAFT"],
+        ]
+          .join(" ")
+          .toLowerCase();
+
+        return haystack.includes(query);
+      })
+      .sort(sortMode === "quality" ? comparePropertiesForQualityCleanup : comparePropertiesForSiteDisplay);
+  }, [properties, search, sortMode]);
+  const propertiesWithQualityIssues = useMemo(
+    () => properties.filter((property) => getPropertyQualityIssues(property).length > 0).length,
+    [properties]
+  );
 
   async function persistProperty(property: Property) {
     if (!connected) {
@@ -2877,6 +3081,8 @@ function PropertyManager({
         properties={properties}
         setProperties={setProperties}
         connected={connected}
+        open={createOpen}
+        onOpenChange={onCreateOpenChange}
       />
 
       {propertyInventoryMetrics.map((metric) => (
@@ -2935,7 +3141,7 @@ function PropertyManager({
         description="Recherche, disponibilité, mise à la une et édition rapide des biens."
         contentClassName="gap-5"
       >
-        <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
+        <div className="grid gap-3 xl:grid-cols-[1fr_auto_auto] xl:items-center">
           <div className="relative">
             <Search className="absolute left-3 top-2.5 size-4 text-gray-400" />
             <Input
@@ -2945,6 +3151,15 @@ function PropertyManager({
               className="pl-9"
             />
           </div>
+          <Select value={sortMode} onValueChange={(value) => setSortMode(value as PropertySortMode)}>
+            <SelectTrigger className="h-12 w-full bg-white sm:h-10 xl:w-64">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="site">Tri affichage site original</SelectItem>
+              <SelectItem value="quality">Tri nettoyage qualite</SelectItem>
+            </SelectContent>
+          </Select>
           <div className="grid grid-cols-2 rounded-lg border border-orange-100 bg-white p-1">
             <Button
               type="button"
@@ -2973,6 +3188,21 @@ function PropertyManager({
               Cartes
             </Button>
           </div>
+        </div>
+
+        <div className="grid gap-3 rounded-xl border border-orange-100 bg-orange-50/70 p-4 text-sm text-gray-700 sm:grid-cols-3">
+          <p>
+            <strong className="block text-[#111111]">{filteredProperties.length}</strong>
+            bien(s) dans la vue actuelle
+          </p>
+          <p>
+            <strong className="block text-[#111111]">{propertiesWithQualityIssues}</strong>
+            bien(s) a verifier
+          </p>
+          <p>
+            <strong className="block text-[#111111]">{sortMode === "site" ? "Affichage public" : "A corriger"}</strong>
+            ordre de tri actif
+          </p>
         </div>
 
         {feedback ? (
@@ -3227,7 +3457,7 @@ function PipelinePanel({
 
   return (
     <BentoGrid>
-      <div className="grid gap-4 md:col-span-6 md:grid-cols-2 xl:col-span-12 xl:grid-cols-4">
+      <div className="grid gap-4 md:col-span-6 md:grid-cols-2 lg:col-span-12 lg:grid-cols-4">
         <KpiCard label="Leads actifs" value={activeLeads.length} description="Demandes normalisees non archivees." />
         <KpiCard label="A traiter aujourd'hui" value={todayRemainingTasks.length} description="Rappels encore ouverts aujourd'hui." tone="orange" />
         <KpiCard label="En retard" value={overdueTasks.length} description="Rappels passes non termines." tone={overdueTasks.length ? "orange" : "dark"} />
@@ -3751,54 +3981,220 @@ function PipelinePanel({
   );
 }
 
+const contactQualificationBadgeClasses: Record<ContactQualificationStatus, string> = {
+  TO_REVIEW: "border-0 bg-orange-100 text-orange-800",
+  QUALIFIED: "border-0 bg-emerald-100 text-emerald-800",
+  DUPLICATE: "border-0 bg-yellow-100 text-yellow-900",
+  NO_CONTACT: "border-0 bg-red-100 text-red-800",
+  INACTIVE: "border-0 bg-gray-100 text-gray-700",
+};
+
+const contactQualificationOrder: Record<ContactQualificationStatus, number> = {
+  TO_REVIEW: 0,
+  QUALIFIED: 1,
+  NO_CONTACT: 2,
+  DUPLICATE: 3,
+  INACTIVE: 4,
+};
+
 function LeadManager({
   leads,
   setLeads,
   connected,
   title,
   description,
+  enableQualification = false,
+  onPipelineChanged,
+  onOpenPipeline,
 }: {
   leads: AdminLead[];
   setLeads: React.Dispatch<React.SetStateAction<AdminLead[]>>;
   connected: boolean;
   title: string;
   description: string;
+  enableQualification?: boolean;
+  onPipelineChanged?: () => Promise<void> | void;
+  onOpenPipeline?: () => void;
 }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("ALL");
+  const [qualificationFilter, setQualificationFilter] = useState("ALL");
   const [feedback, setFeedback] = useState("");
-  const visible = leads.filter((lead) => {
-    const haystack = `${lead.name} ${lead.email} ${lead.city} ${lead.category}`.toLowerCase();
-    return !lead.archived && haystack.includes(search.toLowerCase()) && (status === "ALL" || lead.status === status);
-  });
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const visible = useMemo(
+    () =>
+      leads
+        .filter((lead) => {
+          const haystack = `${lead.name} ${lead.email} ${lead.city} ${lead.category}`.toLowerCase();
+          return (
+            !lead.archived &&
+            haystack.includes(search.toLowerCase()) &&
+            (status === "ALL" || lead.status === status) &&
+            (qualificationFilter === "ALL" || lead.qualificationStatus === qualificationFilter)
+          );
+        })
+        .sort((a, b) => {
+          if (!enableQualification) {
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+          }
+          const aRank = a.qualificationStatus ? contactQualificationOrder[a.qualificationStatus] : 99;
+          const bRank = b.qualificationStatus ? contactQualificationOrder[b.qualificationStatus] : 99;
+          return aRank - bRank || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        }),
+    [enableQualification, leads, qualificationFilter, search, status]
+  );
+  const qualificationMetrics = {
+    toReview: leads.filter((lead) => !lead.archived && lead.qualificationStatus === "TO_REVIEW").length,
+    ready: leads.filter(
+      (lead) =>
+        !lead.archived &&
+        lead.qualificationStatus === "QUALIFIED" &&
+        lead.activeProspect &&
+        lead.contactRole !== "UNKNOWN" &&
+        !lead.pipelineLeadId
+    ).length,
+    noContact: leads.filter((lead) => !lead.archived && lead.qualificationStatus === "NO_CONTACT").length,
+  };
 
   async function persist(lead: AdminLead, updates: Partial<AdminLead>) {
+    const previousLeads = leads;
     setLeads((current) => current.map((item) => item.id === lead.id ? { ...item, ...updates } : item));
     if (!connected) {
       setFeedback("Modification conservée dans cette session locale.");
-      return;
+      return true;
     }
+
     const response = await fetch("/api/admin/leads", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ table: lead.kind, id: lead.id, ...updates }),
+    }).catch(() => null);
+    const payload = response
+      ? (await response.json().catch(() => null)) as {
+          message?: string;
+          lead?: ContactLead | EstimationLead;
+        } | null
+      : null;
+
+    if (!response?.ok) {
+      setLeads(previousLeads);
+      if (response?.status === 401) window.location.assign("/admin/login");
+      setFeedback(payload?.message ?? "Mise à jour impossible.");
+      return false;
+    }
+
+    if (payload?.lead) {
+      const normalizedLead =
+        lead.kind === "contacts"
+          ? normalizeContacts([payload.lead as ContactLead])[0]
+          : normalizeEstimations([payload.lead as EstimationLead])[0];
+      setLeads((current) => current.map((item) => item.id === lead.id ? normalizedLead : item));
+    }
+    setFeedback(payload?.message ?? "Mise à jour enregistrée.");
+    return true;
+  }
+
+  async function saveQualification(lead: AdminLead) {
+    if (!lead.contactRole || !lead.qualificationStatus) return;
+    setPendingId(`qualification-${lead.id}`);
+    await persist(lead, {
+      contactRole: lead.contactRole,
+      qualificationStatus: lead.qualificationStatus,
+      activeProspect: lead.activeProspect,
     });
-    const payload = await response.json().catch(() => null) as { message?: string } | null;
-    setFeedback(payload?.message ?? (response.ok ? "Mise à jour enregistrée." : "Mise à jour impossible."));
+    setPendingId(null);
+  }
+
+  async function createProspect(lead: AdminLead) {
+    if (!connected) {
+      setFeedback("Supabase doit être connecté pour créer un prospect dans le pipeline.");
+      return;
+    }
+
+    setPendingId(`pipeline-${lead.id}`);
+    const qualificationSaved = await persist(lead, {
+      contactRole: lead.contactRole,
+      qualificationStatus: lead.qualificationStatus,
+      activeProspect: lead.activeProspect,
+    });
+    if (!qualificationSaved) {
+      setPendingId(null);
+      return;
+    }
+
+    const response = await fetch("/api/admin/pipeline", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "create-lead-from-contact", contactId: lead.id }),
+    }).catch(() => null);
+    const payload = response
+      ? (await response.json().catch(() => null)) as {
+          message?: string;
+          leadId?: string;
+        } | null
+      : null;
+
+    if (!response?.ok || !payload?.leadId) {
+      if (response?.status === 401) window.location.assign("/admin/login");
+      setFeedback(payload?.message ?? "Le prospect n'a pas pu être créé.");
+      setPendingId(null);
+      return;
+    }
+
+    setLeads((current) =>
+      current.map((item) => item.id === lead.id ? { ...item, pipelineLeadId: payload.leadId! } : item)
+    );
+    await onPipelineChanged?.();
+    setFeedback(payload.message ?? "Prospect créé dans le pipeline.");
+    setPendingId(null);
   }
 
   return (
     <BentoCard span="full" title={title} description={description} contentClassName="gap-5">
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <div className="relative flex-1"><Search className="absolute left-3 top-2.5 size-4 text-gray-400" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Rechercher un nom, une ville, un email" className="pl-9" /></div>
+      {enableQualification ? (
+        <div className="grid gap-3 sm:grid-cols-3">
+          <KpiCard label="À qualifier" value={qualificationMetrics.toReview} description="Validation humaine attendue." tone="orange" />
+          <KpiCard label="Prêts pour le pipeline" value={qualificationMetrics.ready} description="Qualifiés, actifs et non convertis." />
+          <KpiCard label="Sans contact" value={qualificationMetrics.noContact} description="Téléphone ou email réel manquant." />
+        </div>
+      ) : null}
+
+      <div className="grid gap-3 lg:grid-cols-[1fr_200px_240px]">
+        <div className="relative">
+          <Search className="absolute left-3 top-3.5 size-4 text-gray-400 sm:top-2.5" />
+          <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Rechercher un nom, une ville, un email" className="pl-9" />
+        </div>
         <Select value={status} onValueChange={(value) => setStatus(value ?? "ALL")}>
-          <SelectTrigger className="w-full sm:w-48">
+          <SelectTrigger className="w-full">
             <SelectValue>{(value) => getStatusSelectLabel(value)}</SelectValue>
           </SelectTrigger>
-          <SelectContent><SelectItem value="ALL">Tous les statuts</SelectItem>{leadStatuses.map((value) => <SelectItem key={value} value={value}>{leadStatusLabels[value]}</SelectItem>)}</SelectContent>
+          <SelectContent>
+            <SelectItem value="ALL">Tous les statuts</SelectItem>
+            {leadStatuses.map((value) => <SelectItem key={value} value={value}>{leadStatusLabels[value]}</SelectItem>)}
+          </SelectContent>
         </Select>
+        {enableQualification ? (
+          <Select value={qualificationFilter} onValueChange={(value) => setQualificationFilter(value ?? "ALL")}>
+            <SelectTrigger className="w-full">
+              <SelectValue>
+                {(value) =>
+                  value === "ALL"
+                    ? "Toutes les qualifications"
+                    : contactQualificationStatusLabels[value as ContactQualificationStatus]
+                }
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Toutes les qualifications</SelectItem>
+              {contactQualificationStatuses.map((value) => (
+                <SelectItem key={value} value={value}>{contactQualificationStatusLabels[value]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : <div />}
       </div>
-      {feedback ? <p className="rounded-md bg-orange-50 p-3 text-sm text-orange-800">{feedback}</p> : null}
+
+      {feedback ? <p className="rounded-md bg-orange-50 p-3 text-sm text-orange-800" aria-live="polite">{feedback}</p> : null}
       {visible.length === 0 ? (
         <BentoEmptyState
           icon={<ContactRound className="size-5" />}
@@ -3806,24 +4202,172 @@ function LeadManager({
           description="Les prochaines demandes apparaîtront ici automatiquement."
           className="py-12"
         />
-      ) : visible.map((lead) => (
-        <article key={lead.id} className="rounded-xl border border-orange-100 bg-white p-4 shadow-sm shadow-orange-100/40 sm:p-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div><p className="text-lg font-bold text-[#111111]">{lead.name}</p><p className="mt-1 text-sm text-gray-500">{new Date(lead.createdAt).toLocaleString("fr-FR")} · {lead.city}</p></div>
-            <Badge className="w-fit border-0 bg-orange-100 text-orange-800">{leadStatusLabels[lead.status]}</Badge>
-          </div>
-          <div className="mt-5 grid gap-5">
-            <div className="grid gap-2 text-sm text-gray-700 sm:grid-cols-3"><p><strong>Email</strong><br />{lead.email}</p><p><strong>Téléphone</strong><br />{lead.phone}</p><p><strong>Demande</strong><br />{lead.category}</p></div>
-            <p className="break-words rounded-md bg-orange-50 p-4 text-sm leading-6 text-gray-700">{lead.message}</p>
-            <div className="grid gap-3 lg:grid-cols-[200px_1fr_auto_auto] lg:items-end">
-              <div className="grid gap-2"><Label>Statut</Label><Select value={lead.status} onValueChange={(value) => persist(lead, { status: value as LeadStatus })}><SelectTrigger><SelectValue>{(value) => getStatusSelectLabel(value)}</SelectValue></SelectTrigger><SelectContent>{leadStatuses.map((value) => <SelectItem key={value} value={value}>{leadStatusLabels[value]}</SelectItem>)}</SelectContent></Select></div>
-              <div className="grid gap-2"><Label htmlFor={`notes-${lead.id}`}>Notes internes</Label><Input id={`notes-${lead.id}`} value={lead.notes} onChange={(event) => setLeads((current) => current.map((item) => item.id === lead.id ? { ...item, notes: event.target.value } : item))} /></div>
-              <Button variant="outline" onClick={() => persist(lead, { notes: lead.notes })}><Save className="size-4" />Sauver</Button>
-              <Button variant="outline" onClick={() => persist(lead, { archived: true })}><Archive className="size-4" />Archiver</Button>
+      ) : visible.map((lead) => {
+        const qualificationStatus = lead.qualificationStatus ?? "TO_REVIEW";
+        const contactRole = lead.contactRole ?? "UNKNOWN";
+        const qualificationDisablesProspect = ["DUPLICATE", "NO_CONTACT", "INACTIVE"].includes(qualificationStatus);
+        const readyForPipeline =
+          qualificationStatus === "QUALIFIED" &&
+          lead.activeProspect &&
+          contactRole !== "UNKNOWN" &&
+          !lead.pipelineLeadId;
+
+        return (
+          <article key={lead.id} className="rounded-lg border border-[#e8e3da] bg-white p-4 shadow-[0_5px_16px_rgb(17_17_17/0.045)] sm:p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-lg font-bold text-[#111111]">{lead.name}</p>
+                <p className="mt-1 text-sm text-gray-500">{new Date(lead.createdAt).toLocaleString("fr-FR")} · {lead.city}</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge className="w-fit border-0 bg-orange-100 text-orange-800">{leadStatusLabels[lead.status]}</Badge>
+                {enableQualification ? (
+                  <Badge className={contactQualificationBadgeClasses[qualificationStatus]}>
+                    {contactQualificationStatusLabels[qualificationStatus]}
+                  </Badge>
+                ) : null}
+              </div>
             </div>
-          </div>
-        </article>
-      ))}
+
+            <div className="mt-5 grid gap-5">
+              <div className="grid gap-2 text-sm text-gray-700 sm:grid-cols-3">
+                <p><strong>Email</strong><br />{lead.email}</p>
+                <p><strong>Téléphone</strong><br />{lead.phone}</p>
+                <p><strong>Demande</strong><br />{lead.category}</p>
+              </div>
+              <p className="break-words rounded-md bg-[#f6f2e9] p-4 text-sm leading-6 text-gray-700">{lead.message}</p>
+
+              {enableQualification ? (
+                <section className="grid gap-4 border-t border-[#e8e3da] pt-4" aria-label={`Qualification de ${lead.name}`}>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <h3 className="font-bold text-[#111111]">Qualification commerciale</h3>
+                      <p className="mt-1 text-sm leading-5 text-gray-600">
+                        Classification {lead.qualificationSource === "MANUAL" ? "validée manuellement" : "préremplie automatiquement"}.
+                      </p>
+                    </div>
+                    {lead.pipelineLeadId ? (
+                      <Badge className="w-fit border-0 bg-[#111111] text-white">Déjà dans le pipeline</Badge>
+                    ) : null}
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="grid gap-2">
+                      <Label>Rôle commercial</Label>
+                      <Select
+                        value={contactRole}
+                        onValueChange={(value) =>
+                          setLeads((current) =>
+                            current.map((item) => item.id === lead.id ? { ...item, contactRole: value as ContactRole } : item)
+                          )
+                        }
+                      >
+                        <SelectTrigger><SelectValue>{(value) => contactRoleLabels[value as ContactRole]}</SelectValue></SelectTrigger>
+                        <SelectContent>
+                          {contactRoles.map((value) => <SelectItem key={value} value={value}>{contactRoleLabels[value]}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>État de qualification</Label>
+                      <Select
+                        value={qualificationStatus}
+                        onValueChange={(value) => {
+                          const nextStatus = value as ContactQualificationStatus;
+                          setLeads((current) =>
+                            current.map((item) =>
+                              item.id === lead.id
+                                ? {
+                                    ...item,
+                                    qualificationStatus: nextStatus,
+                                    activeProspect: ["DUPLICATE", "NO_CONTACT", "INACTIVE"].includes(nextStatus)
+                                      ? false
+                                      : item.activeProspect,
+                                  }
+                                : item
+                            )
+                          );
+                        }}
+                      >
+                        <SelectTrigger><SelectValue>{(value) => contactQualificationStatusLabels[value as ContactQualificationStatus]}</SelectValue></SelectTrigger>
+                        <SelectContent>
+                          {contactQualificationStatuses.map((value) => (
+                            <SelectItem key={value} value={value}>{contactQualificationStatusLabels[value]}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <label className="flex min-h-12 items-center gap-3 self-end rounded-lg border border-[#d8d2c8] bg-white px-3 py-2 text-sm font-semibold text-[#111111]">
+                      <input
+                        type="checkbox"
+                        checked={lead.activeProspect}
+                        disabled={qualificationDisablesProspect}
+                        onChange={(event) =>
+                          setLeads((current) =>
+                            current.map((item) => item.id === lead.id ? { ...item, activeProspect: event.target.checked } : item)
+                          )
+                        }
+                        className="size-5 accent-orange-600"
+                      />
+                      Prospect actif
+                    </label>
+                  </div>
+
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full border-[#d8d2c8] bg-white sm:w-auto"
+                      disabled={pendingId === `qualification-${lead.id}`}
+                      onClick={() => void saveQualification(lead)}
+                    >
+                      <Save className="size-4" />
+                      Valider la qualification
+                    </Button>
+                    {lead.pipelineLeadId ? (
+                      <Button type="button" className="w-full bg-[#111111] text-white hover:bg-[#272727] sm:w-auto" onClick={onOpenPipeline}>
+                        <Target className="size-4" />
+                        Ouvrir le pipeline
+                      </Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        className="w-full bg-orange-500 text-white hover:bg-orange-600 sm:w-auto"
+                        disabled={!readyForPipeline || pendingId === `pipeline-${lead.id}` || !connected}
+                        onClick={() => void createProspect(lead)}
+                      >
+                        <Target className="size-4" />
+                        {pendingId === `pipeline-${lead.id}` ? "Création..." : "Créer un prospect"}
+                      </Button>
+                    )}
+                  </div>
+                  {!lead.pipelineLeadId && !readyForPipeline ? (
+                    <p className="text-xs leading-5 text-gray-500">
+                      Pour créer le prospect : choisissez un rôle, passez l&apos;état à Qualifié et conservez Prospect actif.
+                    </p>
+                  ) : null}
+                </section>
+              ) : null}
+
+              <div className="grid gap-3 lg:grid-cols-[200px_1fr_auto_auto] lg:items-end">
+                <div className="grid gap-2">
+                  <Label>Statut</Label>
+                  <Select value={lead.status} onValueChange={(value) => void persist(lead, { status: value as LeadStatus })}>
+                    <SelectTrigger><SelectValue>{(value) => getStatusSelectLabel(value)}</SelectValue></SelectTrigger>
+                    <SelectContent>{leadStatuses.map((value) => <SelectItem key={value} value={value}>{leadStatusLabels[value]}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor={`notes-${lead.id}`}>Notes internes</Label>
+                  <Input id={`notes-${lead.id}`} value={lead.notes} onChange={(event) => setLeads((current) => current.map((item) => item.id === lead.id ? { ...item, notes: event.target.value } : item))} />
+                </div>
+                <Button variant="outline" onClick={() => void persist(lead, { notes: lead.notes })}><Save className="size-4" />Sauver</Button>
+                <Button variant="outline" onClick={() => void persist(lead, { archived: true })}><Archive className="size-4" />Archiver</Button>
+              </div>
+            </div>
+          </article>
+        );
+      })}
     </BentoCard>
   );
 }
@@ -4171,10 +4715,59 @@ function LegacyReviewPanel({ connected }: { connected: boolean }) {
   );
 }
 
+function CrmLoadingState() {
+  return (
+    <div aria-busy="true" aria-label="Chargement des données CRM">
+      <BentoGrid>
+        <BentoCard span="wide" variant="highlight" title="Chargement des priorités">
+          <BentoCardSkeleton lines={4} />
+        </BentoCard>
+        <BentoCard span="medium" title="Chargement du suivi">
+          <BentoCardSkeleton lines={3} />
+        </BentoCard>
+        <BentoCard span="full" title="Préparation de votre espace">
+          <BentoCardSkeleton lines={2} />
+        </BentoCard>
+      </BentoGrid>
+    </div>
+  );
+}
+
+function CrmLoadErrorState({ message }: { message: string }) {
+  return (
+    <BentoGrid>
+      <BentoCard
+        span="full"
+        variant="danger"
+        title="Le CRM n'a pas pu être chargé"
+        description="Vos données ne sont pas modifiées. Vous pouvez relancer le chargement."
+        action={
+          <Button type="button" variant="outline" onClick={() => window.location.reload()}>
+            <RefreshCw className="size-4" />
+            Réessayer
+          </Button>
+        }
+      >
+        <BentoErrorState message={message} />
+      </BentoCard>
+    </BentoGrid>
+  );
+}
+
+function scrollToCrmSection(id: string) {
+  requestAnimationFrame(() => {
+    const target = document.getElementById(id);
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    target?.scrollIntoView({ block: "start", behavior: reducedMotion ? "auto" : "smooth" });
+  });
+}
+
 export function AdminDashboard({ contacts, estimations, activities: initialActivities, properties, connected, userName, userRole }: Props) {
   const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(connected);
   const [activeTab, setActiveTab] = useState<AdminTab>("overview");
+  const [contactCreateOpen, setContactCreateOpen] = useState(false);
+  const [propertyCreateOpen, setPropertyCreateOpen] = useState(false);
   const [contactLeads, setContactLeads] = useState(() => normalizeContacts(contacts));
   const [estimationLeads, setEstimationLeads] = useState(() => normalizeEstimations(estimations));
   const [pipelineLeads, setPipelineLeads] = useState<PipelineLead[]>([]);
@@ -4294,108 +4887,204 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
 
     window.location.assign(payload?.redirectTo ?? "/admin/login");
   }
+
+  const activeTabDetails = crmTabMeta[activeTab];
+  const mobileQuickAction =
+    activeTab === "contacts" && !contactCreateOpen
+      ? {
+          label: "Nouveau",
+          icon: Plus,
+          onClick: () => {
+            setContactCreateOpen(true);
+            scrollToCrmSection("crm-create-contact");
+          },
+        }
+      : activeTab === "properties" && !propertyCreateOpen
+        ? {
+            label: "Nouveau bien",
+            icon: Plus,
+            onClick: () => {
+              setPropertyCreateOpen(true);
+              scrollToCrmSection("crm-create-property");
+            },
+          }
+        : activeTab === "overview"
+          ? {
+              label: "À traiter",
+              icon: Target,
+              onClick: () => {
+                setActiveTab("pipeline");
+                window.scrollTo({ top: 0 });
+              },
+            }
+          : activeTab === "pipeline" && connected
+            ? {
+                label: "Actualiser",
+                icon: RefreshCw,
+                onClick: () => void refreshPipeline(),
+              }
+            : undefined;
+
   return (
-    <main className="min-h-dvh overflow-x-hidden bg-orange-50 px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 sm:py-8 lg:px-8">
+    <main className="crm-riviera min-h-dvh overflow-x-hidden bg-[#fbf9f4] px-3 pt-4 pb-[calc(9rem+env(safe-area-inset-bottom))] sm:px-6 sm:py-7 lg:px-8">
       <div className="mx-auto w-full max-w-screen-2xl min-w-0">
-        <header className="mb-8 flex flex-col justify-between gap-4 sm:mb-10 sm:flex-row sm:items-center">
-          <div>
-            <Badge className={connected ? "border-0 bg-emerald-600 text-white" : "border-0 bg-yellow-300 text-[#111111]"}>
-              {connected ? "Supabase connecté" : "Mode local"}
-            </Badge>
-            <h1 className="mt-3 text-3xl font-black text-[#111111] sm:text-4xl">CRM IMMO-DREAMS83</h1>
-            <p className="mt-2 text-sm leading-6 text-gray-600">Prospects, estimations, biens, statistiques et activité de l&apos;agence.</p>
+        <header className="mb-5 border-b border-[#e8e3da] pb-5 sm:mb-7 sm:pb-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-bold uppercase text-orange-700">IMMO DREAMS · Riviera</p>
+              <h1 className="mt-1 text-2xl font-black text-[#111111] sm:text-3xl">Cockpit commercial</h1>
+              <p className="mt-1.5 max-w-2xl text-sm leading-5 text-gray-600">
+                Les priorités de l&apos;agence, du premier contact à la publication du bien.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => void logout()}
+              className="hidden border-[#d8d2c8] bg-white md:inline-flex"
+            >
+              <LogOut className="size-4" />
+              Déconnexion
+            </Button>
           </div>
-          <Button variant="outline" onClick={() => void logout()} className="w-full border-orange-200 bg-white sm:w-auto">
-            <LogOut className="size-4" />Déconnexion
-          </Button>
+          <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-gray-600">
+            <Badge className={connected ? "border-0 bg-emerald-700 text-white" : "border-0 bg-[#e8d4b7] text-[#111111]"}>
+              {connected ? "Données synchronisées" : "Mode local"}
+            </Badge>
+            <span>
+              <strong className="text-[#111111]">{userName}</strong>
+              <span className="mx-1.5 text-[#b9b2a8]">·</span>
+              {adminRoleLabels[userRole]}
+            </span>
+            {loading ? <Badge className="border-0 bg-orange-100 text-orange-800">Chargement...</Badge> : null}
+          </div>
         </header>
-        <div className="mb-6 grid gap-3 rounded-lg border border-orange-100 bg-white p-4 text-sm text-gray-700 shadow-sm shadow-orange-100/40 sm:grid-cols-[1fr_auto] sm:items-center">
-          <p>
-            Connecté : <strong className="text-[#111111]">{userName}</strong> · rôle{" "}
-            <strong className="text-[#111111]">{adminRoleLabels[userRole]}</strong>
-          </p>
-          {loading ? <Badge className="w-fit border-0 bg-orange-100 text-orange-800">Chargement CRM...</Badge> : null}
-          {loadError ? <p className="text-sm font-semibold text-red-700 sm:col-span-2">{loadError}</p> : null}
-        </div>
+
+        {!connected ? (
+          <section
+            aria-label="Configuration du CRM"
+            className="mb-5 flex items-start gap-3 border-l-4 border-[#d9a441] bg-[#fff9e8] px-4 py-3 text-sm leading-5 text-[#5f4a19] sm:mb-6"
+          >
+            <Info className="mt-0.5 size-4 shrink-0" />
+            <p>
+              <strong>Supabase non configuré.</strong> Les essais restent dans cette session et le catalogue officiel ne peut pas être modifié.
+            </p>
+          </section>
+        ) : null}
+
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as AdminTab)} className="w-full min-w-0 gap-6 sm:gap-8">
-          <div className="w-full min-w-0">
-            <TabsList className="!grid h-auto w-full grid-cols-2 gap-1 bg-white p-1 shadow-sm shadow-orange-100/40 sm:grid-cols-3 lg:!inline-flex lg:w-full lg:justify-start">
-              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="overview"><LayoutDashboard />Vue d&apos;ensemble</TabsTrigger>
-              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="pipeline"><Target />Pipeline</TabsTrigger>
-              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="contacts"><ContactRound />Contacts</TabsTrigger>
-              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="estimations"><ClipboardCheck />Estimations</TabsTrigger>
-              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="legacyReview"><ListChecks />Anciennes demandes</TabsTrigger>
-              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="properties"><Building2 />Biens</TabsTrigger>
-              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="activities"><ListChecks />Activités</TabsTrigger>
-              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-[15px] sm:!min-h-10 lg:w-auto lg:flex-none lg:justify-center lg:px-5" value="statistics"><BarChart3 />Statistiques</TabsTrigger>
+          <div className="mb-5 md:hidden">
+            <p className="text-xs font-bold uppercase text-orange-700">Espace de travail</p>
+            <h2 className="mt-1 text-xl font-black text-[#111111]">{activeTabDetails.title}</h2>
+            <p className="mt-1 text-sm leading-5 text-gray-600">{activeTabDetails.description}</p>
+          </div>
+
+          <div className="sticky top-0 z-30 hidden w-full min-w-0 bg-[#fbf9f4]/95 py-2 backdrop-blur-md md:block">
+            <TabsList className="!grid h-auto w-full grid-cols-4 gap-1 border border-[#e8e3da] bg-white p-1 shadow-[0_4px_16px_rgb(17_17_17/0.05)] xl:!inline-flex xl:justify-start">
+              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-sm font-semibold xl:w-auto xl:flex-none xl:justify-center xl:px-4" value="overview"><LayoutDashboard />Vue d&apos;ensemble</TabsTrigger>
+              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-sm font-semibold xl:w-auto xl:flex-none xl:justify-center xl:px-4" value="pipeline"><Target />Pipeline</TabsTrigger>
+              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-sm font-semibold xl:w-auto xl:flex-none xl:justify-center xl:px-4" value="contacts"><ContactRound />Contacts</TabsTrigger>
+              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-sm font-semibold xl:w-auto xl:flex-none xl:justify-center xl:px-4" value="estimations"><ClipboardCheck />Estimations</TabsTrigger>
+              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-sm font-semibold xl:w-auto xl:flex-none xl:justify-center xl:px-4" value="legacyReview"><ListChecks />Anciennes demandes</TabsTrigger>
+              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-sm font-semibold xl:w-auto xl:flex-none xl:justify-center xl:px-4" value="properties"><Building2 />Biens</TabsTrigger>
+              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-sm font-semibold xl:w-auto xl:flex-none xl:justify-center xl:px-4" value="activities"><ListChecks />Activités</TabsTrigger>
+              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-sm font-semibold xl:w-auto xl:flex-none xl:justify-center xl:px-4" value="statistics"><BarChart3 />Statistiques</TabsTrigger>
             </TabsList>
           </div>
-          <TabsContent value="overview" className="w-full">
-            <BentoDesignDashboard metrics={metrics} setActiveTab={setActiveTab} />
-          </TabsContent>
-          <TabsContent value="pipeline" className="w-full">
-            <PipelinePanel
-              leads={pipelineLeads}
-              setLeads={setPipelineLeads}
-              tasks={pipelineTasks}
-              setTasks={setPipelineTasks}
-              team={teamMembers}
-              connected={connected}
-              error={pipelineError}
-              onRefresh={refreshPipeline}
-            />
-          </TabsContent>
-          <TabsContent value="contacts">
-            <BentoGrid>
-              <CreateContactCard setLeads={setContactLeads} connected={connected} />
-              <LeadManager
-                title="Contacts"
-                description="Demandes entrantes, prospects créés manuellement et suivi commercial rapide."
-                leads={contactLeads}
-                setLeads={setContactLeads}
-                connected={connected}
-              />
-            </BentoGrid>
-          </TabsContent>
-          <TabsContent value="estimations" className="w-full">
-            <BentoGrid>
-              <LeadManager
-                title="Estimations"
-                description="Demandes d'estimation reçues depuis le formulaire public et leur statut de suivi."
-                leads={estimationLeads}
-                setLeads={setEstimationLeads}
-                connected={connected}
-              />
-            </BentoGrid>
-          </TabsContent>
-          <TabsContent value="legacyReview" className="w-full">
-            <LegacyReviewPanel connected={connected} />
-          </TabsContent>
-          <TabsContent value="properties" className="w-full">
-            <PropertyManager properties={propertyItems} setProperties={setPropertyItems} connected={connected} />
-          </TabsContent>
-          <TabsContent value="activities" className="w-full">
-            <ActivityPanel
-              activities={activities}
-              filteredActivities={filteredActivities}
-              recipeActivitiesCount={recipeActivitiesCount}
-              activitySearch={activitySearch}
-              setActivitySearch={setActivitySearch}
-              activityEntityType={activityEntityType}
-              setActivityEntityType={setActivityEntityType}
-              activityAction={activityAction}
-              setActivityAction={setActivityAction}
-              activityPeriod={activityPeriod}
-              setActivityPeriod={setActivityPeriod}
-              activityVisibility={activityVisibility}
-              setActivityVisibility={setActivityVisibility}
-            />
-          </TabsContent>
-          <TabsContent value="statistics" className="w-full">
-            <BentoStatisticsPanel metrics={metrics} />
-          </TabsContent>
+
+          {loading ? (
+            <CrmLoadingState />
+          ) : loadError ? (
+            <CrmLoadErrorState message={loadError} />
+          ) : (
+            <>
+              <TabsContent value="overview" className="w-full">
+                <BentoDesignDashboard metrics={metrics} setActiveTab={setActiveTab} />
+              </TabsContent>
+              <TabsContent value="pipeline" className="w-full">
+                <PipelinePanel
+                  leads={pipelineLeads}
+                  setLeads={setPipelineLeads}
+                  tasks={pipelineTasks}
+                  setTasks={setPipelineTasks}
+                  team={teamMembers}
+                  connected={connected}
+                  error={pipelineError}
+                  onRefresh={refreshPipeline}
+                />
+              </TabsContent>
+              <TabsContent value="contacts">
+                <BentoGrid>
+                  <CreateContactCard
+                    setLeads={setContactLeads}
+                    connected={connected}
+                    open={contactCreateOpen}
+                    onOpenChange={setContactCreateOpen}
+                  />
+                  <LeadManager
+                    title="Contacts"
+                    description="Demandes entrantes, prospects créés manuellement et suivi commercial rapide."
+                    leads={contactLeads}
+                    setLeads={setContactLeads}
+                    connected={connected}
+                    enableQualification
+                    onPipelineChanged={refreshPipeline}
+                    onOpenPipeline={() => setActiveTab("pipeline")}
+                  />
+                </BentoGrid>
+              </TabsContent>
+              <TabsContent value="estimations" className="w-full">
+                <BentoGrid>
+                  <LeadManager
+                    title="Estimations"
+                    description="Demandes d'estimation reçues depuis le formulaire public et leur statut de suivi."
+                    leads={estimationLeads}
+                    setLeads={setEstimationLeads}
+                    connected={connected}
+                  />
+                </BentoGrid>
+              </TabsContent>
+              <TabsContent value="legacyReview" className="w-full">
+                <LegacyReviewPanel connected={connected} />
+              </TabsContent>
+              <TabsContent value="properties" className="w-full">
+                <PropertyManager
+                  properties={propertyItems}
+                  setProperties={setPropertyItems}
+                  connected={connected}
+                  createOpen={propertyCreateOpen}
+                  onCreateOpenChange={setPropertyCreateOpen}
+                />
+              </TabsContent>
+              <TabsContent value="activities" className="w-full">
+                <ActivityPanel
+                  activities={activities}
+                  filteredActivities={filteredActivities}
+                  recipeActivitiesCount={recipeActivitiesCount}
+                  activitySearch={activitySearch}
+                  setActivitySearch={setActivitySearch}
+                  activityEntityType={activityEntityType}
+                  setActivityEntityType={setActivityEntityType}
+                  activityAction={activityAction}
+                  setActivityAction={setActivityAction}
+                  activityPeriod={activityPeriod}
+                  setActivityPeriod={setActivityPeriod}
+                  activityVisibility={activityVisibility}
+                  setActivityVisibility={setActivityVisibility}
+                />
+              </TabsContent>
+              <TabsContent value="statistics" className="w-full">
+                <BentoStatisticsPanel metrics={metrics} />
+              </TabsContent>
+            </>
+          )}
         </Tabs>
       </div>
+      <CrmMobileNavigation
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onLogout={() => void logout()}
+        quickAction={mobileQuickAction}
+      />
     </main>
   );
 }
