@@ -39,6 +39,27 @@ export type ContactLead = {
   pipeline_lead_id: string | null;
 };
 
+export type AdminCrmLead = {
+  id: string;
+  kind: "contacts" | "estimations";
+  createdAt: string;
+  name: string;
+  email: string;
+  phone: string;
+  category: string;
+  city: string;
+  message: string;
+  status: LeadStatus;
+  notes: string;
+  archived: boolean;
+  contactRole: ContactRole | null;
+  qualificationStatus: ContactQualificationStatus | null;
+  qualificationSource: ContactQualificationSource | null;
+  activeProspect: boolean;
+  qualifiedAt: string | null;
+  pipelineLeadId: string | null;
+};
+
 export type EstimationLead = {
   id: string;
   created_at: string;

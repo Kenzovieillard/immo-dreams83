@@ -1,25 +1,22 @@
 "use client";
 
 import Image from "next/image";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   Archive,
   ArrowDown,
   ArrowUp,
-  BarChart3,
   Building2,
   CalendarClock,
   ChevronDown,
   ChevronUp,
   CheckCircle2,
-  ClipboardCheck,
   ContactRound,
   Clock,
   Info,
   LayoutDashboard,
   ImagePlus,
   ListChecks,
-  LogOut,
   Pencil,
   Plus,
   RefreshCw,
@@ -42,15 +39,20 @@ import {
 } from "@/components/admin/bento/bento-states";
 import {
   CrmMobileNavigation,
-  crmTabMeta,
   type CrmTab,
 } from "@/components/admin/crm-mobile-navigation";
+import { CrmRivieraContacts } from "@/components/admin/crm-riviera-contacts";
+import { CrmRivieraHeader } from "@/components/admin/crm-riviera-header";
+import {
+  CrmRivieraOverview,
+  type RivieraOverviewMetrics,
+} from "@/components/admin/crm-riviera-overview";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { DiagnosticBar } from "@/components/site/diagnostic-bar";
 import {
@@ -79,6 +81,10 @@ import {
   leadStatuses,
 } from "@/lib/crm";
 import {
+  buildCrmDailyPriorities,
+  type CrmDailyPriority,
+} from "@/lib/crm-dashboard";
+import {
   climateUnit,
   dpeBadgeClasses,
   dpeLetters,
@@ -104,11 +110,11 @@ import {
   propertyImportSource,
 } from "@/lib/property-management";
 import { cn } from "@/lib/utils";
-import { adminRoleLabels, type AdminRole } from "@/types/admin";
+import type { AdminRole } from "@/types/admin";
 import type {
   Activity,
+  AdminCrmLead,
   AdminTeamMember,
-  ContactQualificationSource,
   ContactQualificationStatus,
   ContactLead,
   ContactRole,
@@ -291,26 +297,24 @@ const landSaleOptions = [
 ];
 const landSaleOptionLabels = landSaleOptions.map((option) => option.label);
 
-type AdminLead = {
-  id: string;
-  kind: "contacts" | "estimations";
-  createdAt: string;
-  name: string;
-  email: string;
-  phone: string;
-  category: string;
-  city: string;
-  message: string;
-  status: LeadStatus;
-  notes: string;
-  archived: boolean;
-  contactRole: ContactRole | null;
-  qualificationStatus: ContactQualificationStatus | null;
-  qualificationSource: ContactQualificationSource | null;
-  activeProspect: boolean;
-  qualifiedAt: string | null;
-  pipelineLeadId: string | null;
-};
+type AdminLead = AdminCrmLead;
+
+const crmRivieraStyle = {
+  "--crm-riviera-bg-canvas": "#f6f4ef",
+  "--crm-riviera-bg-surface": "#fbfaf7",
+  "--crm-riviera-bg-header": "#17221e",
+  "--crm-riviera-bg-action": "#2f493a",
+  "--crm-riviera-bg-accent": "#dce5d7",
+  "--crm-riviera-text-primary": "#18211f",
+  "--crm-riviera-text-secondary": "#66716c",
+  "--crm-riviera-text-action": "#2f493a",
+  "--crm-riviera-border-default": "#dfddd4",
+  "--crm-riviera-status-success": "#4d7a5c",
+  "--crm-riviera-status-warning": "#c28b2c",
+  "--crm-riviera-status-danger": "#a94d43",
+  "--crm-riviera-shadow-card": "0 2px 8px rgb(23 34 30 / 0.07)",
+  overflowAnchor: "none",
+} as CSSProperties;
 
 type ContactFormState = {
   fullName: string;
@@ -1110,10 +1114,43 @@ function ActivityPreview({ activity }: { activity: Activity }) {
 function BentoDesignDashboard({
   metrics,
   setActiveTab,
+  priorities,
+  pipelineTasks,
+  onPriorityAction,
+  onCreateContact,
 }: {
   metrics: AdminMetrics;
   setActiveTab: React.Dispatch<React.SetStateAction<AdminTab>>;
+  priorities?: CrmDailyPriority[];
+  pipelineTasks?: PipelineTask[];
+  onPriorityAction?: (priority: CrmDailyPriority) => void;
+  onCreateContact?: () => void;
 }) {
+  if (priorities && pipelineTasks && onPriorityAction && onCreateContact) {
+    const overviewMetrics: RivieraOverviewMetrics = {
+      totalLeads: metrics.totalLeads,
+      newLeads: metrics.newLeads,
+      appointments: metrics.appointments,
+      mandateSigned: metrics.mandateSigned,
+      availableProperties: metrics.availableProperties,
+      propertiesWithoutPhotos: metrics.propertiesWithoutPhotos,
+      contactsToQualify: metrics.contactsToQualify,
+    };
+
+    return (
+      <CrmRivieraOverview
+        metrics={overviewMetrics}
+        priorities={priorities}
+        tasks={pipelineTasks}
+        onPriorityAction={onPriorityAction}
+        onOpenPipeline={() => setActiveTab("pipeline")}
+        onOpenContacts={() => setActiveTab("contacts")}
+        onOpenProperties={() => setActiveTab("properties")}
+        onCreateContact={onCreateContact}
+      />
+    );
+  }
+
   const pipelineMax = Math.max(
     metrics.contactsToQualify,
     metrics.contactsReadyForPipeline,
@@ -1671,7 +1708,7 @@ function CreateContactCard({
         <Button
           type="button"
           variant="outline"
-          className="h-10 border-orange-200 bg-white"
+          className="h-11 rounded-xl border-[var(--crm-riviera-border-default)] bg-[var(--crm-riviera-bg-surface)]"
           onClick={() => onOpenChange(!open)}
           aria-expanded={open}
           aria-controls="crm-create-contact-form"
@@ -1765,14 +1802,14 @@ function CreateContactCard({
           <Button
             type="submit"
             disabled={submitting}
-            className="h-11 w-full bg-orange-500 text-white hover:bg-orange-600 sm:w-fit"
+            className="h-12 w-full rounded-2xl bg-[var(--crm-riviera-bg-action)] text-white hover:bg-[var(--crm-riviera-bg-header)] sm:h-11 sm:w-fit"
           >
             <ContactRound className="size-4" />
             {submitting ? "Création..." : "Créer le contact"}
           </Button>
         </form>
       ) : (
-        <div className="rounded-xl border border-orange-100 bg-orange-50/60 p-4 text-sm leading-6 text-gray-600">
+        <div className="rounded-xl border border-[var(--crm-riviera-border-default)] bg-[var(--crm-riviera-bg-accent)] p-4 text-sm leading-6 text-[var(--crm-riviera-text-secondary)]">
           Le formulaire est replié pour garder la vue Contacts lisible. Cliquez sur Créer pour ajouter un contact manuellement.
         </div>
       )}
@@ -4006,6 +4043,10 @@ function LeadManager({
   enableQualification = false,
   onPipelineChanged,
   onOpenPipeline,
+  contactSearch = "",
+  onContactSearchChange = () => {},
+  selectedContactId = null,
+  onSelectedContactChange = () => {},
 }: {
   leads: AdminLead[];
   setLeads: React.Dispatch<React.SetStateAction<AdminLead[]>>;
@@ -4015,6 +4056,10 @@ function LeadManager({
   enableQualification?: boolean;
   onPipelineChanged?: () => Promise<void> | void;
   onOpenPipeline?: () => void;
+  contactSearch?: string;
+  onContactSearchChange?: (value: string) => void;
+  selectedContactId?: string | null;
+  onSelectedContactChange?: (id: string | null) => void;
 }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("ALL");
@@ -4147,6 +4192,26 @@ function LeadManager({
     await onPipelineChanged?.();
     setFeedback(payload.message ?? "Prospect créé dans le pipeline.");
     setPendingId(null);
+  }
+
+  if (enableQualification) {
+    return (
+      <CrmRivieraContacts
+        leads={leads}
+        setLeads={setLeads}
+        connected={connected}
+        search={contactSearch}
+        onSearchChange={onContactSearchChange}
+        selectedContactId={selectedContactId}
+        onSelectedContactChange={onSelectedContactChange}
+        pendingId={pendingId}
+        feedback={feedback}
+        onSaveQualification={saveQualification}
+        onCreateProspect={createProspect}
+        onPersist={persist}
+        onOpenPipeline={onOpenPipeline ?? (() => {})}
+      />
+    );
   }
 
   return (
@@ -4762,11 +4827,13 @@ function scrollToCrmSection(id: string) {
   });
 }
 
-export function AdminDashboard({ contacts, estimations, activities: initialActivities, properties, connected, userName, userRole }: Props) {
+export function AdminDashboard({ contacts, estimations, activities: initialActivities, properties, connected, userName }: Props) {
   const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(connected);
   const [activeTab, setActiveTab] = useState<AdminTab>("overview");
   const [contactCreateOpen, setContactCreateOpen] = useState(false);
+  const [contactSearch, setContactSearch] = useState("");
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
   const [propertyCreateOpen, setPropertyCreateOpen] = useState(false);
   const [contactLeads, setContactLeads] = useState(() => normalizeContacts(contacts));
   const [estimationLeads, setEstimationLeads] = useState(() => normalizeEstimations(estimations));
@@ -4790,6 +4857,17 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
     () => buildAdminMetrics(contactLeads, estimationLeads, propertyItems, businessActivities),
     [businessActivities, contactLeads, estimationLeads, propertyItems]
   );
+  const dailyPriorities = useMemo(
+    () =>
+      buildCrmDailyPriorities({
+        contacts: contactLeads,
+        leads: pipelineLeads,
+        tasks: pipelineTasks,
+      }),
+    [contactLeads, pipelineLeads, pipelineTasks]
+  );
+  const selectedContact =
+    contactLeads.find((contact) => contact.id === selectedContactId && !contact.archived) ?? null;
   const filteredActivities = useMemo(
     () => filterActivities(activities, activitySearch, activityEntityType, activityAction, activityPeriod, activityVisibility),
     [activities, activityAction, activityEntityType, activityPeriod, activitySearch, activityVisibility]
@@ -4888,16 +4966,32 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
     window.location.assign(payload?.redirectTo ?? "/admin/login");
   }
 
-  const activeTabDetails = crmTabMeta[activeTab];
+  function changeTab(tab: AdminTab) {
+    setActiveTab(tab);
+    if (tab !== "contacts") setSelectedContactId(null);
+  }
+
+  function openContactCreation() {
+    setSelectedContactId(null);
+    setActiveTab("contacts");
+    setContactCreateOpen(true);
+    scrollToCrmSection("crm-create-contact");
+  }
+
+  function handlePriorityAction(priority: CrmDailyPriority) {
+    if (priority.tab === "contacts") {
+      setSelectedContactId(priority.contactId ?? null);
+    }
+    setActiveTab(priority.tab);
+    window.scrollTo({ top: 0 });
+  }
+
   const mobileQuickAction =
-    activeTab === "contacts" && !contactCreateOpen
+    activeTab === "contacts"
       ? {
-          label: "Nouveau",
+          label: "Créer un contact",
           icon: Plus,
-          onClick: () => {
-            setContactCreateOpen(true);
-            scrollToCrmSection("crm-create-contact");
-          },
+          onClick: openContactCreation,
         }
       : activeTab === "properties" && !propertyCreateOpen
         ? {
@@ -4910,11 +5004,11 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
           }
         : activeTab === "overview"
           ? {
-              label: "À traiter",
+              label: dailyPriorities[0] ? dailyPriorities[0].actionLabel : "Ouvrir le pipeline",
               icon: Target,
               onClick: () => {
-                setActiveTab("pipeline");
-                window.scrollTo({ top: 0 });
+                if (dailyPriorities[0]) handlePriorityAction(dailyPriorities[0]);
+                else changeTab("pipeline");
               },
             }
           : activeTab === "pipeline" && connected
@@ -4926,38 +5020,28 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
             : undefined;
 
   return (
-    <main className="crm-riviera min-h-dvh overflow-x-hidden bg-[#fbf9f4] px-3 pt-4 pb-[calc(9rem+env(safe-area-inset-bottom))] sm:px-6 sm:py-7 lg:px-8">
-      <div className="mx-auto w-full max-w-screen-2xl min-w-0">
-        <header className="mb-5 border-b border-[#e8e3da] pb-5 sm:mb-7 sm:pb-6">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-xs font-bold uppercase text-orange-700">IMMO DREAMS · Riviera</p>
-              <h1 className="mt-1 text-2xl font-black text-[#111111] sm:text-3xl">Cockpit commercial</h1>
-              <p className="mt-1.5 max-w-2xl text-sm leading-5 text-gray-600">
-                Les priorités de l&apos;agence, du premier contact à la publication du bien.
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              onClick={() => void logout()}
-              className="hidden border-[#d8d2c8] bg-white md:inline-flex"
-            >
-              <LogOut className="size-4" />
-              Déconnexion
-            </Button>
-          </div>
-          <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-gray-600">
-            <Badge className={connected ? "border-0 bg-emerald-700 text-white" : "border-0 bg-[#e8d4b7] text-[#111111]"}>
-              {connected ? "Données synchronisées" : "Mode local"}
-            </Badge>
-            <span>
-              <strong className="text-[#111111]">{userName}</strong>
-              <span className="mx-1.5 text-[#b9b2a8]">·</span>
-              {adminRoleLabels[userRole]}
-            </span>
-            {loading ? <Badge className="border-0 bg-orange-100 text-orange-800">Chargement...</Badge> : null}
-          </div>
-        </header>
+    <main
+      className="crm-riviera min-h-dvh overflow-x-clip bg-[var(--crm-riviera-bg-canvas)] pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-8"
+      style={crmRivieraStyle}
+    >
+      <CrmRivieraHeader
+        activeTab={activeTab}
+        onTabChange={changeTab}
+        connected={connected}
+        loading={loading}
+        userName={userName}
+        priorityCount={dailyPriorities.length}
+        appointmentCount={metrics.appointments}
+        contactsToQualify={metrics.contactsToQualify}
+        contactsReady={metrics.contactsReadyForPipeline}
+        selectedContact={selectedContact}
+        onCloseContact={() => setSelectedContactId(null)}
+        contactSearch={contactSearch}
+        onContactSearchChange={setContactSearch}
+        onCreateContact={openContactCreation}
+        onLogout={() => void logout()}
+      />
+      <div className="mx-auto w-full max-w-screen-2xl min-w-0 px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
 
         {!connected ? (
           <section
@@ -4971,26 +5055,7 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
           </section>
         ) : null}
 
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as AdminTab)} className="w-full min-w-0 gap-6 sm:gap-8">
-          <div className="mb-5 md:hidden">
-            <p className="text-xs font-bold uppercase text-orange-700">Espace de travail</p>
-            <h2 className="mt-1 text-xl font-black text-[#111111]">{activeTabDetails.title}</h2>
-            <p className="mt-1 text-sm leading-5 text-gray-600">{activeTabDetails.description}</p>
-          </div>
-
-          <div className="sticky top-0 z-30 hidden w-full min-w-0 bg-[#fbf9f4]/95 py-2 backdrop-blur-md md:block">
-            <TabsList className="!grid h-auto w-full grid-cols-4 gap-1 border border-[#e8e3da] bg-white p-1 shadow-[0_4px_16px_rgb(17_17_17/0.05)] xl:!inline-flex xl:justify-start">
-              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-sm font-semibold xl:w-auto xl:flex-none xl:justify-center xl:px-4" value="overview"><LayoutDashboard />Vue d&apos;ensemble</TabsTrigger>
-              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-sm font-semibold xl:w-auto xl:flex-none xl:justify-center xl:px-4" value="pipeline"><Target />Pipeline</TabsTrigger>
-              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-sm font-semibold xl:w-auto xl:flex-none xl:justify-center xl:px-4" value="contacts"><ContactRound />Contacts</TabsTrigger>
-              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-sm font-semibold xl:w-auto xl:flex-none xl:justify-center xl:px-4" value="estimations"><ClipboardCheck />Estimations</TabsTrigger>
-              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-sm font-semibold xl:w-auto xl:flex-none xl:justify-center xl:px-4" value="legacyReview"><ListChecks />Anciennes demandes</TabsTrigger>
-              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-sm font-semibold xl:w-auto xl:flex-none xl:justify-center xl:px-4" value="properties"><Building2 />Biens</TabsTrigger>
-              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-sm font-semibold xl:w-auto xl:flex-none xl:justify-center xl:px-4" value="activities"><ListChecks />Activités</TabsTrigger>
-              <TabsTrigger className="!min-h-11 w-full min-w-0 justify-start px-3 text-sm font-semibold xl:w-auto xl:flex-none xl:justify-center xl:px-4" value="statistics"><BarChart3 />Statistiques</TabsTrigger>
-            </TabsList>
-          </div>
-
+        <Tabs value={activeTab} onValueChange={(value) => changeTab(value as AdminTab)} className="w-full min-w-0 gap-6 sm:gap-8">
           {loading ? (
             <CrmLoadingState />
           ) : loadError ? (
@@ -4998,7 +5063,14 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
           ) : (
             <>
               <TabsContent value="overview" className="w-full">
-                <BentoDesignDashboard metrics={metrics} setActiveTab={setActiveTab} />
+                <BentoDesignDashboard
+                  metrics={metrics}
+                  setActiveTab={setActiveTab}
+                  priorities={dailyPriorities}
+                  pipelineTasks={pipelineTasks}
+                  onPriorityAction={handlePriorityAction}
+                  onCreateContact={openContactCreation}
+                />
               </TabsContent>
               <TabsContent value="pipeline" className="w-full">
                 <PipelinePanel
@@ -5013,24 +5085,32 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
                 />
               </TabsContent>
               <TabsContent value="contacts">
-                <BentoGrid>
-                  <CreateContactCard
-                    setLeads={setContactLeads}
-                    connected={connected}
-                    open={contactCreateOpen}
-                    onOpenChange={setContactCreateOpen}
-                  />
-                  <LeadManager
-                    title="Contacts"
-                    description="Demandes entrantes, prospects créés manuellement et suivi commercial rapide."
-                    leads={contactLeads}
-                    setLeads={setContactLeads}
-                    connected={connected}
-                    enableQualification
-                    onPipelineChanged={refreshPipeline}
-                    onOpenPipeline={() => setActiveTab("pipeline")}
-                  />
-                </BentoGrid>
+                {contactCreateOpen ? (
+                  <div className="mb-4">
+                    <BentoGrid>
+                      <CreateContactCard
+                        setLeads={setContactLeads}
+                        connected={connected}
+                        open={contactCreateOpen}
+                        onOpenChange={setContactCreateOpen}
+                      />
+                    </BentoGrid>
+                  </div>
+                ) : null}
+                <LeadManager
+                  title="Contacts"
+                  description="Demandes entrantes, prospects créés manuellement et suivi commercial rapide."
+                  leads={contactLeads}
+                  setLeads={setContactLeads}
+                  connected={connected}
+                  enableQualification
+                  onPipelineChanged={refreshPipeline}
+                  onOpenPipeline={() => changeTab("pipeline")}
+                  contactSearch={contactSearch}
+                  onContactSearchChange={setContactSearch}
+                  selectedContactId={selectedContactId}
+                  onSelectedContactChange={setSelectedContactId}
+                />
               </TabsContent>
               <TabsContent value="estimations" className="w-full">
                 <BentoGrid>
@@ -5081,7 +5161,7 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
       </div>
       <CrmMobileNavigation
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={changeTab}
         onLogout={() => void logout()}
         quickAction={mobileQuickAction}
       />

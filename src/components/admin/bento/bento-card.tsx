@@ -7,12 +7,12 @@ import { bentoSpanClasses, type BentoSpan } from "./bento-grid";
 export type BentoVariant = "default" | "highlight" | "success" | "warning" | "danger" | "muted";
 
 const variantClasses: Record<BentoVariant, string> = {
-  default: "border-[var(--bento-card-border)] bg-[var(--bento-card-background)] text-[var(--riviera-ink)]",
-  highlight: "border-[#e8d4b7] bg-[#fff5e9] text-[var(--riviera-ink)]",
+  default: "border-[var(--bento-card-border)] bg-[var(--bento-card-background)] text-[var(--crm-riviera-text-primary)]",
+  highlight: "border-[var(--crm-riviera-border-default)] bg-[var(--crm-riviera-bg-accent)] text-[var(--crm-riviera-text-primary)]",
   success: "border-emerald-100 bg-emerald-50 text-emerald-950",
   warning: "border-yellow-200 bg-yellow-50 text-yellow-950",
   danger: "border-red-100 bg-red-50 text-red-950",
-  muted: "border-[var(--bento-card-border)] bg-[var(--bento-card-muted-background)] text-[var(--riviera-ink)]",
+  muted: "border-[var(--bento-card-border)] bg-[var(--bento-card-muted-background)] text-[var(--crm-riviera-text-primary)]",
 };
 
 export function BentoCard({
@@ -52,13 +52,13 @@ export function BentoCard({
         <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             {eyebrow ? (
-              <Badge className="mb-2 w-fit border-0 bg-white text-orange-800">{eyebrow}</Badge>
+              <Badge className="mb-2 w-fit border-0 bg-[var(--crm-riviera-bg-accent)] text-[var(--crm-riviera-text-action)]">{eyebrow}</Badge>
             ) : null}
             <CardTitle className="text-base font-bold leading-snug text-inherit sm:text-lg">
               {title}
             </CardTitle>
             {description ? (
-              <p className="mt-1.5 text-sm leading-5 text-gray-600">{description}</p>
+              <p className="mt-1.5 text-sm leading-5 text-[var(--crm-riviera-text-secondary)]">{description}</p>
             ) : null}
           </div>
           {action ? <div className="self-end sm:shrink-0">{action}</div> : null}

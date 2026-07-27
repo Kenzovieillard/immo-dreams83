@@ -11,7 +11,7 @@ import {
   LayoutDashboard,
   ListChecks,
   LogOut,
-  MoreHorizontal,
+  Plus,
   Target,
 } from "lucide-react";
 import {
@@ -81,10 +81,10 @@ const primaryItems: NavigationItem[] = [
   { value: "overview", label: "Accueil", icon: LayoutDashboard },
   { value: "contacts", label: "Contacts", icon: ContactRound },
   { value: "properties", label: "Biens", icon: Building2 },
-  { value: "pipeline", label: "Pipeline", icon: Target },
 ];
 
 const secondaryItems: NavigationItem[] = [
+  { value: "pipeline", label: "Pipeline", icon: Target },
   { value: "estimations", label: "Estimations", icon: ClipboardCheck },
   { value: "legacyReview", label: "Anciennes demandes", icon: ListChecks },
   { value: "activities", label: "Activités", icon: History },
@@ -113,6 +113,7 @@ export function CrmMobileNavigation({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const secondaryActive = secondaryItems.some((item) => item.value === activeTab);
+  const actionEmphasized = activeTab === "overview" || secondaryActive;
   const QuickActionIcon = quickAction?.icon;
 
   function selectTab(tab: CrmTab) {
@@ -125,21 +126,9 @@ export function CrmMobileNavigation({
     <>
       <nav
         aria-label="Navigation principale du CRM"
-        className="crm-mobile-dock fixed inset-x-0 bottom-0 z-40 border-t border-[#e8e3da] bg-white/96 px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-10px_32px_rgb(17_17_17/0.09)] backdrop-blur-md md:hidden"
+        className="crm-mobile-dock fixed inset-x-0 bottom-0 z-40 border-t border-[var(--crm-riviera-border-default)] bg-[var(--crm-riviera-bg-surface)] px-1 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_-8px_rgb(23_34_30/0.16)] md:hidden"
       >
-        {quickAction && QuickActionIcon ? (
-          <div className="mx-auto flex max-w-md justify-end pb-2">
-            <Button
-              type="button"
-              onClick={quickAction.onClick}
-              className="h-12 rounded-lg bg-orange-500 px-4 font-bold text-white shadow-[0_8px_22px_rgb(17_17_17/0.14)] hover:bg-orange-600"
-            >
-              <QuickActionIcon className="size-5" />
-              {quickAction.label}
-            </Button>
-          </div>
-        ) : null}
-        <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
+        <div className="mx-auto grid h-[72px] max-w-md grid-cols-4 gap-1">
           {primaryItems.map((item) => {
             const Icon = item.icon;
             const active = activeTab === item.value;
@@ -151,12 +140,11 @@ export function CrmMobileNavigation({
                 onClick={() => selectTab(item.value)}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex min-h-13 min-w-0 touch-manipulation flex-col items-center justify-center gap-1 rounded-lg px-1 text-[11px] font-semibold text-gray-600 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500",
-                  active && "bg-[#111111] text-white",
-                  item.value === "pipeline" && !active && "text-orange-700"
+                  "flex min-w-0 touch-manipulation flex-col items-center justify-center gap-1 rounded-2xl px-1 text-xs font-medium text-[var(--crm-riviera-text-secondary)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--crm-riviera-bg-action)]",
+                  active && "bg-[var(--crm-riviera-bg-accent)] text-[var(--crm-riviera-text-action)]"
                 )}
               >
-                <Icon className="size-5" />
+                <Icon className="size-6" />
                 <span className="max-w-full truncate">{item.label}</span>
               </button>
             );
@@ -169,23 +157,47 @@ export function CrmMobileNavigation({
                   type="button"
                   aria-current={secondaryActive ? "page" : undefined}
                   className={cn(
-                    "flex min-h-13 min-w-0 touch-manipulation flex-col items-center justify-center gap-1 rounded-lg px-1 text-[11px] font-semibold text-gray-600 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500",
-                    secondaryActive && "bg-[#111111] text-white"
+                    "flex min-w-0 touch-manipulation flex-col items-center justify-center gap-1 rounded-2xl px-1 text-xs font-medium text-[var(--crm-riviera-text-secondary)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--crm-riviera-bg-action)]",
+                    actionEmphasized && "bg-[var(--crm-riviera-bg-action)] text-white"
                   )}
                 />
               }
             >
-              <MoreHorizontal className="size-5" />
-              <span>Plus</span>
+              <span
+                className={cn(
+                  "flex size-9 items-center justify-center rounded-full",
+                  actionEmphasized
+                    ? "bg-[var(--crm-riviera-bg-accent)] text-[var(--crm-riviera-text-action)]"
+                    : "text-[var(--crm-riviera-text-action)]"
+                )}
+              >
+                <Plus className="size-6" />
+              </span>
+              <span>Action</span>
             </SheetTrigger>
             <SheetContent
               side="bottom"
-              className="crm-riviera max-h-[75dvh] rounded-t-lg border-[#e8e3da] bg-[#fbf9f4] pb-[env(safe-area-inset-bottom)]"
+              className="crm-riviera max-h-[82dvh] rounded-t-2xl border-[var(--crm-riviera-border-default)] bg-[var(--crm-riviera-bg-canvas)] pb-[env(safe-area-inset-bottom)]"
             >
-              <SheetHeader className="border-b border-[#e8e3da] px-4 pt-5 pb-4 pr-14 text-left">
-                <SheetTitle className="text-lg font-bold text-[#111111]">Plus d&apos;outils</SheetTitle>
-                <SheetDescription>Les vues de contrôle et de suivi secondaire.</SheetDescription>
+              <SheetHeader className="border-b border-[var(--crm-riviera-border-default)] px-4 pt-5 pb-4 pr-14 text-left">
+                <SheetTitle className="text-lg font-bold text-[var(--crm-riviera-text-primary)]">Actions et outils</SheetTitle>
+                <SheetDescription>Les commandes utiles restent accessibles avec le pouce droit.</SheetDescription>
               </SheetHeader>
+              {quickAction && QuickActionIcon ? (
+                <div className="px-4">
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      quickAction.onClick();
+                      setMenuOpen(false);
+                    }}
+                    className="h-12 w-full rounded-2xl bg-[var(--crm-riviera-bg-action)] px-4 font-semibold text-white hover:bg-[var(--crm-riviera-bg-header)]"
+                  >
+                    <QuickActionIcon className="size-5" />
+                    {quickAction.label}
+                  </Button>
+                </div>
+              ) : null}
               <div className="grid grid-cols-2 gap-2 px-4">
                 {secondaryItems.map((item) => {
                   const Icon = item.icon;
@@ -198,8 +210,8 @@ export function CrmMobileNavigation({
                       onClick={() => selectTab(item.value)}
                       aria-current={active ? "page" : undefined}
                       className={cn(
-                        "flex min-h-20 flex-col items-start justify-between rounded-lg border border-[#e8e3da] bg-white p-3 text-left text-sm font-bold text-[#111111] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500",
-                        active && "border-orange-300 bg-orange-50 text-orange-800"
+                        "flex min-h-20 flex-col items-start justify-between rounded-2xl border border-[var(--crm-riviera-border-default)] bg-[var(--crm-riviera-bg-surface)] p-3 text-left text-sm font-semibold text-[var(--crm-riviera-text-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--crm-riviera-bg-action)]",
+                        active && "border-[var(--crm-riviera-bg-action)] bg-[var(--crm-riviera-bg-accent)]"
                       )}
                     >
                       <Icon className="size-5" />
@@ -208,12 +220,12 @@ export function CrmMobileNavigation({
                   );
                 })}
               </div>
-              <SheetFooter className="border-t border-[#e8e3da]">
+              <SheetFooter className="border-t border-[var(--crm-riviera-border-default)]">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={onLogout}
-                  className="h-12 justify-center border-[#d8d2c8] bg-white text-[#111111]"
+                  className="h-12 justify-center rounded-2xl border-[var(--crm-riviera-border-default)] bg-[var(--crm-riviera-bg-surface)] text-[var(--crm-riviera-text-primary)]"
                 >
                   <LogOut className="size-4" />
                   Déconnexion

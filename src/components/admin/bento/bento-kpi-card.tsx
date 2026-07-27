@@ -18,10 +18,10 @@ export function BentoKpiCard({
   span?: BentoSpan;
 }) {
   const toneClassName = {
-    dark: "text-[#111111]",
-    orange: "text-orange-600",
-    success: "text-emerald-700",
-    warning: "text-yellow-700",
+    dark: "text-[var(--crm-riviera-text-primary)]",
+    orange: "text-[var(--crm-riviera-text-action)]",
+    success: "text-[var(--crm-riviera-status-success)]",
+    warning: "text-[var(--crm-riviera-status-warning)]",
   }[tone];
 
   return (
@@ -29,16 +29,16 @@ export function BentoKpiCard({
       className={cn(
         span ? bentoSpanClasses[span] : null,
         span
-          ? "min-w-0 rounded-(--bento-card-radius) border border-[var(--bento-card-border)] bg-white p-4 shadow-(--bento-card-shadow)"
-          : "min-w-0 border-l-2 border-[#e8d4b7] py-1 pl-3",
+          ? "min-w-0 rounded-(--bento-card-radius) border border-[var(--bento-card-border)] bg-[var(--crm-riviera-bg-surface)] p-4 shadow-(--bento-card-shadow)"
+          : "min-w-0 border-l-2 border-[var(--crm-riviera-bg-accent)] py-1 pl-3",
         className
       )}
     >
-      <p className="text-xs font-semibold leading-5 text-gray-500 sm:text-sm">{label}</p>
+      <p className="text-xs font-semibold leading-5 text-[var(--crm-riviera-text-secondary)] sm:text-sm">{label}</p>
       <p className={cn("mt-1 break-words text-2xl font-black leading-tight sm:text-3xl", toneClassName)}>
         {value}
       </p>
-      {description ? <p className="mt-2 text-xs leading-5 text-gray-500">{description}</p> : null}
+      {description ? <p className="mt-2 text-xs leading-5 text-[var(--crm-riviera-text-secondary)]">{description}</p> : null}
     </div>
   );
 }

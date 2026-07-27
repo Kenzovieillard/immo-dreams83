@@ -181,47 +181,60 @@
 }
 
 .crm-riviera {
-  --background: var(--riviera-sand);
-  --foreground: var(--riviera-ink);
-  --card: var(--riviera-white);
-  --card-foreground: var(--riviera-ink);
-  --popover: var(--riviera-white);
-  --popover-foreground: var(--riviera-ink);
-  --primary: var(--riviera-orange);
-  --primary-foreground: var(--riviera-white);
-  --secondary: #f3efe7;
-  --secondary-foreground: var(--riviera-ink);
-  --muted: #f3efe7;
-  --muted-foreground: #68645d;
-  --accent: var(--riviera-gold);
-  --accent-foreground: var(--riviera-ink);
-  --border: var(--riviera-sand-strong);
-  --input: #d8d2c8;
-  --ring: var(--riviera-orange);
-  --bento-card-radius: 0.5rem;
-  --bento-card-border: var(--riviera-sand-strong);
-  --bento-card-background: var(--riviera-white);
-  --bento-card-muted-background: #f6f2e9;
-  --bento-card-shadow: 0 6px 20px rgb(17 17 17 / 0.055);
-  color: var(--riviera-ink);
+  --crm-riviera-bg-canvas: #f6f4ef;
+  --crm-riviera-bg-surface: #fbfaf7;
+  --crm-riviera-bg-header: #17221e;
+  --crm-riviera-bg-action: #2f493a;
+  --crm-riviera-bg-accent: #dce5d7;
+  --crm-riviera-text-primary: #18211f;
+  --crm-riviera-text-secondary: #66716c;
+  --crm-riviera-text-action: #2f493a;
+  --crm-riviera-border-default: #dfddd4;
+  --crm-riviera-status-success: #4d7a5c;
+  --crm-riviera-status-warning: #c28b2c;
+  --crm-riviera-status-danger: #a94d43;
+  --crm-riviera-shadow-card: 0 2px 8px rgb(23 34 30 / 0.07);
+  --background: var(--crm-riviera-bg-canvas);
+  --foreground: var(--crm-riviera-text-primary);
+  --card: var(--crm-riviera-bg-surface);
+  --card-foreground: var(--crm-riviera-text-primary);
+  --popover: var(--crm-riviera-bg-surface);
+  --popover-foreground: var(--crm-riviera-text-primary);
+  --primary: var(--crm-riviera-bg-action);
+  --primary-foreground: #ffffff;
+  --secondary: var(--crm-riviera-bg-accent);
+  --secondary-foreground: var(--crm-riviera-text-primary);
+  --muted: var(--crm-riviera-bg-accent);
+  --muted-foreground: var(--crm-riviera-text-secondary);
+  --accent: var(--crm-riviera-bg-accent);
+  --accent-foreground: var(--crm-riviera-text-primary);
+  --border: var(--crm-riviera-border-default);
+  --input: var(--crm-riviera-border-default);
+  --ring: var(--crm-riviera-bg-action);
+  --bento-card-radius: 1rem;
+  --bento-card-border: var(--crm-riviera-border-default);
+  --bento-card-background: var(--crm-riviera-bg-surface);
+  --bento-card-muted-background: var(--crm-riviera-bg-accent);
+  --bento-card-shadow: var(--crm-riviera-shadow-card);
+  color: var(--crm-riviera-text-primary);
 }
 
 .crm-riviera [data-slot="input"],
 .crm-riviera [data-slot="textarea"],
 .crm-riviera [data-slot="select-trigger"] {
-  border-color: #d8d2c8;
-  background: var(--riviera-white);
+  border-color: var(--crm-riviera-border-default);
+  background: var(--crm-riviera-bg-surface);
 }
 
 .crm-riviera [data-slot="input"]:focus-visible,
 .crm-riviera [data-slot="textarea"]:focus-visible,
 .crm-riviera [data-slot="select-trigger"]:focus-visible {
-  border-color: var(--riviera-orange);
+  border-color: var(--crm-riviera-bg-action);
 }
 
 .crm-riviera [data-slot="tabs-trigger"][data-active] {
-  border-color: #e8d4b7;
-  box-shadow: inset 0 -2px 0 var(--riviera-orange);
+  border-color: var(--crm-riviera-border-default);
+  box-shadow: inset 0 -2px 0 var(--crm-riviera-bg-action);
 }
 
 .dark {
