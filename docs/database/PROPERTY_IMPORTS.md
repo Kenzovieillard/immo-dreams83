@@ -43,7 +43,7 @@ Le script :
 - conserve les slugs existants;
 - applique les statuts commerciaux et de publication;
 - importe les photos dans `property_photos`;
-- genere un rapport JSON dans `reports/`.
+- genere un rapport JSON local dans `reports/imports/`.
 
 ## Derniere application reelle
 
@@ -64,7 +64,7 @@ Resultat :
 - aucun doublon `slug`;
 - lecture anonyme directe de `properties` bloquee par RLS.
 
-Rapports locaux generes dans `reports/` :
+Rapports locaux generes dans `reports/imports/` :
 
 - dry-run biens connecte;
 - import reel biens;

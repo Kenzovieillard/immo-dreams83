@@ -71,6 +71,8 @@ Routes API :
 
 - `src/app/api/contact/route.ts` : creation de demandes contact.
 - `src/app/api/estimation/route.ts` : creation de demandes d'estimation.
+- `src/app/api/admin/auth/login/route.ts` : connexion admin.
+- `src/app/api/admin/auth/logout/route.ts` : deconnexion admin.
 - `src/app/api/admin/leads/route.ts` : operations admin sur les leads.
 - `src/app/api/admin/pipeline/route.ts` : pipeline commercial.
 - `src/app/api/admin/properties/route.ts` : gestion admin des biens.
@@ -212,6 +214,9 @@ Dossier : `reports/`
 - `reports/imports/applied/` : imports ou migrations appliquees.
 - `reports/audits/` : audits, controles et logs techniques.
 - `reports/audits/dev-server-logs/` : logs de serveurs de developpement ranges hors racine.
+- `reports/MANIFEST.md` : inventaire synthetique versionne des lots de rapports locaux.
+
+Les fichiers `reports/**/*.json` et `reports/**/*.log` restent locaux et sont ignores par Git.
 
 ## Methode de travail
 

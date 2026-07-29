@@ -155,7 +155,7 @@ Regles du script :
 - detection des leads deja crees par `source_table` + `source_id` ;
 - creation de `leads`, `lead_status_history` et `communications` ;
 - conservation des anciennes tables `contacts` et `estimations` ;
-- rapport JSON dans `reports/`.
+- rapport JSON local dans `reports/imports/`.
 
 Resultat du dry-run connecte avant import du 16/07/2026 :
 
