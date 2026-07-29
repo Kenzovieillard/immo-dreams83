@@ -1,0 +1,204 @@
+{
+  "success": true,
+  "mode": "dry-run",
+  "generatedAt": "2026-07-16T18:23:33.235Z",
+  "migrationVersion": "v3-legacy-contacts-leads-20260716",
+  "writesPerformed": false,
+  "readyForApply": true,
+  "summary": {
+    "contactsRead": 5,
+    "estimationsRead": 5,
+    "submissionsAnalyzed": 10,
+    "matchCategory": {
+      "MATCH CERTAIN": 9,
+      "MATCH PROBABLE": 0,
+      "AMBIGU": 1,
+      "AUCUN MATCH": 0
+    },
+    "legacyLeadsAlreadyPresent": 9,
+    "plannedLeads": 0,
+    "skippedIgnored": 1,
+    "skippedExisting": 9,
+    "blockers": 0
+  },
+  "blockers": [],
+  "skippedIgnored": [
+    {
+      "key": "contact:fdbaec34-e229-4035-9606-546f0f59c468",
+      "name": "Test Codex Contact Manuel",
+      "reason": "IGNORED"
+    }
+  ],
+  "plannedItems": [
+    {
+      "key": "contact:eea43e1b-6551-4423-bf15-a1bc964f8f46",
+      "name": "Test Codex Contact OK",
+      "legacySource": "contact",
+      "matchCategory": "MATCH CERTAIN",
+      "canonical": {
+        "action": "reuse",
+        "contactId": "eea43e1b-6551-4423-bf15-a1bc964f8f46",
+        "reason": "legacy_contact_self"
+      },
+      "archived": true,
+      "skipped": false,
+      "skipReason": null,
+      "existingLeadId": "5129e67e-2e93-4031-97bd-81a978196d20",
+      "sourceTable": "contacts",
+      "sourceId": "eea43e1b-6551-4423-bf15-a1bc964f8f46"
+    },
+    {
+      "key": "contact:fdbaec34-e229-4035-9606-546f0f59c468",
+      "name": "Test Codex Contact Manuel",
+      "legacySource": "contact",
+      "matchCategory": "AMBIGU",
+      "canonical": {
+        "action": "reuse",
+        "contactId": "fdbaec34-e229-4035-9606-546f0f59c468",
+        "reason": "ignored_contact"
+      },
+      "archived": true,
+      "skipped": true,
+      "skipReason": "IGNORED",
+      "existingLeadId": null,
+      "sourceTable": "contacts",
+      "sourceId": "fdbaec34-e229-4035-9606-546f0f59c468"
+    },
+    {
+      "key": "contact:fdb3f557-ade6-4acd-9a28-b7f2ec24ff6c",
+      "name": "Test Codex Estimation Contact",
+      "legacySource": "contact",
+      "matchCategory": "MATCH CERTAIN",
+      "canonical": {
+        "action": "reuse",
+        "contactId": "fdb3f557-ade6-4acd-9a28-b7f2ec24ff6c",
+        "reason": "legacy_contact_self"
+      },
+      "archived": true,
+      "skipped": false,
+      "skipReason": null,
+      "existingLeadId": "4750f92d-763d-42e5-b4ff-a879825ce5ab",
+      "sourceTable": "contacts",
+      "sourceId": "fdb3f557-ade6-4acd-9a28-b7f2ec24ff6c"
+    },
+    {
+      "key": "contact:b94b2850-e0d5-43cd-b093-f62374b94cee",
+      "name": "Kenzo Vieillard",
+      "legacySource": "contact",
+      "matchCategory": "MATCH CERTAIN",
+      "canonical": {
+        "action": "reuse",
+        "contactId": "b94b2850-e0d5-43cd-b093-f62374b94cee",
+        "reason": "legacy_contact_self"
+      },
+      "archived": false,
+      "skipped": false,
+      "skipReason": null,
+      "existingLeadId": "f74ae049-c43a-4481-8d26-049ed69dc401",
+      "sourceTable": "contacts",
+      "sourceId": "b94b2850-e0d5-43cd-b093-f62374b94cee"
+    },
+    {
+      "key": "contact:88da245a-8a51-453d-a23b-157db8d3d1ce",
+      "name": "ANTOINE FARIDONI",
+      "legacySource": "contact",
+      "matchCategory": "MATCH CERTAIN",
+      "canonical": {
+        "action": "reuse",
+        "contactId": "88da245a-8a51-453d-a23b-157db8d3d1ce",
+        "reason": "legacy_contact_self"
+      },
+      "archived": false,
+      "skipped": false,
+      "skipReason": null,
+      "existingLeadId": "02590a9f-25b5-4d74-8258-4729de049676",
+      "sourceTable": "contacts",
+      "sourceId": "88da245a-8a51-453d-a23b-157db8d3d1ce"
+    },
+    {
+      "key": "estimation:ac5813b2-1e61-47ae-8188-775c79b4be81",
+      "name": "Test Codex Estimation OK",
+      "legacySource": "estimation",
+      "matchCategory": "MATCH CERTAIN",
+      "canonical": {
+        "action": "reuse",
+        "contactId": "eea43e1b-6551-4423-bf15-a1bc964f8f46",
+        "reason": "email_match"
+      },
+      "archived": true,
+      "skipped": false,
+      "skipReason": null,
+      "existingLeadId": "eb7b88c1-c986-4efb-a6ce-ee9a59b295b8",
+      "sourceTable": "estimations",
+      "sourceId": "ac5813b2-1e61-47ae-8188-775c79b4be81"
+    },
+    {
+      "key": "estimation:6b912fda-899c-492e-8975-d3a7506154c7",
+      "name": "Kenzo Vieillard",
+      "legacySource": "estimation",
+      "matchCategory": "MATCH CERTAIN",
+      "canonical": {
+        "action": "reuse",
+        "contactId": "b94b2850-e0d5-43cd-b093-f62374b94cee",
+        "reason": "email_match"
+      },
+      "archived": false,
+      "skipped": false,
+      "skipReason": null,
+      "existingLeadId": "32e34e9a-2d6c-4cd7-93a8-5cab57357f41",
+      "sourceTable": "estimations",
+      "sourceId": "6b912fda-899c-492e-8975-d3a7506154c7"
+    },
+    {
+      "key": "estimation:199af1a7-9180-4264-a7c1-e91eff356570",
+      "name": "Test Codex Estimation Contact",
+      "legacySource": "estimation",
+      "matchCategory": "MATCH CERTAIN",
+      "canonical": {
+        "action": "reuse",
+        "contactId": "fdb3f557-ade6-4acd-9a28-b7f2ec24ff6c",
+        "reason": "email_match"
+      },
+      "archived": true,
+      "skipped": false,
+      "skipReason": null,
+      "existingLeadId": "39c90bca-365d-47cd-b582-484261373b0f",
+      "sourceTable": "estimations",
+      "sourceId": "199af1a7-9180-4264-a7c1-e91eff356570"
+    },
+    {
+      "key": "estimation:6faa84b4-c3eb-4056-80e2-0b8ebd707fd1",
+      "name": "Kenzo Vieillard",
+      "legacySource": "estimation",
+      "matchCategory": "MATCH CERTAIN",
+      "canonical": {
+        "action": "reuse",
+        "contactId": "b94b2850-e0d5-43cd-b093-f62374b94cee",
+        "reason": "email_match"
+      },
+      "archived": false,
+      "skipped": false,
+      "skipReason": null,
+      "existingLeadId": "63b3ef79-de8c-40c6-a7d1-a2ec139bb8c9",
+      "sourceTable": "estimations",
+      "sourceId": "6faa84b4-c3eb-4056-80e2-0b8ebd707fd1"
+    },
+    {
+      "key": "estimation:3f5b9d7a-6cf1-4ff7-b737-9cbe519bdb8e",
+      "name": "ANTOINE FARIDONI",
+      "legacySource": "estimation",
+      "matchCategory": "MATCH CERTAIN",
+      "canonical": {
+        "action": "reuse",
+        "contactId": "88da245a-8a51-453d-a23b-157db8d3d1ce",
+        "reason": "email_match"
+      },
+      "archived": false,
+      "skipped": false,
+      "skipReason": null,
+      "existingLeadId": "45d50328-2154-408c-968a-144c4d9cffb9",
+      "sourceTable": "estimations",
+      "sourceId": "3f5b9d7a-6cf1-4ff7-b737-9cbe519bdb8e"
+    }
+  ]
+}

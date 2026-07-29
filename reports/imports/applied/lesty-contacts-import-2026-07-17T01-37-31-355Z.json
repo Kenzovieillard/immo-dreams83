@@ -1,0 +1,142 @@
+{
+  "success": true,
+  "mode": "import",
+  "generatedAt": "2026-07-17T01:37:22.611Z",
+  "sourceFile": "ged_contact (2026-07-16 220737).csv",
+  "writesPerformed": true,
+  "totals": {
+    "inputRows": 187,
+    "validContacts": 187,
+    "create": 187,
+    "update": 0,
+    "duplicateRefs": 0,
+    "duplicateRealEmails": 11,
+    "duplicatePhones": 7,
+    "technicalEmails": 77,
+    "missingRealContactMethod": 48,
+    "archived": 0
+  },
+  "blockers": [],
+  "samples": [
+    {
+      "ref": "128",
+      "action": "create",
+      "requestType": "Vendeur",
+      "hasRealEmail": false,
+      "hasPhone": false,
+      "hasCity": false,
+      "flags": [
+        "technical_email",
+        "missing_real_contact_method"
+      ]
+    },
+    {
+      "ref": "129",
+      "action": "create",
+      "requestType": "Vendeur",
+      "hasRealEmail": false,
+      "hasPhone": false,
+      "hasCity": false,
+      "flags": [
+        "technical_email",
+        "missing_real_contact_method"
+      ]
+    },
+    {
+      "ref": "131",
+      "action": "create",
+      "requestType": "Vendeur",
+      "hasRealEmail": false,
+      "hasPhone": false,
+      "hasCity": false,
+      "flags": [
+        "technical_email",
+        "missing_real_contact_method"
+      ]
+    },
+    {
+      "ref": "136",
+      "action": "create",
+      "requestType": "Vendeur",
+      "hasRealEmail": false,
+      "hasPhone": false,
+      "hasCity": false,
+      "flags": [
+        "technical_email",
+        "missing_real_contact_method"
+      ]
+    },
+    {
+      "ref": "138",
+      "action": "create",
+      "requestType": "Vendeur",
+      "hasRealEmail": false,
+      "hasPhone": false,
+      "hasCity": false,
+      "flags": [
+        "technical_email",
+        "missing_real_contact_method"
+      ]
+    },
+    {
+      "ref": "141",
+      "action": "create",
+      "requestType": "Vendeur",
+      "hasRealEmail": false,
+      "hasPhone": false,
+      "hasCity": false,
+      "flags": [
+        "technical_email",
+        "missing_real_contact_method"
+      ]
+    },
+    {
+      "ref": "142",
+      "action": "create",
+      "requestType": "Vendeur",
+      "hasRealEmail": false,
+      "hasPhone": false,
+      "hasCity": false,
+      "flags": [
+        "technical_email",
+        "missing_real_contact_method"
+      ]
+    },
+    {
+      "ref": "143",
+      "action": "create",
+      "requestType": "Vendeur",
+      "hasRealEmail": false,
+      "hasPhone": false,
+      "hasCity": false,
+      "flags": [
+        "technical_email",
+        "missing_real_contact_method"
+      ]
+    },
+    {
+      "ref": "144",
+      "action": "create",
+      "requestType": "Vendeur",
+      "hasRealEmail": false,
+      "hasPhone": false,
+      "hasCity": false,
+      "flags": [
+        "technical_email",
+        "missing_real_contact_method"
+      ]
+    },
+    {
+      "ref": "147",
+      "action": "create",
+      "requestType": "Vendeur",
+      "hasRealEmail": false,
+      "hasPhone": false,
+      "hasCity": false,
+      "flags": [
+        "technical_email",
+        "missing_real_contact_method"
+      ]
+    }
+  ]
+}

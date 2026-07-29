@@ -1,0 +1,94 @@
+{
+  "mode": "dry-run",
+  "generatedAt": "2026-07-15T21:44:10.282Z",
+  "total": 12,
+  "created": 12,
+  "updated": 0,
+  "unchanged": 0,
+  "items": [
+    {
+      "reference": "099",
+      "slug": "maison-carqueiranne-83320-ref-099",
+      "title": "Maison à Carqueiranne avec piscine",
+      "action": "create",
+      "photoCount": 6
+    },
+    {
+      "reference": "67",
+      "slug": "maison-toulon-83200-ref-67",
+      "title": "Demeure atypique sur les pentes du Faron",
+      "action": "create",
+      "photoCount": 5
+    },
+    {
+      "reference": "101",
+      "slug": "maison-hyeres-83400-ref-101",
+      "title": "Maison avec terrasse et vue dégagée à Hyères",
+      "action": "create",
+      "photoCount": 4
+    },
+    {
+      "reference": "091",
+      "slug": "terrain-pierrefeu-du-var-83390-ref-091",
+      "title": "Terrain plat à Pierrefeu-du-Var",
+      "action": "create",
+      "photoCount": 4
+    },
+    {
+      "reference": "093bis",
+      "slug": "appartement-sollies-pont-83210-ref-093bis",
+      "title": "Haut de villa rénové à Solliès-Pont",
+      "action": "create",
+      "photoCount": 5
+    },
+    {
+      "reference": "066",
+      "slug": "terrain-sollies-pont-83210-ref-066",
+      "title": "Terrain dominant libre constructeur",
+      "action": "create",
+      "photoCount": 3
+    },
+    {
+      "reference": "103",
+      "slug": "appartement-hyeres-83400-ref-103",
+      "title": "Appartement T3 rénové quartier gare à Hyères",
+      "action": "create",
+      "photoCount": 5
+    },
+    {
+      "reference": "102",
+      "slug": "appartement-hyeres-83400-ref-102",
+      "title": "Appartement T2 rénové sur les hauteurs de Hyères",
+      "action": "create",
+      "photoCount": 4
+    },
+    {
+      "reference": "098",
+      "slug": "appartement-cuers-83390-ref-098",
+      "title": "Appartement T2 avec jardin à Cuers",
+      "action": "create",
+      "photoCount": 4
+    },
+    {
+      "reference": "72",
+      "slug": "appartement-toulon-83000-ref-72",
+      "title": "Appartement T2 lumineux au Mourillon",
+      "action": "create",
+      "photoCount": 3
+    },
+    {
+      "reference": "71",
+      "slug": "appartement-toulon-83000-ref-71",
+      "title": "Appartement T2 au Mourillon",
+      "action": "create",
+      "photoCount": 3
+    },
+    {
+      "reference": "73",
+      "slug": "appartement-toulon-83000-ref-73",
+      "title": "Studio lumineux au Mourillon",
+      "action": "create",
+      "photoCount": 2
+    }
+  ]
+}

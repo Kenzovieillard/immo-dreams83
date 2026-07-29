@@ -1,0 +1,518 @@
+{
+  "success": true,
+  "mode": "dry-run",
+  "generatedAt": "2026-07-16T16:03:15.559Z",
+  "writesPerformed": false,
+  "summary": {
+    "contactsRead": 5,
+    "estimationsRead": 5,
+    "submissionsAnalyzed": 10,
+    "byCategory": {
+      "MATCH CERTAIN": 9,
+      "MATCH PROBABLE": 0,
+      "AMBIGU": 1,
+      "AUCUN MATCH": 0
+    },
+    "manualReview": 1,
+    "missingContactMethod": 0,
+    "simulatedContacts": 9,
+    "simulatedLeads": 9,
+    "simulatedCommunications": 10
+  },
+  "ambiguousCases": [
+    {
+      "legacySource": "contact",
+      "legacyId": "fdbaec34-e229-4035-9606-546f0f59c468",
+      "matchCategory": "AMBIGU",
+      "plannedAction": "MANUAL_REVIEW",
+      "matchedKeys": [
+        "phone:0600000000"
+      ],
+      "futureContact": {
+        "name": "Test Codex Contact Manuel",
+        "email": "codex-manual-20260714013810@example.fr",
+        "phone": "0600000000",
+        "city": "Solli�s-Pont",
+        "source": "LEGACY_CONTACTS_ESTIMATIONS"
+      },
+      "futureLead": {
+        "source": "CONTACT_FORM",
+        "requestType": "Achat",
+        "status": "NEW",
+        "city": "Solli�s-Pont",
+        "legacyTable": "contacts",
+        "legacyId": "fdbaec34-e229-4035-9606-546f0f59c468",
+        "payloadPreview": {
+          "message": "Test automatique de cr�ation manuelle CRM."
+        }
+      },
+      "futureStatusHistory": {
+        "fromStatus": null,
+        "toStatus": "NEW",
+        "reason": "LEGACY_IMPORT_DRY_RUN"
+      },
+      "futureCommunications": [
+        {
+          "type": "NOTE",
+          "direction": "INBOUND",
+          "bodyPreview": "Test automatique de cr�ation manuelle CRM."
+        }
+      ],
+      "warnings": [
+        "Demande legacy archivee.",
+        "Rapprochement a verifier manuellement avant migration."
+      ]
+    }
+  ],
+  "probableMatches": [],
+  "unmatched": [],
+  "simulatedPayloads": [
+    {
+      "legacySource": "contact",
+      "legacyId": "eea43e1b-6551-4423-bf15-a1bc964f8f46",
+      "matchCategory": "MATCH CERTAIN",
+      "plannedAction": "CREATE_OR_REUSE_CONTACT",
+      "matchedKeys": [
+        "email:test.codex@example.com",
+        "phone:0600000000"
+      ],
+      "futureContact": {
+        "name": "Test Codex Contact OK",
+        "email": "test.codex@example.com",
+        "phone": "0600000000",
+        "city": "Solli�s-Pont",
+        "source": "LEGACY_CONTACTS_ESTIMATIONS"
+      },
+      "futureLead": {
+        "source": "CONTACT_FORM",
+        "requestType": "Autre",
+        "status": "NEW",
+        "city": "Solli�s-Pont",
+        "legacyTable": "contacts",
+        "legacyId": "eea43e1b-6551-4423-bf15-a1bc964f8f46",
+        "payloadPreview": {
+          "message": "Test technique apr�s correctif Supabase contact."
+        }
+      },
+      "futureStatusHistory": {
+        "fromStatus": null,
+        "toStatus": "NEW",
+        "reason": "LEGACY_IMPORT_DRY_RUN"
+      },
+      "futureCommunications": [
+        {
+          "type": "NOTE",
+          "direction": "INBOUND",
+          "bodyPreview": "Test technique apr�s correctif Supabase contact."
+        }
+      ],
+      "warnings": [
+        "Demande legacy archivee."
+      ]
+    },
+    {
+      "legacySource": "contact",
+      "legacyId": "fdbaec34-e229-4035-9606-546f0f59c468",
+      "matchCategory": "AMBIGU",
+      "plannedAction": "MANUAL_REVIEW",
+      "matchedKeys": [
+        "phone:0600000000"
+      ],
+      "futureContact": {
+        "name": "Test Codex Contact Manuel",
+        "email": "codex-manual-20260714013810@example.fr",
+        "phone": "0600000000",
+        "city": "Solli�s-Pont",
+        "source": "LEGACY_CONTACTS_ESTIMATIONS"
+      },
+      "futureLead": {
+        "source": "CONTACT_FORM",
+        "requestType": "Achat",
+        "status": "NEW",
+        "city": "Solli�s-Pont",
+        "legacyTable": "contacts",
+        "legacyId": "fdbaec34-e229-4035-9606-546f0f59c468",
+        "payloadPreview": {
+          "message": "Test automatique de cr�ation manuelle CRM."
+        }
+      },
+      "futureStatusHistory": {
+        "fromStatus": null,
+        "toStatus": "NEW",
+        "reason": "LEGACY_IMPORT_DRY_RUN"
+      },
+      "futureCommunications": [
+        {
+          "type": "NOTE",
+          "direction": "INBOUND",
+          "bodyPreview": "Test automatique de cr�ation manuelle CRM."
+        }
+      ],
+      "warnings": [
+        "Demande legacy archivee.",
+        "Rapprochement a verifier manuellement avant migration."
+      ]
+    },
+    {
+      "legacySource": "contact",
+      "legacyId": "fdb3f557-ade6-4acd-9a28-b7f2ec24ff6c",
+      "matchCategory": "MATCH CERTAIN",
+      "plannedAction": "CREATE_OR_REUSE_CONTACT",
+      "matchedKeys": [
+        "email:codex-estimation-20260714013810@example.fr",
+        "phone:0611111111",
+        "name_city:test codex estimation contact|la garde"
+      ],
+      "futureContact": {
+        "name": "Test Codex Estimation Contact",
+        "email": "codex-estimation-20260714013810@example.fr",
+        "phone": "0611111111",
+        "city": "La Garde",
+        "source": "LEGACY_CONTACTS_ESTIMATIONS"
+      },
+      "futureLead": {
+        "source": "CONTACT_FORM",
+        "requestType": "Estimation",
+        "status": "NEW",
+        "city": "La Garde",
+        "legacyTable": "contacts",
+        "legacyId": "fdb3f557-ade6-4acd-9a28-b7f2ec24ff6c",
+        "payloadPreview": {
+          "message": "Demande d'estimation Maison à La Garde (83130).\n\nSurface : 120 m² · Pièces : 5.\n\nTest automatique miroir estimation vers contact.\n\nPrix envisagé : 450000 €"
+        }
+      },
+      "futureStatusHistory": {
+        "fromStatus": null,
+        "toStatus": "NEW",
+        "reason": "LEGACY_IMPORT_DRY_RUN"
+      },
+      "futureCommunications": [
+        {
+          "type": "NOTE",
+          "direction": "INBOUND",
+          "bodyPreview": "Demande d'estimation Maison à La Garde (83130).\n\nSurface : 120 m² · Pièces : 5.\n\nTest automatique miroir estimation vers contact.\n\nPrix envisagé : 450000 €"
+        }
+      ],
+      "warnings": [
+        "Demande legacy archivee."
+      ]
+    },
+    {
+      "legacySource": "contact",
+      "legacyId": "b94b2850-e0d5-43cd-b093-f62374b94cee",
+      "matchCategory": "MATCH CERTAIN",
+      "plannedAction": "CREATE_OR_REUSE_CONTACT",
+      "matchedKeys": [
+        "email:kenzovieillardkenzo-v@outlook.fr",
+        "phone:0782468217",
+        "name_city:kenzo vieillard|la garde"
+      ],
+      "futureContact": {
+        "name": "Kenzo Vieillard",
+        "email": "kenzovieillardkenzo-v@outlook.fr",
+        "phone": "0782468217",
+        "city": "LA GARDE",
+        "source": "LEGACY_CONTACTS_ESTIMATIONS"
+      },
+      "futureLead": {
+        "source": "CONTACT_FORM",
+        "requestType": "Estimation",
+        "status": "NEW",
+        "city": "LA GARDE",
+        "legacyTable": "contacts",
+        "legacyId": "b94b2850-e0d5-43cd-b093-f62374b94cee",
+        "payloadPreview": {
+          "message": "Demande d'estimation Maison à LA GARDE (83130).\n\nSurface : 220 m² · Pièces : 6.\n\nbhkhb\n\nPrix envisagé : 1500000 €"
+        }
+      },
+      "futureStatusHistory": {
+        "fromStatus": null,
+        "toStatus": "NEW",
+        "reason": "LEGACY_IMPORT_DRY_RUN"
+      },
+      "futureCommunications": [
+        {
+          "type": "NOTE",
+          "direction": "INBOUND",
+          "bodyPreview": "Demande d'estimation Maison à LA GARDE (83130).\n\nSurface : 220 m² · Pièces : 6.\n\nbhkhb\n\nPrix envisagé : 1500000 €"
+        }
+      ],
+      "warnings": []
+    },
+    {
+      "legacySource": "contact",
+      "legacyId": "88da245a-8a51-453d-a23b-157db8d3d1ce",
+      "matchCategory": "MATCH CERTAIN",
+      "plannedAction": "CREATE_OR_REUSE_CONTACT",
+      "matchedKeys": [
+        "email:vieillardkenzo@gmail.com",
+        "phone:0782468217",
+        "name_city:antoine faridoni|la garde"
+      ],
+      "futureContact": {
+        "name": "ANTOINE FARIDONI",
+        "email": "vieillardkenzo@gmail.com",
+        "phone": "0782468217",
+        "city": "la garde",
+        "source": "LEGACY_CONTACTS_ESTIMATIONS"
+      },
+      "futureLead": {
+        "source": "CONTACT_FORM",
+        "requestType": "Estimation",
+        "status": "NEW",
+        "city": "la garde",
+        "legacyTable": "contacts",
+        "legacyId": "88da245a-8a51-453d-a23b-157db8d3d1ce",
+        "payloadPreview": {
+          "message": "Demande d'estimation Terrain à la garde (83130).\n\nSurface : 550 m².\n\nPrix envisagé : 450000 €"
+        }
+      },
+      "futureStatusHistory": {
+        "fromStatus": null,
+        "toStatus": "NEW",
+        "reason": "LEGACY_IMPORT_DRY_RUN"
+      },
+      "futureCommunications": [
+        {
+          "type": "NOTE",
+          "direction": "INBOUND",
+          "bodyPreview": "Demande d'estimation Terrain à la garde (83130).\n\nSurface : 550 m².\n\nPrix envisagé : 450000 €"
+        }
+      ],
+      "warnings": []
+    },
+    {
+      "legacySource": "estimation",
+      "legacyId": "ac5813b2-1e61-47ae-8188-775c79b4be81",
+      "matchCategory": "MATCH CERTAIN",
+      "plannedAction": "CREATE_OR_REUSE_CONTACT",
+      "matchedKeys": [
+        "email:test.codex@example.com",
+        "phone:0600000000"
+      ],
+      "futureContact": {
+        "name": "Test Codex Estimation OK",
+        "email": "test.codex@example.com",
+        "phone": "0600000000",
+        "city": "Solli�s-Pont",
+        "source": "LEGACY_CONTACTS_ESTIMATIONS"
+      },
+      "futureLead": {
+        "source": "ESTIMATION_FORM",
+        "requestType": "Estimation Maison",
+        "status": "NEW",
+        "city": "Solli�s-Pont",
+        "legacyTable": "estimations",
+        "legacyId": "ac5813b2-1e61-47ae-8188-775c79b4be81",
+        "payloadPreview": {
+          "message": "Test technique apr�s correctif Supabase estimation.\n\nPrix envisagé : 450000 €",
+          "propertyType": "Maison",
+          "postalCode": "83210",
+          "surface": 120,
+          "rooms": 5
+        }
+      },
+      "futureStatusHistory": {
+        "fromStatus": null,
+        "toStatus": "NEW",
+        "reason": "LEGACY_IMPORT_DRY_RUN"
+      },
+      "futureCommunications": [
+        {
+          "type": "NOTE",
+          "direction": "INBOUND",
+          "bodyPreview": "Test technique apr�s correctif Supabase estimation.\n\nPrix envisagé : 450000 €"
+        }
+      ],
+      "warnings": [
+        "Demande legacy archivee."
+      ]
+    },
+    {
+      "legacySource": "estimation",
+      "legacyId": "6b912fda-899c-492e-8975-d3a7506154c7",
+      "matchCategory": "MATCH CERTAIN",
+      "plannedAction": "CREATE_OR_REUSE_CONTACT",
+      "matchedKeys": [
+        "email:kenzovieillardkenzo-v@outlook.fr",
+        "phone:0782468217",
+        "name_city:kenzo vieillard|la garde"
+      ],
+      "futureContact": {
+        "name": "Kenzo Vieillard",
+        "email": "kenzovieillardkenzo-v@outlook.fr",
+        "phone": "0782468217",
+        "city": "LA GARDE",
+        "source": "LEGACY_CONTACTS_ESTIMATIONS"
+      },
+      "futureLead": {
+        "source": "ESTIMATION_FORM",
+        "requestType": "Estimation Maison",
+        "status": "NEW",
+        "city": "LA GARDE",
+        "legacyTable": "estimations",
+        "legacyId": "6b912fda-899c-492e-8975-d3a7506154c7",
+        "payloadPreview": {
+          "message": "Je souhaite estre contacté\n\nPrix envisagé : 250000 €",
+          "propertyType": "Maison",
+          "postalCode": "83130",
+          "surface": 120,
+          "rooms": 5
+        }
+      },
+      "futureStatusHistory": {
+        "fromStatus": null,
+        "toStatus": "NEW",
+        "reason": "LEGACY_IMPORT_DRY_RUN"
+      },
+      "futureCommunications": [
+        {
+          "type": "NOTE",
+          "direction": "INBOUND",
+          "bodyPreview": "Je souhaite estre contacté\n\nPrix envisagé : 250000 €"
+        }
+      ],
+      "warnings": []
+    },
+    {
+      "legacySource": "estimation",
+      "legacyId": "199af1a7-9180-4264-a7c1-e91eff356570",
+      "matchCategory": "MATCH CERTAIN",
+      "plannedAction": "CREATE_OR_REUSE_CONTACT",
+      "matchedKeys": [
+        "email:codex-estimation-20260714013810@example.fr",
+        "phone:0611111111",
+        "name_city:test codex estimation contact|la garde"
+      ],
+      "futureContact": {
+        "name": "Test Codex Estimation Contact",
+        "email": "codex-estimation-20260714013810@example.fr",
+        "phone": "0611111111",
+        "city": "La Garde",
+        "source": "LEGACY_CONTACTS_ESTIMATIONS"
+      },
+      "futureLead": {
+        "source": "ESTIMATION_FORM",
+        "requestType": "Estimation Maison",
+        "status": "NEW",
+        "city": "La Garde",
+        "legacyTable": "estimations",
+        "legacyId": "199af1a7-9180-4264-a7c1-e91eff356570",
+        "payloadPreview": {
+          "message": "Test automatique miroir estimation vers contact.\n\nPrix envisagé : 450000 €",
+          "propertyType": "Maison",
+          "postalCode": "83130",
+          "surface": 120,
+          "rooms": 5
+        }
+      },
+      "futureStatusHistory": {
+        "fromStatus": null,
+        "toStatus": "NEW",
+        "reason": "LEGACY_IMPORT_DRY_RUN"
+      },
+      "futureCommunications": [
+        {
+          "type": "NOTE",
+          "direction": "INBOUND",
+          "bodyPreview": "Test automatique miroir estimation vers contact.\n\nPrix envisagé : 450000 €"
+        }
+      ],
+      "warnings": [
+        "Demande legacy archivee."
+      ]
+    },
+    {
+      "legacySource": "estimation",
+      "legacyId": "6faa84b4-c3eb-4056-80e2-0b8ebd707fd1",
+      "matchCategory": "MATCH CERTAIN",
+      "plannedAction": "CREATE_OR_REUSE_CONTACT",
+      "matchedKeys": [
+        "email:kenzovieillardkenzo-v@outlook.fr",
+        "phone:0782468217",
+        "name_city:kenzo vieillard|la garde"
+      ],
+      "futureContact": {
+        "name": "Kenzo Vieillard",
+        "email": "kenzovieillardkenzo-v@outlook.fr",
+        "phone": "0782468217",
+        "city": "LA GARDE",
+        "source": "LEGACY_CONTACTS_ESTIMATIONS"
+      },
+      "futureLead": {
+        "source": "ESTIMATION_FORM",
+        "requestType": "Estimation Maison",
+        "status": "LOST",
+        "city": "LA GARDE",
+        "legacyTable": "estimations",
+        "legacyId": "6faa84b4-c3eb-4056-80e2-0b8ebd707fd1",
+        "payloadPreview": {
+          "message": "bhkhb\n\nPrix envisagé : 1500000 €",
+          "propertyType": "Maison",
+          "postalCode": "83130",
+          "surface": 220,
+          "rooms": 6
+        }
+      },
+      "futureStatusHistory": {
+        "fromStatus": null,
+        "toStatus": "LOST",
+        "reason": "LEGACY_IMPORT_DRY_RUN"
+      },
+      "futureCommunications": [
+        {
+          "type": "NOTE",
+          "direction": "INBOUND",
+          "bodyPreview": "bhkhb\n\nPrix envisagé : 1500000 €"
+        }
+      ],
+      "warnings": []
+    },
+    {
+      "legacySource": "estimation",
+      "legacyId": "3f5b9d7a-6cf1-4ff7-b737-9cbe519bdb8e",
+      "matchCategory": "MATCH CERTAIN",
+      "plannedAction": "CREATE_OR_REUSE_CONTACT",
+      "matchedKeys": [
+        "email:vieillardkenzo@gmail.com",
+        "phone:0782468217",
+        "name_city:antoine faridoni|la garde"
+      ],
+      "futureContact": {
+        "name": "ANTOINE FARIDONI",
+        "email": "vieillardkenzo@gmail.com",
+        "phone": "0782468217",
+        "city": "la garde",
+        "source": "LEGACY_CONTACTS_ESTIMATIONS"
+      },
+      "futureLead": {
+        "source": "ESTIMATION_FORM",
+        "requestType": "Estimation Terrain",
+        "status": "NEW",
+        "city": "la garde",
+        "legacyTable": "estimations",
+        "legacyId": "3f5b9d7a-6cf1-4ff7-b737-9cbe519bdb8e",
+        "payloadPreview": {
+          "message": "Prix envisagé : 450000 €",
+          "propertyType": "Terrain",
+          "postalCode": "83130",
+          "surface": 550,
+          "rooms": null
+        }
+      },
+      "futureStatusHistory": {
+        "fromStatus": null,
+        "toStatus": "NEW",
+        "reason": "LEGACY_IMPORT_DRY_RUN"
+      },
+      "futureCommunications": [
+        {
+          "type": "NOTE",
+          "direction": "INBOUND",
+          "bodyPreview": "Prix envisagé : 450000 €"
+        }
+      ],
+      "warnings": []
+    }
+  ]
+}

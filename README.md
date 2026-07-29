@@ -501,14 +501,15 @@ Les statistiques CRM sont calculees a partir des donnees locales ou Supabase dej
 
 ## Documentation
 
-- Setup technique : `docs/V2_5_SETUP.md`
-- Recette mobile et CRM : `docs/V2_5_RECETTE.md`
-- Recette V2.6 : `docs/V2_6_RECETTE.md`
-- Inventaire des annonces importees : `docs/PROPERTY_IMPORTS.md`
-- Design system CRM Bento : `docs/CRM_BENTO_DESIGN_SYSTEM.md`
-- Implementation CRM V3 : `docs/CRM_V3_IMPLEMENTATION.md`
-- Demarrage CRM commercial V3 : `docs/V3_PHASE_3_CRM_COMMERCIAL.md`
-- Objectifs V3 : `docs/V3.md`
+- Index d'organisation : `docs/README.md`
+- Setup technique et Vercel : `docs/deployment/V2_5_SETUP.md`
+- Recette mobile et CRM : `docs/crm/V2_5_RECETTE.md`
+- Recette V2.6 : `docs/crm/V2_6_RECETTE.md`
+- Inventaire des annonces importees : `docs/database/PROPERTY_IMPORTS.md`
+- Design system CRM Bento : `docs/frontend/CRM_BENTO_DESIGN_SYSTEM.md`
+- Implementation CRM V3 : `docs/crm/CRM_V3_IMPLEMENTATION.md`
+- Demarrage CRM commercial V3 : `docs/crm/V3_PHASE_3_CRM_COMMERCIAL.md`
+- Objectifs V3 : `docs/crm/V3.md`
 
 ## Verifications
 
