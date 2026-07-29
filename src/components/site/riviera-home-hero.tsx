@@ -114,7 +114,7 @@ export function RivieraHomeHero() {
     <section
       ref={storyRef}
       className="riviera-scroll-story relative bg-[#f6f2e9]"
-      style={{ height: reducedMotion ? "100svh" : "640svh" }}
+      style={reducedMotion ? { height: "100svh" } : undefined}
       aria-label="Présentation IMMO DREAMS"
     >
       <div className="sticky top-0 h-[100svh] min-h-[35rem] overflow-hidden bg-[#f6f2e9]">

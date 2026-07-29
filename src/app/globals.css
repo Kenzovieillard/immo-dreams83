@@ -272,7 +272,14 @@
 }
 
 .riviera-scroll-story {
+  height: 190svh;
   isolation: isolate;
+}
+
+@media (min-width: 768px) and (min-height: 600px) {
+  .riviera-scroll-story {
+    height: 640svh;
+  }
 }
 
 .riviera-scroll-story [style*="opacity"],
