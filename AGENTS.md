@@ -2,7 +2,7 @@
 
 ## Bento Design CRM
 
-Toutes les futures phases du CRM V3 doivent respecter le Bento Design System documente dans `docs/CRM_BENTO_DESIGN_SYSTEM.md`.
+Toutes les futures phases du CRM V3 doivent respecter le Bento Design System documente dans `docs/frontend/CRM_BENTO_DESIGN_SYSTEM.md`.
 
 Regles principales :
 

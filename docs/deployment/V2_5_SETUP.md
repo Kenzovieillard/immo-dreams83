@@ -93,4 +93,4 @@ npm run lint
 npm run build
 ```
 
-Pour la validation fonctionnelle, utiliser `docs/V2_5_RECETTE.md`.
+Pour la validation fonctionnelle, utiliser `docs/crm/V2_5_RECETTE.md`.
