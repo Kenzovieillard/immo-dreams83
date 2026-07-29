@@ -128,7 +128,7 @@ export function RivieraHomeHero() {
             src="/images/riviera/interior-hero.jpg"
             alt=""
             fill
-            priority
+            fetchPriority="low"
             sizes="100vw"
             className="object-cover"
             style={{
@@ -143,7 +143,7 @@ export function RivieraHomeHero() {
         />
 
         <p
-          className="pointer-events-none absolute inset-x-4 top-[13%] z-10 text-center text-[4.4rem] font-black leading-[0.82] text-[#111111] sm:whitespace-nowrap sm:text-[7rem] sm:leading-none lg:text-[9.4rem]"
+          className="pointer-events-none absolute inset-x-4 top-[13%] z-10 text-center text-[4.4rem] font-black leading-[0.82] text-[#111111] sm:whitespace-nowrap sm:text-[5rem] sm:leading-none md:text-[6rem] lg:text-[9.4rem]"
           style={{
             opacity: wordmarkReveal,
             transform: `scale(${1 - progress * 0.16})`,
@@ -168,10 +168,11 @@ export function RivieraHomeHero() {
             }}
           >
             <Image
-              src="/images/hero/villa-riviera-scroll-cutout-v2.png"
+              src="/images/hero/villa-riviera-scroll-cutout-v2.webp"
               alt=""
               fill
               priority
+              fetchPriority="high"
               sizes="(min-width: 768px) 72vw, 92vw"
               className="object-contain drop-shadow-[0_34px_28px_rgba(17,17,17,0.22)]"
             />

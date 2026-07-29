@@ -82,11 +82,10 @@ export default async function Home() {
             </div>
 
             <div className={getFeaturedGridClass(visibleFeaturedProperties.length)}>
-              {visibleFeaturedProperties.map((property, index) => (
+              {visibleFeaturedProperties.map((property) => (
                 <PropertyCard
                   key={property.id}
                   property={property}
-                  priority={index < 3}
                 />
               ))}
             </div>

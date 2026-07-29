@@ -2,9 +2,6 @@
 
 import { useEffect } from "react";
 
-const MOBILE_VIEWPORT_CONTENT =
-  "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover";
-
 function isEditableElement(element: Element | null) {
   return Boolean(
     element?.matches(
@@ -28,9 +25,6 @@ function resetHorizontalOffset() {
 
 export function MobileViewportGuard() {
   useEffect(() => {
-    const viewportMeta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
-    viewportMeta?.setAttribute("content", MOBILE_VIEWPORT_CONTENT);
-
     function scheduleReset() {
       requestAnimationFrame(resetHorizontalOffset);
       window.setTimeout(resetHorizontalOffset, 80);
