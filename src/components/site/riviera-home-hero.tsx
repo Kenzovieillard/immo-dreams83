@@ -13,6 +13,10 @@ function revealBetween(progress: number, start: number, end: number) {
   return clamp((progress - start) / (end - start));
 }
 
+function mapScrollProgress(progress: number, start: number, end: number) {
+  return revealBetween(progress, start, end);
+}
+
 export function RivieraHomeHero() {
   const storyRef = useRef<HTMLElement>(null);
   const frameRef = useRef<number | null>(null);
@@ -96,20 +100,21 @@ export function RivieraHomeHero() {
     });
   }, [reducedMotion]);
 
-  const interiorReveal = reducedMotion ? 1 : revealBetween(progress, 0.58, 0.82);
-  const contentReveal = reducedMotion ? 1 : revealBetween(progress, 0.76, 0.96);
-  const arrivalReveal = reducedMotion ? 0 : 1 - revealBetween(progress, 0.12, 0.38);
-  const villaReveal = reducedMotion ? 0 : 1 - revealBetween(progress, 0.61, 0.78);
-  const wordmarkReveal = reducedMotion ? 0 : 1 - revealBetween(progress, 0.3, 0.58);
+  const villaProgress = reducedMotion ? 1 : mapScrollProgress(progress, 0.04, 0.92);
+  const interiorReveal = reducedMotion ? 1 : revealBetween(progress, 0.68, 0.9);
+  const contentReveal = reducedMotion ? 1 : revealBetween(progress, 0.84, 0.98);
+  const arrivalReveal = reducedMotion ? 0 : 1 - revealBetween(progress, 0.16, 0.52);
+  const villaReveal = reducedMotion ? 0 : 1 - revealBetween(progress, 0.8, 0.96);
+  const wordmarkReveal = reducedMotion ? 0 : 1 - revealBetween(progress, 0.34, 0.68);
   const activeStep = reducedMotion ? 4 : Math.min(4, Math.floor(progress * 5));
-  const villaScale = 0.78 + progress * 1.45;
-  const villaTranslate = 7 - progress * 19;
+  const villaScale = 0.72 + villaProgress * 1.34;
+  const villaTranslate = 9 - villaProgress * 16;
 
   return (
     <section
       ref={storyRef}
       className="riviera-scroll-story relative bg-[#f6f2e9]"
-      style={{ height: reducedMotion ? "100svh" : "500svh" }}
+      style={{ height: reducedMotion ? "100svh" : "640svh" }}
       aria-label="Présentation IMMO DREAMS"
     >
       <div className="sticky top-0 h-[100svh] min-h-[35rem] overflow-hidden bg-[#f6f2e9]">
@@ -159,7 +164,7 @@ export function RivieraHomeHero() {
           <div
             className="absolute inset-0"
             style={{
-              transform: `translateY(${villaTranslate}%) scale(${villaScale})`,
+              transform: `translate3d(0, ${villaTranslate}%, 0) scale(${villaScale})`,
             }}
           >
             <Image
