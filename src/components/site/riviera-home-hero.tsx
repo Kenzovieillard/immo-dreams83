@@ -17,18 +17,112 @@ function mapScrollProgress(progress: number, start: number, end: number) {
   return revealBetween(progress, start, end);
 }
 
+const SMOOTHING_TIME_MS = 70;
+const PROGRESS_EPSILON = 0.0005;
+
+type HeroThemeState = {
+  dark: boolean;
+  complete: boolean;
+  active: boolean;
+};
+
 export function RivieraHomeHero() {
   const storyRef = useRef<HTMLElement>(null);
   const frameRef = useRef<number | null>(null);
-  const [progress, setProgress] = useState(0);
+  const targetProgressRef = useRef(0);
+  const renderedProgressRef = useRef(0);
+  const lastFrameTimeRef = useRef<number | null>(null);
+  const metricsRef = useRef({ top: 0, distance: 1 });
+  const themeStateRef = useRef<HeroThemeState | null>(null);
+  const contentInteractiveRef = useRef(false);
+  const activeStepRef = useRef(0);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const replayRef = useRef<HTMLButtonElement>(null);
+  const indicatorRef = useRef<HTMLDivElement>(null);
+  const stepRefs = useRef<Array<HTMLSpanElement | null>>([]);
   const [reducedMotion, setReducedMotion] = useState(false);
+
+  const applyVisualProgress = useCallback(
+    (progress: number, complete = progress >= 0.999) => {
+      const story = storyRef.current;
+      if (!story) return;
+
+      const villaProgress = mapScrollProgress(progress, 0.04, 0.92);
+      const interiorReveal = revealBetween(progress, 0.68, 0.9);
+      const contentReveal = revealBetween(progress, 0.84, 0.98);
+      const arrivalReveal = 1 - revealBetween(progress, 0.16, 0.52);
+      const villaReveal = 1 - revealBetween(progress, 0.8, 0.96);
+      const wordmarkReveal = 1 - revealBetween(progress, 0.34, 0.68);
+      const villaScale = 0.72 + villaProgress * 1.34;
+      const villaTranslate = 9 - villaProgress * 16;
+
+      story.style.setProperty("--riviera-sky-opacity", `${1 - interiorReveal}`);
+      story.style.setProperty("--riviera-interior-opacity", `${interiorReveal}`);
+      story.style.setProperty(
+        "--riviera-interior-scale",
+        `${1.06 - interiorReveal * 0.06}`
+      );
+      story.style.setProperty("--riviera-wordmark-opacity", `${wordmarkReveal}`);
+      story.style.setProperty("--riviera-wordmark-scale", `${1 - progress * 0.16}`);
+      story.style.setProperty("--riviera-villa-opacity", `${villaReveal}`);
+      story.style.setProperty("--riviera-villa-translate", `${villaTranslate}%`);
+      story.style.setProperty("--riviera-villa-scale", `${villaScale}`);
+      story.style.setProperty("--riviera-arrival-opacity", `${arrivalReveal}`);
+      story.style.setProperty("--riviera-content-opacity", `${contentReveal}`);
+      story.style.setProperty(
+        "--riviera-step-color",
+        interiorReveal > 0.5 ? "#ffffff" : "#111111"
+      );
+
+      const isContentInteractive = contentReveal > 0.82;
+      if (contentInteractiveRef.current !== isContentInteractive) {
+        contentInteractiveRef.current = isContentInteractive;
+        const pointerEvents = isContentInteractive ? "auto" : "none";
+        if (contentRef.current) contentRef.current.style.pointerEvents = pointerEvents;
+        if (replayRef.current) replayRef.current.style.pointerEvents = pointerEvents;
+      }
+
+      const activeStep = Math.min(4, Math.floor(progress * 5));
+      if (activeStepRef.current !== activeStep) {
+        activeStepRef.current = activeStep;
+        indicatorRef.current?.setAttribute(
+          "aria-label",
+          `Étape ${activeStep + 1} sur 5`
+        );
+        stepRefs.current.forEach((step, index) => {
+          if (step) step.dataset.active = index === activeStep ? "true" : "false";
+        });
+      }
+
+      const nextTheme: HeroThemeState = {
+        dark: progress >= 0.7,
+        complete,
+        active: progress > 0 && !complete,
+      };
+      const currentTheme = themeStateRef.current;
+
+      if (
+        !currentTheme ||
+        currentTheme.dark !== nextTheme.dark ||
+        currentTheme.complete !== nextTheme.complete ||
+        currentTheme.active !== nextTheme.active
+      ) {
+        themeStateRef.current = nextTheme;
+        window.dispatchEvent(
+          new CustomEvent("riviera-hero-theme", {
+            detail: nextTheme,
+          })
+        );
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 
     const syncMotionPreference = () => {
       setReducedMotion(motionQuery.matches);
-      if (motionQuery.matches) setProgress(1);
     };
 
     syncMotionPreference();
@@ -38,56 +132,89 @@ export function RivieraHomeHero() {
   }, []);
 
   useEffect(() => {
+    const story = storyRef.current;
+    if (!story) return;
+
+    const measureStory = () => {
+      const rect = story.getBoundingClientRect();
+      metricsRef.current = {
+        top: window.scrollY + rect.top,
+        distance: Math.max(1, story.offsetHeight - window.innerHeight),
+      };
+    };
+
+    const updateTargetProgress = () => {
+      const { top, distance } = metricsRef.current;
+      targetProgressRef.current = clamp((window.scrollY - top) / distance);
+    };
+
+    const animateProgress = (timestamp: number) => {
+      frameRef.current = null;
+      updateTargetProgress();
+
+      const target = targetProgressRef.current;
+      const current = renderedProgressRef.current;
+      const elapsed = lastFrameTimeRef.current
+        ? Math.min(64, timestamp - lastFrameTimeRef.current)
+        : 16.67;
+      const smoothing = 1 - Math.exp(-elapsed / SMOOTHING_TIME_MS);
+      const next =
+        Math.abs(target - current) <= PROGRESS_EPSILON
+          ? target
+          : current + (target - current) * smoothing;
+
+      lastFrameTimeRef.current = timestamp;
+      renderedProgressRef.current = next;
+      applyVisualProgress(next);
+
+      if (Math.abs(target - next) > PROGRESS_EPSILON) {
+        frameRef.current = window.requestAnimationFrame(animateProgress);
+      } else {
+        lastFrameTimeRef.current = null;
+      }
+    };
+
+    const requestAnimation = () => {
+      if (frameRef.current !== null) return;
+      frameRef.current = window.requestAnimationFrame(animateProgress);
+    };
+
+    const handleScroll = () => {
+      updateTargetProgress();
+      requestAnimation();
+    };
+
+    const handleResize = () => {
+      measureStory();
+      updateTargetProgress();
+      requestAnimation();
+    };
+
+    measureStory();
+    updateTargetProgress();
+
     if (reducedMotion) {
-      window.dispatchEvent(
-        new CustomEvent("riviera-hero-theme", {
-          detail: { dark: true, complete: false },
-        })
-      );
+      targetProgressRef.current = 1;
+      renderedProgressRef.current = 1;
+      applyVisualProgress(1, false);
       return;
     }
 
-    const updateProgress = () => {
-      frameRef.current = null;
-      const story = storyRef.current;
-      if (!story) return;
-
-      const rect = story.getBoundingClientRect();
-      const scrollableDistance = Math.max(1, story.offsetHeight - window.innerHeight);
-      const nextProgress = clamp(-rect.top / scrollableDistance);
-      const isInsideStory = rect.top <= 0 && rect.bottom > window.innerHeight;
-      const isPastStory = rect.bottom <= window.innerHeight;
-
-      setProgress((current) =>
-        Math.abs(current - nextProgress) > 0.001 ? nextProgress : current
-      );
-
-      window.dispatchEvent(
-        new CustomEvent("riviera-hero-theme", {
-          detail: {
-            dark: nextProgress >= 0.7,
-            complete: isPastStory,
-            active: isInsideStory,
-          },
-        })
-      );
-    };
-
-    const requestUpdate = () => {
-      if (frameRef.current !== null) return;
-      frameRef.current = window.requestAnimationFrame(updateProgress);
-    };
-
-    updateProgress();
-    window.addEventListener("scroll", requestUpdate, { passive: true });
-    window.addEventListener("resize", requestUpdate);
+    renderedProgressRef.current = targetProgressRef.current;
+    applyVisualProgress(renderedProgressRef.current);
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("scrollend", handleScroll);
+    window.addEventListener("resize", handleResize);
 
     return () => {
-      window.removeEventListener("scroll", requestUpdate);
-      window.removeEventListener("resize", requestUpdate);
+      window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("scrollend", handleScroll);
+      window.removeEventListener("resize", handleResize);
       if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+      lastFrameTimeRef.current = null;
     };
-  }, [reducedMotion]);
+  }, [applyVisualProgress, reducedMotion]);
 
   const replay = useCallback(() => {
     const story = storyRef.current;
@@ -100,16 +227,6 @@ export function RivieraHomeHero() {
     });
   }, [reducedMotion]);
 
-  const villaProgress = reducedMotion ? 1 : mapScrollProgress(progress, 0.04, 0.92);
-  const interiorReveal = reducedMotion ? 1 : revealBetween(progress, 0.68, 0.9);
-  const contentReveal = reducedMotion ? 1 : revealBetween(progress, 0.84, 0.98);
-  const arrivalReveal = reducedMotion ? 0 : 1 - revealBetween(progress, 0.16, 0.52);
-  const villaReveal = reducedMotion ? 0 : 1 - revealBetween(progress, 0.8, 0.96);
-  const wordmarkReveal = reducedMotion ? 0 : 1 - revealBetween(progress, 0.34, 0.68);
-  const activeStep = reducedMotion ? 4 : Math.min(4, Math.floor(progress * 5));
-  const villaScale = 0.72 + villaProgress * 1.34;
-  const villaTranslate = 9 - villaProgress * 16;
-
   return (
     <section
       ref={storyRef}
@@ -120,7 +237,7 @@ export function RivieraHomeHero() {
       <div className="sticky top-0 h-[100svh] min-h-[35rem] overflow-hidden bg-[#f6f2e9]">
         <div
           className="absolute inset-0 bg-[linear-gradient(180deg,#dce8e8_0%,#f7f3ea_58%,#e8d4b7_100%)]"
-          style={{ opacity: 1 - interiorReveal }}
+          style={{ opacity: "var(--riviera-sky-opacity)" }}
         />
 
         <div className="absolute inset-0">
@@ -132,21 +249,21 @@ export function RivieraHomeHero() {
             sizes="100vw"
             className="object-cover"
             style={{
-              opacity: interiorReveal,
-              transform: `scale(${1.06 - interiorReveal * 0.06})`,
+              opacity: "var(--riviera-interior-opacity)",
+              transform: "scale(var(--riviera-interior-scale))",
             }}
           />
         </div>
         <div
           className="absolute inset-0 bg-[linear-gradient(180deg,rgba(17,17,17,0.72)_0%,rgba(17,17,17,0.38)_50%,rgba(17,17,17,0.82)_100%)]"
-          style={{ opacity: interiorReveal }}
+          style={{ opacity: "var(--riviera-interior-opacity)" }}
         />
 
         <p
           className="pointer-events-none absolute inset-x-4 top-[13%] z-10 text-center text-[4.4rem] font-black leading-[0.82] text-[#111111] sm:whitespace-nowrap sm:text-[5rem] sm:leading-none md:text-[6rem] lg:text-[9.4rem]"
           style={{
-            opacity: wordmarkReveal,
-            transform: `scale(${1 - progress * 0.16})`,
+            opacity: "var(--riviera-wordmark-opacity)",
+            transform: "scale(var(--riviera-wordmark-scale))",
           }}
           aria-hidden="true"
         >
@@ -157,14 +274,15 @@ export function RivieraHomeHero() {
         <div
           className="pointer-events-none absolute left-1/2 top-[28%] z-20 h-[47vh] min-h-[17rem] w-[92vw] max-w-[69rem] -translate-x-1/2 md:top-[25%] md:h-[58vh] md:w-[72vw]"
           style={{
-            opacity: villaReveal,
+            opacity: "var(--riviera-villa-opacity)",
           }}
           aria-hidden="true"
         >
           <div
             className="absolute inset-0"
             style={{
-              transform: `translate3d(0, ${villaTranslate}%, 0) scale(${villaScale})`,
+              transform:
+                "translate3d(0, var(--riviera-villa-translate), 0) scale(var(--riviera-villa-scale))",
             }}
           >
             <Image
@@ -181,24 +299,25 @@ export function RivieraHomeHero() {
 
         <p
           className="absolute bottom-24 left-5 z-30 max-w-[12rem] text-[1.25rem] font-medium leading-[1.2] text-[#111111]/82 sm:bottom-20 sm:left-12 sm:max-w-[23rem] sm:text-[1.75rem]"
-          style={{ opacity: arrivalReveal }}
+          style={{ opacity: "var(--riviera-arrival-opacity)" }}
         >
           Une adresse peut changer votre horizon.
         </p>
 
         <div
           className="absolute bottom-[6.1rem] right-5 z-30 flex max-w-[10rem] items-center justify-end gap-2 text-right text-[0.55rem] font-bold uppercase text-[#111111]/68 sm:bottom-20 sm:right-12 sm:max-w-none sm:text-xs"
-          style={{ opacity: arrivalReveal }}
+          style={{ opacity: "var(--riviera-arrival-opacity)" }}
         >
           <span>Faites défiler pour approcher</span>
           <ArrowDown className="size-5 text-orange-500" aria-hidden="true" />
         </div>
 
         <div
+          ref={contentRef}
           className="absolute inset-0 z-30 flex items-center px-5 pb-24 pt-24 sm:px-8 lg:px-12"
           style={{
-            opacity: contentReveal,
-            pointerEvents: contentReveal > 0.82 ? "auto" : "none",
+            opacity: "var(--riviera-content-opacity)",
+            pointerEvents: "none",
           }}
         >
           <p
@@ -256,29 +375,30 @@ export function RivieraHomeHero() {
         </div>
 
         <div
+          ref={indicatorRef}
           className="absolute bottom-4 left-1/2 z-40 flex -translate-x-1/2 items-center gap-3"
-          aria-label={`Étape ${activeStep + 1} sur 5`}
+          aria-label="Étape 1 sur 5"
         >
           {Array.from({ length: 5 }, (_, index) => (
             <span
               key={index}
-              className={
-                index === activeStep
-                  ? "h-1 w-8 rounded-full bg-orange-500 transition-all"
-                  : "h-1 w-3.5 rounded-full bg-current opacity-25 transition-all"
-              }
-              style={{ color: interiorReveal > 0.5 ? "#ffffff" : "#111111" }}
+              ref={(step) => {
+                stepRefs.current[index] = step;
+              }}
+              className="riviera-scroll-step h-1 rounded-full"
+              data-active={index === 0 ? "true" : "false"}
             />
           ))}
         </div>
 
         <button
+          ref={replayRef}
           type="button"
           onClick={replay}
           className="absolute bottom-4 right-5 z-40 inline-flex h-9 items-center gap-2 rounded-lg border border-white/35 bg-black/20 px-3 text-[0.65rem] font-bold uppercase text-white backdrop-blur transition hover:bg-white hover:text-[#111111] md:left-12 md:right-auto"
           style={{
-            opacity: contentReveal,
-            pointerEvents: contentReveal > 0.82 ? "auto" : "none",
+            opacity: "var(--riviera-content-opacity)",
+            pointerEvents: "none",
           }}
         >
           Rejouer

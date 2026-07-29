@@ -272,6 +272,17 @@
 }
 
 .riviera-scroll-story {
+  --riviera-arrival-opacity: 1;
+  --riviera-content-opacity: 0;
+  --riviera-interior-opacity: 0;
+  --riviera-interior-scale: 1.06;
+  --riviera-sky-opacity: 1;
+  --riviera-step-color: #111111;
+  --riviera-villa-opacity: 1;
+  --riviera-villa-scale: 0.72;
+  --riviera-villa-translate: 9%;
+  --riviera-wordmark-opacity: 1;
+  --riviera-wordmark-scale: 1;
   height: 190svh;
   isolation: isolate;
 }
@@ -285,6 +296,22 @@
 .riviera-scroll-story [style*="opacity"],
 .riviera-scroll-story [style*="transform"] {
   will-change: opacity, transform;
+}
+
+.riviera-scroll-step {
+  width: 0.875rem;
+  background-color: var(--riviera-step-color);
+  opacity: 0.25;
+  transition:
+    width 160ms ease-out,
+    background-color 160ms ease-out,
+    opacity 160ms ease-out;
+}
+
+.riviera-scroll-step[data-active="true"] {
+  width: 2rem;
+  background-color: #f97316;
+  opacity: 1;
 }
 
 @media (max-height: 720px) and (max-width: 767px) {
