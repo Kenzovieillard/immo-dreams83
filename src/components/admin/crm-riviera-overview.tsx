@@ -1,9 +1,9 @@
 "use client";
 
-import { Plus, Target } from "lucide-react";
+import { Download, Plus, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { CrmDailyPriority } from "@/lib/crm-dashboard";
-import type { PipelineTask } from "@/types/crm";
+import type { CrmOverviewSnapshot, PipelineTask } from "@/types/crm";
 import {
   RivieraActionCard,
   RivieraMetric,
@@ -16,11 +16,13 @@ import {
 export type RivieraOverviewMetrics = {
   totalLeads: number;
   newLeads: number;
-  appointments: number;
-  mandateSigned: number;
+  visits: number;
+  offers: number;
   availableProperties: number;
   propertiesWithoutPhotos: number;
   contactsToQualify: number;
+  openTasks: number;
+  todayTasks: number;
 };
 
 export function CrmRivieraOverview({
@@ -32,6 +34,7 @@ export function CrmRivieraOverview({
   onOpenContacts,
   onOpenProperties,
   onCreateContact,
+  overview,
 }: {
   metrics: RivieraOverviewMetrics;
   priorities: CrmDailyPriority[];
@@ -41,6 +44,7 @@ export function CrmRivieraOverview({
   onOpenContacts: () => void;
   onOpenProperties: () => void;
   onCreateContact: () => void;
+  overview?: CrmOverviewSnapshot | null;
 }) {
   const openTasks = tasks.filter((task) => !task.completedAt);
   const today = new Date();
@@ -53,15 +57,19 @@ export function CrmRivieraOverview({
       due.getDate() === today.getDate()
     );
   });
-  const visiblePriorities = priorities.slice(0, 4);
+  const visiblePriorities = priorities.slice(0, 2);
+  const syncedAt = overview?.generatedAt ? new Date(overview.generatedAt) : null;
   const formattedDate = today.toLocaleDateString("fr-FR", {
     weekday: "long",
     day: "numeric",
     month: "long",
   });
+  const syncLabel = syncedAt && !Number.isNaN(syncedAt.getTime())
+    ? `Vue : equipe · ${syncedAt.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`
+    : "Vue : equipe";
 
   return (
-    <div className="grid gap-4 sm:gap-5">
+    <div className="grid min-w-0 gap-4 sm:gap-5">
       <div className="hidden items-center justify-between gap-6 md:flex">
         <div>
           <h2 className="text-3xl font-bold leading-10 text-[var(--crm-riviera-text-primary)]">
@@ -71,24 +79,31 @@ export function CrmRivieraOverview({
             {formattedDate} · Priorités de l&apos;équipe Riviera
           </p>
         </div>
-        <RivieraStatusBadge tone={priorities.length ? "warning" : "success"}>
-          {priorities.length ? `${priorities.length} priorités` : "Journée à jour"}
-        </RivieraStatusBadge>
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-medium text-[var(--crm-riviera-text-secondary)]">{syncLabel}</span>
+          <Button type="button" variant="secondary" className={rivieraSecondaryButtonClass}>
+            <Download className="size-4" />
+            Exporter
+          </Button>
+          <RivieraStatusBadge tone={priorities.length ? "warning" : "success"}>
+            {priorities.length ? `${priorities.length} urgences` : "Journée à jour"}
+          </RivieraStatusBadge>
+        </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-12 lg:gap-5">
-        <RivieraPanel className="grid gap-4 border-0 bg-transparent p-0 shadow-none md:border md:bg-[var(--crm-riviera-bg-surface)] md:p-5 md:shadow-[var(--crm-riviera-shadow-card)] lg:col-span-8">
+      <div className="grid w-full min-w-0 max-w-full gap-4 overflow-hidden lg:grid-cols-12 lg:gap-5">
+        <RivieraPanel className="grid gap-4 border-0 bg-transparent p-0 shadow-none md:border md:bg-[var(--crm-riviera-bg-surface)] md:p-4 md:shadow-[var(--crm-riviera-shadow-card)] lg:col-span-8">
           <div className="flex items-center justify-between gap-4">
             <h2 className="text-lg font-semibold leading-6 text-[var(--crm-riviera-text-primary)]">
-              À traiter maintenant
+              À traiter aujourd&apos;hui
             </h2>
             <RivieraStatusBadge tone={priorities.length ? "warning" : "success"}>
-              {priorities.length ? "Aujourd'hui" : "À jour"}
+              {priorities.length ? `${priorities.length} urgences` : "À jour"}
             </RivieraStatusBadge>
           </div>
 
           {visiblePriorities.length ? (
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid w-full min-w-0 max-w-full gap-4 md:grid-cols-2">
               {visiblePriorities.map((priority) => (
                 <RivieraActionCard
                   key={priority.id}
@@ -113,19 +128,25 @@ export function CrmRivieraOverview({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3 md:flex md:justify-end">
+          <div className="grid min-w-0 grid-cols-2 gap-3 md:flex md:justify-end">
             <Button type="button" variant="secondary" className={rivieraSecondaryButtonClass} onClick={onOpenPipeline}>
               <Target className="size-4" />
-              Voir tout
+              <span className="truncate">
+                <span className="md:hidden">Voir tout</span>
+                <span className="hidden md:inline">Ouvrir les {priorities.length} priorités</span>
+              </span>
             </Button>
             <Button type="button" className={rivieraPrimaryButtonClass} onClick={onCreateContact}>
               <Plus className="size-4" />
-              Créer un contact
+              <span className="truncate">
+                <span className="md:hidden">Créer</span>
+                <span className="hidden md:inline">Créer un contact</span>
+              </span>
             </Button>
           </div>
         </RivieraPanel>
 
-        <RivieraPanel className="grid content-start gap-4 p-5 lg:col-span-4">
+        <RivieraPanel className="grid content-start gap-4 p-4 lg:col-span-4">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-lg font-semibold text-[var(--crm-riviera-text-primary)]">
               Pipeline commercial
@@ -133,12 +154,12 @@ export function CrmRivieraOverview({
             <RivieraStatusBadge>{metrics.totalLeads} actifs</RivieraStatusBadge>
           </div>
           <p className="text-sm text-[var(--crm-riviera-text-secondary)]">
-            Données réelles issues des prospects et rappels enregistrés.
+            {metrics.totalLeads} dossiers actifs · {metrics.newLeads} en attente de décision
           </p>
           <div className="grid grid-cols-3 gap-2 sm:gap-3">
-            <RivieraMetric label="Nouveaux" value={metrics.newLeads} className="px-3 text-center" />
-            <RivieraMetric label="Rendez-vous" value={metrics.appointments} className="px-3 text-center" />
-            <RivieraMetric label="Mandats" value={metrics.mandateSigned} className="px-3 text-center" />
+            <RivieraMetric label="Leads" value={metrics.totalLeads} className="px-3 text-center" />
+            <RivieraMetric label="Visites" value={metrics.visits} className="px-3 text-center" />
+            <RivieraMetric label="Offres" value={metrics.offers} className="px-3 text-center" />
           </div>
           <button
             type="button"
@@ -149,7 +170,7 @@ export function CrmRivieraOverview({
           </button>
         </RivieraPanel>
 
-        <RivieraPanel className="grid gap-4 p-5 lg:col-span-4">
+        <RivieraPanel className="grid gap-3 p-4 lg:col-span-4">
           <h2 className="font-semibold text-[var(--crm-riviera-text-primary)]">Nouveaux leads</h2>
           <p className="text-3xl font-bold text-[var(--crm-riviera-text-primary)]">{metrics.newLeads}</p>
           <p className="text-sm text-[var(--crm-riviera-text-secondary)]">
@@ -160,18 +181,18 @@ export function CrmRivieraOverview({
           </button>
         </RivieraPanel>
 
-        <RivieraPanel className="grid gap-4 p-5 lg:col-span-4">
-          <h2 className="font-semibold text-[var(--crm-riviera-text-primary)]">Rappels aujourd&apos;hui</h2>
-          <p className="text-3xl font-bold text-[var(--crm-riviera-text-primary)]">{todayTasks.length}</p>
+        <RivieraPanel className="grid gap-3 p-4 lg:col-span-4">
+          <h2 className="font-semibold text-[var(--crm-riviera-text-primary)]">Visites à venir</h2>
+          <p className="text-3xl font-bold text-[var(--crm-riviera-text-primary)]">{metrics.visits}</p>
           <p className="text-sm text-[var(--crm-riviera-text-secondary)]">
-            {openTasks.length} rappel{openTasks.length > 1 ? "s" : ""} encore ouvert{openTasks.length > 1 ? "s" : ""}.
+            {metrics.todayTasks || todayTasks.length} prévue{(metrics.todayTasks || todayTasks.length) > 1 ? "s" : ""} aujourd&apos;hui · {metrics.openTasks || openTasks.length} action{(metrics.openTasks || openTasks.length) > 1 ? "s" : ""} ouverte{(metrics.openTasks || openTasks.length) > 1 ? "s" : ""}.
           </p>
           <button type="button" onClick={onOpenPipeline} className="w-fit min-h-11 text-sm font-semibold text-[var(--crm-riviera-text-action)]">
-            Ouvrir les rappels →
+            Ouvrir l&apos;agenda →
           </button>
         </RivieraPanel>
 
-        <RivieraPanel className="grid gap-4 p-5 lg:col-span-4">
+        <RivieraPanel className="grid gap-3 p-4 lg:col-span-4">
           <h2 className="font-semibold text-[var(--crm-riviera-text-primary)]">Stock actif</h2>
           <p className="text-3xl font-bold text-[var(--crm-riviera-text-primary)]">
             {metrics.availableProperties}

@@ -45,3 +45,6 @@ dev-server*.log
 # generated reports
 /reports/**/*.json
 /reports/**/*.log
+
+# Supabase CLI local link metadata
+/supabase/.temp/

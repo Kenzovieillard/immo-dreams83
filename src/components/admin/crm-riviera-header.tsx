@@ -51,7 +51,7 @@ export function CrmRivieraHeader({
   loading,
   userName,
   priorityCount,
-  appointmentCount,
+  visitCount,
   contactsToQualify,
   contactsReady,
   selectedContact,
@@ -67,7 +67,7 @@ export function CrmRivieraHeader({
   loading: boolean;
   userName: string;
   priorityCount: number;
-  appointmentCount: number;
+  visitCount: number;
   contactsToQualify: number;
   contactsReady: number;
   selectedContact: AdminCrmLead | null;
@@ -119,9 +119,16 @@ export function CrmRivieraHeader({
             {activeTab === "overview" ? (
               <>
                 <RivieraStatusBadge tone={priorityCount ? "warning" : "success"}>
+                  {priorityCount} urgence{priorityCount > 1 ? "s" : ""}
+                </RivieraStatusBadge>
+                <RivieraStatusBadge>{visitCount} visite{visitCount > 1 ? "s" : ""}</RivieraStatusBadge>
+              </>
+            ) : activeTab === "pipeline" ? (
+              <>
+                <RivieraStatusBadge tone={priorityCount ? "warning" : "success"}>
                   {priorityCount} priorité{priorityCount > 1 ? "s" : ""}
                 </RivieraStatusBadge>
-                <RivieraStatusBadge>{appointmentCount} rendez-vous</RivieraStatusBadge>
+                <RivieraStatusBadge>{visitCount} visite{visitCount > 1 ? "s" : ""}</RivieraStatusBadge>
               </>
             ) : activeTab === "contacts" && selectedContact ? (
               <>
@@ -149,10 +156,10 @@ export function CrmRivieraHeader({
       </header>
 
       <header className="sticky top-0 z-40 hidden bg-[var(--crm-riviera-bg-header)] text-white md:block">
-        <div className="mx-auto flex min-h-20 w-full max-w-screen-2xl items-center justify-between gap-6 px-6 py-4 lg:px-8">
+        <div className="mx-auto flex min-h-14 w-full max-w-screen-xl items-center justify-between gap-6 px-6 py-3 lg:px-8">
           <div className="min-w-0">
-            <p className="truncate text-lg font-bold">IMMO DREAMS83 · CRM Riviera</p>
-            <p className={cn("mt-1 text-xs font-medium", connected ? "text-[#9db8a2]" : "text-[#dfbd76]")}>
+            <p className="truncate text-base font-bold">IMMO DREAMS83 · CRM Riviera</p>
+            <p className={cn("mt-0.5 text-[11px] font-medium", connected ? "text-[#9db8a2]" : "text-[#dfbd76]")}>
               ● {loading ? "Synchronisation…" : connected ? "Données synchronisées" : "Mode local"}
             </p>
           </div>
@@ -166,9 +173,9 @@ export function CrmRivieraHeader({
                   onContactSearchChange(event.target.value);
                   onTabChange("contacts");
                 }}
-                placeholder="Rechercher un contact…"
-                aria-label="Recherche globale de contacts"
-                className="h-11 rounded-2xl border-0 bg-[var(--crm-riviera-bg-accent)] pl-11 text-[var(--crm-riviera-text-primary)]"
+                placeholder="Rechercher un contact, un bien..."
+                aria-label="Recherche globale du CRM"
+                className="h-10 rounded-2xl border-0 bg-[var(--crm-riviera-bg-accent)] pl-11 text-[var(--crm-riviera-text-primary)]"
               />
             </div>
             <Button type="button" className={rivieraPrimaryButtonClass} onClick={onCreateContact}>
@@ -182,7 +189,7 @@ export function CrmRivieraHeader({
               onClick={onLogout}
               aria-label="Se déconnecter"
               title="Se déconnecter"
-              className="size-11 rounded-xl text-white hover:bg-white/10 hover:text-white"
+              className="size-10 rounded-xl text-white hover:bg-white/10 hover:text-white"
             >
               <LogOut className="size-5" />
             </Button>
@@ -192,7 +199,7 @@ export function CrmRivieraHeader({
           aria-label="Navigation principale du CRM"
           className="border-t border-white/10"
         >
-          <div className="mx-auto flex w-full max-w-screen-2xl gap-2 overflow-x-auto px-6 py-3 lg:px-8">
+          <div className="mx-auto grid w-full max-w-screen-xl grid-cols-8 gap-2 px-6 py-2 lg:px-8">
             {desktopTabs.map((tab) => {
               const active = tab.value === activeTab;
               return (
@@ -202,7 +209,7 @@ export function CrmRivieraHeader({
                   onClick={() => onTabChange(tab.value)}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "min-h-11 min-w-36 shrink-0 rounded-2xl px-4 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white",
+                    "min-h-9 min-w-0 rounded-2xl px-2 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white",
                     active
                       ? "bg-[var(--crm-riviera-bg-accent)] font-semibold text-[var(--crm-riviera-text-primary)]"
                       : "text-white/75 hover:bg-white/8 hover:text-white"

@@ -109,6 +109,15 @@ type TaskRow = {
   updated_at: string;
 };
 
+type PipelineObjectRow = {
+  lead_id: string | null;
+  status: string | null;
+};
+
+const inactiveAppointmentStatuses = new Set(["cancelled", "canceled", "no_show"]);
+const activeOfferStatuses = new Set(["DRAFT", "SUBMITTED", "NEGOTIATING", "ACCEPTED"]);
+const activeMandateStatuses = new Set(["signed", "active"]);
+
 function compactIds(values: Array<string | null | undefined>) {
   return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
 }
@@ -159,6 +168,14 @@ function getNullableDate(value: unknown) {
 
 function isMissingColumnError(error: { message?: string } | null) {
   return Boolean(error?.message && /column .* does not exist|Could not find .* column/i.test(error.message));
+}
+
+function isMissingRelationError(error: { code?: string; message?: string } | null) {
+  return Boolean(
+    error &&
+      (error.code === "42P01" ||
+        (error.message && /relation .* does not exist|Could not find the table/i.test(error.message)))
+  );
 }
 
 async function loadTasks(supabase: ReturnType<typeof getSupabaseAdminClient>) {
@@ -217,7 +234,7 @@ export async function GET() {
     return NextResponse.json({ success: false, message: "Supabase serveur n'est pas configure." }, { status: 503 });
   }
 
-  const [leadsResult, tasksResult, profilesResult] = await Promise.all([
+  const [leadsResult, tasksResult, profilesResult, appointmentsResult, mandatesResult, offersResult] = await Promise.all([
     supabase
       .from("leads")
       .select([
@@ -256,9 +273,28 @@ export async function GET() {
       .select("id,email,full_name,role,is_active")
       .eq("is_active", true)
       .order("full_name", { ascending: true }),
+    supabase
+      .from("appointments")
+      .select("lead_id,status")
+      .limit(1000),
+    supabase
+      .from("mandates")
+      .select("lead_id,status")
+      .limit(1000),
+    supabase
+      .from("offers")
+      .select("lead_id,status")
+      .limit(1000),
   ]);
 
-  const error = leadsResult.error ?? tasksResult.error ?? profilesResult.error;
+  const offersMissing = isMissingRelationError(offersResult.error);
+  const error =
+    leadsResult.error ??
+    tasksResult.error ??
+    profilesResult.error ??
+    appointmentsResult.error ??
+    mandatesResult.error ??
+    (offersMissing ? null : offersResult.error);
   if (error) {
     console.error("[IMMO-DREAMS83] Pipeline load failed", error.message);
     return NextResponse.json({ success: false, message: "Le pipeline CRM n'a pas pu etre charge." }, { status: 500 });
@@ -267,6 +303,17 @@ export async function GET() {
   const leads = (leadsResult.data ?? []) as unknown as LeadRow[];
   const profiles = (profilesResult.data ?? []) as unknown as ProfileRow[];
   const tasks = (tasksResult.data ?? []) as unknown as TaskRow[];
+  const appointments = (appointmentsResult.data ?? []) as unknown as PipelineObjectRow[];
+  const mandates = (mandatesResult.data ?? []) as unknown as PipelineObjectRow[];
+  const offers = offersMissing ? [] : (offersResult.data ?? []) as unknown as PipelineObjectRow[];
+  const activeAppointments = appointments.filter(
+    (appointment) => !inactiveAppointmentStatuses.has((appointment.status ?? "").toLowerCase())
+  );
+  const activeOffers = offers.filter((offer) => activeOfferStatuses.has((offer.status ?? "").toUpperCase()));
+  const activeMandates = mandates.filter((mandate) => activeMandateStatuses.has((mandate.status ?? "").toLowerCase()));
+  const appointmentLeadIds = new Set(compactIds(activeAppointments.map((appointment) => appointment.lead_id)));
+  const offerLeadIds = new Set(compactIds(activeOffers.map((offer) => offer.lead_id)));
+  const mandateLeadIds = new Set(compactIds(activeMandates.map((mandate) => mandate.lead_id)));
   const contactIds = compactIds(leads.map((lead) => lead.contact_id));
   const propertyIds = compactIds(leads.map((lead) => lead.linked_property_id));
 
@@ -329,6 +376,9 @@ export async function GET() {
       linkedPropertyTitle: linkedProperty
         ? `${linkedProperty.reference ? `Ref. ${linkedProperty.reference} - ` : ""}${linkedProperty.title ?? "Bien lie"}`
         : null,
+      hasActiveAppointment: appointmentLeadIds.has(lead.id),
+      hasActiveOffer: offerLeadIds.has(lead.id),
+      hasActiveMandate: mandateLeadIds.has(lead.id),
       notes: lead.notes ?? null,
       archived: Boolean(lead.archived),
     };
@@ -372,6 +422,16 @@ export async function GET() {
       fullName: profile.full_name,
       role: profile.role,
     })),
+    metrics: {
+      visits: activeAppointments.length,
+      offers: activeOffers.length,
+      mandates: activeMandates.length,
+      sources: {
+        visits: "real",
+        offers: offersMissing ? "missing" : "real",
+        mandates: "real",
+      },
+    },
   });
 }
 

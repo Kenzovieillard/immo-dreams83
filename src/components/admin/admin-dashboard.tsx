@@ -47,11 +47,25 @@ import {
   CrmRivieraOverview,
   type RivieraOverviewMetrics,
 } from "@/components/admin/crm-riviera-overview";
+import {
+  RivieraMetric,
+  RivieraPanel,
+  RivieraStatusBadge,
+  rivieraSecondaryButtonClass,
+} from "@/components/admin/crm-riviera-ui";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { DiagnosticBar } from "@/components/site/diagnostic-bar";
@@ -118,10 +132,12 @@ import type {
   ContactQualificationStatus,
   ContactLead,
   ContactRole,
+  CrmOverviewSnapshot,
   EstimationLead,
   LeadPriority,
   LeadStatus,
   PipelineLead,
+  PipelineMetrics,
   PipelineTask,
   TaskEmailReminderStatus,
   TaskRecurrenceRule,
@@ -193,6 +209,61 @@ type PipelineResponse = {
   leads?: PipelineLead[];
   tasks?: PipelineTask[];
   team?: AdminTeamMember[];
+  metrics?: PipelineMetrics;
+};
+
+const emptyPipelineMetrics: PipelineMetrics = {
+  visits: 0,
+  offers: 0,
+  mandates: 0,
+  sources: {
+    visits: "missing",
+    offers: "missing",
+    mandates: "missing",
+  },
+};
+
+export type RivieraPipelineLeadItem = {
+  lead: PipelineLead;
+  nextTask: PipelineTask | null;
+};
+
+export type RivieraPipelineColumn = {
+  id: string;
+  title: string;
+  count: number;
+  leads: RivieraPipelineLeadItem[];
+};
+
+function escapePipelineCsvValue(value: string | number | null | undefined) {
+  const normalizedValue = value == null ? "" : String(value);
+  return `"${normalizedValue.replaceAll('"', '""')}"`;
+}
+
+function getPipelineLeadStageLabel(lead: PipelineLead) {
+  if (lead.hasActiveOffer) return "Offre";
+  if (lead.hasActiveMandate) return "Mandat";
+  if (lead.hasActiveAppointment) return "Rendez-vous";
+  return leadStatusLabels[lead.status];
+}
+
+function getPipelineTaskTimeLabel(task: PipelineTask | null) {
+  if (!task?.dueAt) return "Sans échéance";
+  const dueAt = new Date(task.dueAt);
+  if (Number.isNaN(dueAt.getTime())) return "Sans échéance";
+  if (isTaskOverdue(task)) {
+    return `En retard · ${dueAt.toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}`;
+  }
+  if (isTaskDueToday(task)) {
+    return dueAt.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  }
+  return dueAt.toLocaleDateString("fr-FR", { day: "2-digit", month: "short" });
+}
+
+type OverviewResponse = {
+  success?: boolean;
+  message?: string;
+  overview?: CrmOverviewSnapshot;
 };
 
 const activityEntityTypeLabels: Record<ActivityEntityTypeFilter, string> = {
@@ -517,6 +588,40 @@ function groupTasksByLead(tasks: PipelineTask[]) {
   }, new Map<string, PipelineTask[]>());
 }
 
+function exportPipelineCsv(leads: PipelineLead[], tasks: PipelineTask[]) {
+  const openTasksByLead = groupTasksByLead(tasks.filter(isOpenTask));
+  const rows = leads.map((lead) => {
+    const nextTask = sortTasksByUrgency(openTasksByLead.get(lead.id) ?? [])[0];
+
+    return [
+      lead.contactName,
+      lead.requestType,
+      lead.city,
+      getPipelineLeadStageLabel(lead),
+      leadPriorityLabels[lead.priority],
+      lead.assignedToName ?? "Non attribué",
+      nextTask?.title ?? "Aucune prochaine action",
+      nextTask?.dueAt ? formatDateTime(nextTask.dueAt) : "",
+    ];
+  });
+  const csv = [
+    ["Contact", "Projet", "Ville", "Étape", "Priorité", "Responsable", "Prochaine action", "Échéance"],
+    ...rows,
+  ]
+    .map((row) => row.map(escapePipelineCsvValue).join(";"))
+    .join("\r\n");
+  const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
+  const downloadUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = downloadUrl;
+  link.download = `pipeline-commercial-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(downloadUrl);
+}
+
 function getLeadNextOpenTask(tasks: PipelineTask[]) {
   return sortTasksByUrgency(tasks.filter(isOpenTask))[0] ?? null;
 }
@@ -618,6 +723,338 @@ function buildPipelineAgentStats(
       const bWorkload = b.leadCount + b.openTaskCount + b.overdueTaskCount;
       return bWorkload - aWorkload;
     });
+}
+
+export function CrmRivieraPipeline({
+  activeLeads,
+  dailyTasks,
+  columns,
+  totalLeads,
+  metrics,
+  urgentCount,
+  team,
+  assignee,
+  onAssigneeChange,
+  onRefresh,
+  onExport,
+  onOpenLead,
+  onStartReminder,
+  onCompleteTask,
+  pendingId,
+  error,
+  feedback,
+}: {
+  activeLeads: PipelineLead[];
+  dailyTasks: Array<{ task: PipelineTask; lead: PipelineLead | null }>;
+  columns: RivieraPipelineColumn[];
+  totalLeads: number;
+  metrics: PipelineMetrics;
+  urgentCount: number;
+  team: AdminTeamMember[];
+  assignee: string;
+  onAssigneeChange: (assignee: string) => void;
+  onRefresh: () => void;
+  onExport: () => void;
+  onOpenLead: (lead: PipelineLead) => void;
+  onStartReminder: (leadId?: string) => void;
+  onCompleteTask: (task: PipelineTask) => void;
+  pendingId: string | null;
+  error: string;
+  feedback: string;
+}) {
+  const assignedAgents = team.filter((member) => member.role === "AGENT");
+  const commercialAgents = assignedAgents.length ? assignedAgents : team;
+  const commercialAgentCount = commercialAgents.length;
+
+  return (
+    <div className="grid min-w-0 gap-4 sm:gap-5">
+      <div className="hidden items-center justify-between gap-6 md:flex">
+        <div>
+          <h2 className="text-3xl font-bold leading-10 text-[var(--crm-riviera-text-primary)]">
+            Pipeline commercial
+          </h2>
+          <p className="mt-1 text-sm text-[var(--crm-riviera-text-secondary)]">
+            Prospects, etapes, rappels et assignations
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="secondary"
+          className={rivieraSecondaryButtonClass}
+          onClick={onExport}
+          aria-label="Exporter le pipeline du jour"
+          title="Exporter le pipeline du jour"
+        >
+          <ArrowDown className="size-4" />
+          Exporter
+        </Button>
+      </div>
+
+      {error ? <p className="rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p> : null}
+      {feedback ? <p className="rounded-xl bg-[var(--crm-riviera-bg-accent)] p-3 text-sm text-[var(--crm-riviera-text-primary)]">{feedback}</p> : null}
+
+      <div className="grid gap-3 md:hidden">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-xl font-bold text-[var(--crm-riviera-text-primary)]">À traiter aujourd&apos;hui</h2>
+          <RivieraStatusBadge>{dailyTasks.length} action{dailyTasks.length > 1 ? "s" : ""}</RivieraStatusBadge>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          <RivieraMetric label="Leads" value={totalLeads} className="px-3 py-3" />
+          <RivieraMetric label="Visites" value={metrics.visits} className="px-3 py-3" />
+          <RivieraMetric label="Offres" value={metrics.offers} className="px-3 py-3" />
+        </div>
+
+        <Select value={assignee} onValueChange={(value) => onAssigneeChange(String(value))}>
+          <SelectTrigger className="min-h-11 rounded-2xl border-[var(--crm-riviera-border-default)] bg-[var(--crm-riviera-bg-surface)]">
+            <SelectValue>
+              {(value) =>
+                value === "ALL"
+                  ? "Toute l'équipe"
+                  : value === "UNASSIGNED"
+                    ? "Dossiers non attribués"
+                    : getTeamMemberLabel(team.find((member) => member.id === value))}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">Toute l&apos;équipe</SelectItem>
+            {commercialAgents.map((member) => (
+              <SelectItem key={member.id} value={member.id}>
+                {getTeamMemberLabel(member)}
+              </SelectItem>
+            ))}
+            <SelectItem value="UNASSIGNED">Non attribués</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {dailyTasks.length ? (
+          dailyTasks.slice(0, 2).map(({ task, lead }) => (
+            <article
+              key={task.id}
+              className="grid gap-3 rounded-2xl border border-[var(--crm-riviera-border-default)] bg-[var(--crm-riviera-bg-surface)] p-4 shadow-[var(--crm-riviera-shadow-card)]"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <RivieraStatusBadge tone={isTaskOverdue(task) ? "danger" : "warning"}>
+                  {isTaskOverdue(task) ? "En retard" : "À rappeler"}
+                </RivieraStatusBadge>
+                <span className="text-xs font-medium text-[var(--crm-riviera-text-secondary)]">
+                  {getPipelineTaskTimeLabel(task)}
+                </span>
+              </div>
+              <div>
+                <p className="font-semibold text-[var(--crm-riviera-text-primary)]">
+                  {lead?.contactName ?? task.title}
+                </p>
+                <p className="mt-1 text-sm text-[var(--crm-riviera-text-secondary)]">
+                  {lead
+                    ? `${lead.requestType} · ${lead.city ?? "Ville non renseignée"}`
+                    : task.title}
+                </p>
+                <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-[var(--crm-riviera-text-action)]">
+                  <UserRound className="size-3.5" aria-hidden="true" />
+                  {task.assignedToName ?? lead?.assignedToName ?? "Non attribué"}
+                </p>
+              </div>
+              {lead ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenLead(lead)}
+                  className="ml-auto min-h-9 text-sm font-semibold text-[var(--crm-riviera-text-action)]"
+                >
+                  Ouvrir le dossier →
+                </button>
+              ) : null}
+            </article>
+          ))
+        ) : (
+          <div className="rounded-2xl bg-[var(--crm-riviera-bg-accent)] px-5 py-6 text-center">
+            <p className="font-semibold text-[var(--crm-riviera-text-primary)]">Aucune action urgente</p>
+            <p className="mt-1 text-sm text-[var(--crm-riviera-text-secondary)]">
+              Les prochaines échéances apparaîtront ici.
+            </p>
+          </div>
+        )}
+
+        <Button
+          type="button"
+          className="min-h-12 w-full bg-[var(--crm-riviera-bg-action)] text-white hover:bg-[var(--crm-riviera-bg-header)]"
+          onClick={() => onStartReminder(activeLeads[0]?.id)}
+          disabled={!activeLeads.length}
+        >
+          <Plus className="size-4" />
+          Créer un rappel
+        </Button>
+      </div>
+
+      <div className="hidden gap-4 md:grid lg:grid-cols-12 lg:gap-5">
+        <RivieraPanel className="grid gap-4 p-4 lg:col-span-8">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="font-semibold text-[var(--crm-riviera-text-primary)]">Progression du pipeline</h3>
+            <RivieraStatusBadge>{totalLeads} actifs</RivieraStatusBadge>
+          </div>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <RivieraMetric label="Leads" value={totalLeads} />
+            <RivieraMetric label="Visites" value={metrics.visits} />
+            <RivieraMetric label="Offres" value={metrics.offers} />
+            <RivieraMetric label="Mandats" value={metrics.mandates} />
+          </div>
+          {Object.values(metrics.sources).includes("missing") ? (
+            <p className="text-xs font-medium text-[var(--crm-riviera-text-secondary)]">
+              Certaines sources métier ne sont pas encore connectées. Les valeurs concernées restent à zéro.
+            </p>
+          ) : null}
+        </RivieraPanel>
+
+        <RivieraPanel className="grid content-start gap-3 p-4 lg:col-span-4">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="font-semibold text-[var(--crm-riviera-text-primary)]">Rappels prioritaires</h3>
+            <RivieraStatusBadge tone={urgentCount ? "warning" : "success"}>
+              {urgentCount} urgence{urgentCount > 1 ? "s" : ""}
+            </RivieraStatusBadge>
+          </div>
+          {dailyTasks.length ? (
+            <div className="grid gap-2">
+              {dailyTasks.slice(0, 3).map(({ task, lead }) => (
+                <div key={task.id} className="grid gap-1 rounded-xl bg-[var(--crm-riviera-bg-surface)] py-1.5 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-semibold text-[var(--crm-riviera-text-primary)]">
+                      {task.dueAt ? new Date(task.dueAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "A planifier"}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={pendingId === task.id}
+                      onClick={() => onCompleteTask(task)}
+                      className="text-xs font-semibold text-[var(--crm-riviera-text-action)]"
+                    >
+                      Terminer
+                    </button>
+                  </div>
+                  <p className="text-xs text-[var(--crm-riviera-text-secondary)]">
+                    {task.title} {lead ? `· ${lead.contactName}` : ""}
+                  </p>
+                  <p className="flex items-center gap-1.5 text-xs font-semibold text-[var(--crm-riviera-text-action)]">
+                    <UserRound className="size-3.5" aria-hidden="true" />
+                    {task.assignedToName ?? lead?.assignedToName ?? "Non attribué"}
+                  </p>
+                </div>
+              ))}
+              <button type="button" onClick={onRefresh} className="w-fit min-h-9 text-sm font-semibold text-[var(--crm-riviera-text-action)]">
+                Ouvrir les {dailyTasks.length} taches →
+              </button>
+            </div>
+          ) : (
+            <p className="text-sm text-[var(--crm-riviera-text-secondary)]">Aucun rappel prioritaire.</p>
+          )}
+        </RivieraPanel>
+
+        <RivieraPanel className="grid gap-4 p-4 lg:col-span-12">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="font-semibold text-[var(--crm-riviera-text-primary)]">Dossiers actifs</h3>
+            <div className="flex items-center gap-2">
+              <RivieraStatusBadge>
+                {commercialAgentCount} agent{commercialAgentCount > 1 ? "s" : ""}
+              </RivieraStatusBadge>
+              <Select value={assignee} onValueChange={(value) => onAssigneeChange(String(value))}>
+                <SelectTrigger className="h-9 min-w-40 rounded-full border-0 bg-[var(--crm-riviera-bg-accent)] px-3 text-xs font-semibold">
+                  <SelectValue>
+                    {(value) =>
+                      value === "ALL"
+                        ? "Vue équipe"
+                        : value === "UNASSIGNED"
+                          ? "Non attribués"
+                          : getTeamMemberLabel(team.find((member) => member.id === value))}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Vue équipe</SelectItem>
+                  {commercialAgents.map((member) => (
+                    <SelectItem key={member.id} value={member.id}>
+                      {getTeamMemberLabel(member)}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="UNASSIGNED">Non attribués</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {activeLeads.length ? (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {columns.map((column) => (
+                <section key={column.id} className="grid min-w-0 content-start gap-3 rounded-2xl bg-[#f1eee6] p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="text-sm font-semibold text-[var(--crm-riviera-text-primary)]">{column.title}</h4>
+                    <RivieraStatusBadge>{column.count}</RivieraStatusBadge>
+                  </div>
+                  {column.leads.slice(0, 2).map(({ lead, nextTask }) => (
+                    <article key={lead.id} className="grid gap-2 rounded-2xl bg-[var(--crm-riviera-bg-surface)] p-3 shadow-[var(--crm-riviera-shadow-card)]">
+                      <div className="flex items-center justify-between gap-2">
+                        <RivieraStatusBadge
+                          tone={
+                            nextTask && isTaskOverdue(nextTask)
+                              ? "danger"
+                              : lead.priority === "urgent" || lead.priority === "high"
+                                ? "warning"
+                                : "neutral"
+                          }
+                        >
+                          {nextTask && isTaskOverdue(nextTask)
+                            ? "En retard"
+                            : lead.priority === "urgent" || lead.priority === "high"
+                              ? "À suivre"
+                              : getPipelineLeadStageLabel(lead)}
+                        </RivieraStatusBadge>
+                        <span className="text-xs text-[var(--crm-riviera-text-secondary)]">
+                          {getPipelineTaskTimeLabel(nextTask)}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="font-semibold text-[var(--crm-riviera-text-primary)]">{lead.contactName}</p>
+                        <p className="mt-1 line-clamp-2 text-xs text-[var(--crm-riviera-text-secondary)]">
+                          {lead.requestType} · {lead.city ?? "Ville non renseignee"}
+                        </p>
+                        <p className="mt-2 line-clamp-2 text-xs font-medium text-[var(--crm-riviera-text-primary)]">
+                          {nextTask?.title ?? "Aucune prochaine action planifiée"}
+                        </p>
+                        {lead.linkedPropertyTitle ? (
+                          <p className="mt-1 line-clamp-1 text-xs text-[var(--crm-riviera-text-secondary)]">
+                            Bien : {lead.linkedPropertyTitle}
+                          </p>
+                        ) : null}
+                        <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-[var(--crm-riviera-text-action)]">
+                          <UserRound className="size-3.5" aria-hidden="true" />
+                          {lead.assignedToName ?? "Non attribué"}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onOpenLead(lead)}
+                        className="w-fit min-h-8 text-xs font-semibold text-[var(--crm-riviera-text-action)]"
+                      >
+                        Voir le dossier →
+                      </button>
+                    </article>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => onStartReminder(column.leads[0]?.lead.id)}
+                    className="hidden min-h-8 w-fit text-xs font-semibold text-[var(--crm-riviera-text-action)] md:inline-flex md:items-center"
+                  >
+                    + Créer un rappel
+                  </button>
+                </section>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl bg-[var(--crm-riviera-bg-accent)] px-5 py-8 text-center">
+              <p className="font-semibold text-[var(--crm-riviera-text-primary)]">Aucun dossier actif</p>
+              <p className="mt-2 text-sm text-[var(--crm-riviera-text-secondary)]">Les prochains prospects apparaitront ici.</p>
+            </div>
+          )}
+        </RivieraPanel>
+      </div>
+    </div>
+  );
 }
 
 function parseMultilineValues(value: string) {
@@ -1113,6 +1550,7 @@ function ActivityPreview({ activity }: { activity: Activity }) {
 
 function BentoDesignDashboard({
   metrics,
+  overview,
   setActiveTab,
   priorities,
   pipelineTasks,
@@ -1120,6 +1558,7 @@ function BentoDesignDashboard({
   onCreateContact,
 }: {
   metrics: AdminMetrics;
+  overview?: CrmOverviewSnapshot | null;
   setActiveTab: React.Dispatch<React.SetStateAction<AdminTab>>;
   priorities?: CrmDailyPriority[];
   pipelineTasks?: PipelineTask[];
@@ -1128,13 +1567,15 @@ function BentoDesignDashboard({
 }) {
   if (priorities && pipelineTasks && onPriorityAction && onCreateContact) {
     const overviewMetrics: RivieraOverviewMetrics = {
-      totalLeads: metrics.totalLeads,
-      newLeads: metrics.newLeads,
-      appointments: metrics.appointments,
-      mandateSigned: metrics.mandateSigned,
-      availableProperties: metrics.availableProperties,
-      propertiesWithoutPhotos: metrics.propertiesWithoutPhotos,
-      contactsToQualify: metrics.contactsToQualify,
+      totalLeads: overview?.metrics.totalLeads ?? metrics.totalLeads,
+      newLeads: overview?.metrics.newLeads ?? metrics.newLeads,
+      visits: overview?.metrics.visits ?? metrics.appointments,
+      offers: overview?.metrics.offers ?? metrics.underOfferProperties,
+      availableProperties: overview?.metrics.availableProperties ?? metrics.availableProperties,
+      propertiesWithoutPhotos: overview?.metrics.propertiesWithoutPhotos ?? metrics.propertiesWithoutPhotos,
+      contactsToQualify: overview?.metrics.contactsToQualify ?? metrics.contactsToQualify,
+      openTasks: overview?.metrics.openTasks ?? pipelineTasks.filter((task) => !task.completedAt).length,
+      todayTasks: overview?.metrics.todayTasks ?? pipelineTasks.filter((task) => isTaskDueToday(task)).length,
     };
 
     return (
@@ -1147,6 +1588,7 @@ function BentoDesignDashboard({
         onOpenContacts={() => setActiveTab("contacts")}
         onOpenProperties={() => setActiveTab("properties")}
         onCreateContact={onCreateContact}
+        overview={overview}
       />
     );
   }
@@ -3300,6 +3742,7 @@ function PipelinePanel({
   tasks,
   setTasks,
   team,
+  metrics,
   connected,
   error,
   onRefresh,
@@ -3309,6 +3752,7 @@ function PipelinePanel({
   tasks: PipelineTask[];
   setTasks: React.Dispatch<React.SetStateAction<PipelineTask[]>>;
   team: AdminTeamMember[];
+  metrics: PipelineMetrics;
   connected: boolean;
   error: string;
   onRefresh: () => Promise<void>;
@@ -3318,6 +3762,9 @@ function PipelinePanel({
   const [assignee, setAssignee] = useState("ALL");
   const [feedback, setFeedback] = useState("");
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [selectedPipelineLeadId, setSelectedPipelineLeadId] = useState<string | null>(null);
+  const [reminderComposerOpen, setReminderComposerOpen] = useState(false);
+  const [reminderLeadId, setReminderLeadId] = useState<string | null>(null);
   const [taskDrafts, setTaskDrafts] = useState<Record<string, PipelineTaskDraft>>({});
   const teamById = useMemo(() => new Map(team.map((member) => [member.id, member])), [team]);
   const leadsById = useMemo(() => new Map(leads.map((lead) => [lead.id, lead])), [leads]);
@@ -3366,6 +3813,64 @@ function PipelinePanel({
   });
   const dailyTasks = sortTasksByUrgency([...overdueTasks, ...todayRemainingTasks]).slice(0, 8);
   const unassignedPreview = unassignedLeads.slice(0, 6);
+  const activePipelineLeads = visibleLeads;
+  const toPipelineItem = (lead: PipelineLead): RivieraPipelineLeadItem => ({
+    lead,
+    nextTask: getLeadNextOpenTask(tasksByLead.get(lead.id) ?? []),
+  });
+  const pipelineColumns: RivieraPipelineColumn[] = [
+    {
+      id: "new",
+      title: "Nouveaux",
+      count: activeLeads.filter(
+        (lead) => lead.status === "NEW" && !lead.hasActiveAppointment && !lead.hasActiveOffer
+      ).length,
+      leads: activePipelineLeads.filter(
+        (lead) => lead.status === "NEW" && !lead.hasActiveAppointment && !lead.hasActiveOffer
+      ).map(toPipelineItem),
+    },
+    {
+      id: "contacted",
+      title: "Contactes",
+      count: activeLeads.filter(
+        (lead) => lead.status === "CONTACTED" && !lead.hasActiveAppointment && !lead.hasActiveOffer
+      ).length,
+      leads: activePipelineLeads.filter(
+        (lead) => lead.status === "CONTACTED" && !lead.hasActiveAppointment && !lead.hasActiveOffer
+      ).map(toPipelineItem),
+    },
+    {
+      id: "appointment",
+      title: "Rendez-vous",
+      count: activeLeads.filter(
+        (lead) => !lead.hasActiveOffer && (lead.hasActiveAppointment || lead.status === "APPOINTMENT")
+      ).length,
+      leads: activePipelineLeads.filter(
+        (lead) => !lead.hasActiveOffer && (lead.hasActiveAppointment || lead.status === "APPOINTMENT")
+      ).map(toPipelineItem),
+    },
+    {
+      id: "offers",
+      title: "Offres",
+      count: activeLeads.filter((lead) => lead.hasActiveOffer).length,
+      leads: activePipelineLeads.filter((lead) => lead.hasActiveOffer).map(toPipelineItem),
+    },
+  ];
+  const dailyTaskRows = dailyTasks.map((task) => ({
+    task,
+    lead: task.leadId ? leadsById.get(task.leadId) ?? null : null,
+  }));
+  const reminderLead = reminderLeadId
+    ? leadsById.get(reminderLeadId) ?? null
+    : activePipelineLeads[0] ?? null;
+  const selectedPipelineLead = selectedPipelineLeadId
+    ? leadsById.get(selectedPipelineLeadId) ?? null
+    : null;
+  const selectedPipelineLeadNextTask = selectedPipelineLead
+    ? getLeadNextOpenTask(tasksByLead.get(selectedPipelineLead.id) ?? [])
+    : null;
+  const commercialAgents = team.filter((member) => member.role === "AGENT");
+  const assignableAgents = commercialAgents.length ? commercialAgents : team;
 
   function getDraft(leadId: string) {
     return taskDrafts[leadId] ?? emptyPipelineTaskDraft;
@@ -3490,6 +3995,265 @@ function PipelinePanel({
     }
 
     setFeedback(payload?.message ?? "Rappel mis a jour.");
+  }
+
+  const useRivieraPipeline = true;
+
+  if (useRivieraPipeline) {
+    return (
+      <>
+        <CrmRivieraPipeline
+          activeLeads={activePipelineLeads}
+          dailyTasks={dailyTaskRows}
+          columns={pipelineColumns}
+          totalLeads={activeLeads.length}
+          metrics={metrics}
+          urgentCount={overdueTasks.length}
+          team={team}
+          assignee={assignee}
+          onAssigneeChange={setAssignee}
+          onRefresh={() => void onRefresh()}
+          onExport={() => {
+            exportPipelineCsv(activePipelineLeads, openTasks);
+            setFeedback(`${activePipelineLeads.length} dossier${activePipelineLeads.length > 1 ? "s" : ""} exporté${activePipelineLeads.length > 1 ? "s" : ""} au format CSV.`);
+          }}
+          onOpenLead={(lead) => {
+            setSelectedPipelineLeadId(lead.id);
+          }}
+          onStartReminder={(leadId) => {
+            setReminderLeadId(leadId ?? activePipelineLeads[0]?.id ?? null);
+            setReminderComposerOpen(true);
+          }}
+          onCompleteTask={(task) => void completeTask(task, true)}
+          pendingId={pendingId}
+          error={error}
+          feedback={feedback}
+        />
+
+        <Sheet
+          open={Boolean(selectedPipelineLead)}
+          onOpenChange={(open) => {
+            if (!open) setSelectedPipelineLeadId(null);
+          }}
+        >
+          <SheetContent className="w-[min(94vw,32rem)] overflow-y-auto bg-[var(--crm-riviera-bg-surface)] sm:max-w-lg">
+            {selectedPipelineLead ? (
+              <>
+                <SheetHeader>
+                  <SheetTitle>{selectedPipelineLead.contactName}</SheetTitle>
+                  <SheetDescription>
+                    {selectedPipelineLead.requestType} · {selectedPipelineLead.city ?? "Ville non renseignée"}
+                  </SheetDescription>
+                </SheetHeader>
+
+                <div className="grid gap-5 px-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-2xl bg-[var(--crm-riviera-bg-accent)] p-3">
+                      <p className="text-xs text-[var(--crm-riviera-text-secondary)]">Étape</p>
+                      <p className="mt-1 font-semibold text-[var(--crm-riviera-text-primary)]">
+                        {getPipelineLeadStageLabel(selectedPipelineLead)}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl bg-[var(--crm-riviera-bg-accent)] p-3">
+                      <p className="text-xs text-[var(--crm-riviera-text-secondary)]">Priorité</p>
+                      <p className="mt-1 font-semibold text-[var(--crm-riviera-text-primary)]">
+                        {leadPriorityLabels[selectedPipelineLead.priority]}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label>Responsable</Label>
+                    <Select
+                      value={selectedPipelineLead.assignedTo ?? "UNASSIGNED"}
+                      onValueChange={(value) =>
+                        void persistLead(selectedPipelineLead, {
+                          assignedTo: value === "UNASSIGNED" ? null : String(value),
+                        })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue>
+                          {(value) =>
+                            value === "UNASSIGNED"
+                              ? "Non attribué"
+                              : getTeamMemberLabel(teamById.get(String(value)))}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="UNASSIGNED">Non attribué</SelectItem>
+                        {assignableAgents.map((member) => (
+                          <SelectItem key={member.id} value={member.id}>
+                            {getTeamMemberLabel(member)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label>Statut du dossier</Label>
+                    <Select
+                      value={selectedPipelineLead.status}
+                      onValueChange={(value) =>
+                        void persistLead(selectedPipelineLead, { status: value as LeadStatus })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue>{(value) => leadStatusLabels[value as LeadStatus]}</SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {leadStatuses.map((value) => (
+                          <SelectItem key={value} value={value}>
+                            {leadStatusLabels[value]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="rounded-2xl border border-[var(--crm-riviera-border-default)] p-4">
+                    <p className="text-xs font-semibold uppercase text-[var(--crm-riviera-text-secondary)]">
+                      Prochaine action
+                    </p>
+                    <p className="mt-2 font-semibold text-[var(--crm-riviera-text-primary)]">
+                      {selectedPipelineLeadNextTask?.title ?? "Aucune action planifiée"}
+                    </p>
+                    <p className="mt-1 text-sm text-[var(--crm-riviera-text-secondary)]">
+                      {getPipelineTaskTimeLabel(selectedPipelineLeadNextTask)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-[var(--crm-riviera-border-default)] p-4">
+                    <p className="text-xs font-semibold uppercase text-[var(--crm-riviera-text-secondary)]">
+                      Bien lié
+                    </p>
+                    <p className="mt-2 font-semibold text-[var(--crm-riviera-text-primary)]">
+                      {selectedPipelineLead.linkedPropertyTitle ?? "Aucun bien lié au dossier"}
+                    </p>
+                    {selectedPipelineLead.hasActiveOffer ? (
+                      <p className="mt-2 text-xs text-[var(--crm-riviera-text-secondary)]">
+                        L&apos;offre est rattachée à ce dossier. Sa création et ses conditions seront gérées depuis la fiche du bien.
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+
+                <SheetFooter>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setSelectedPipelineLeadId(null);
+                      setReminderLeadId(selectedPipelineLead.id);
+                      setReminderComposerOpen(true);
+                    }}
+                    className="bg-[var(--crm-riviera-bg-action)] text-white hover:bg-[var(--crm-riviera-bg-header)]"
+                  >
+                    <Plus className="size-4" />
+                    Créer la prochaine action
+                  </Button>
+                </SheetFooter>
+              </>
+            ) : null}
+          </SheetContent>
+        </Sheet>
+
+        <Sheet open={reminderComposerOpen} onOpenChange={setReminderComposerOpen}>
+          <SheetContent className="w-[min(92vw,28rem)] overflow-y-auto bg-[var(--crm-riviera-bg-surface)] sm:max-w-md">
+            <SheetHeader>
+              <SheetTitle>Créer un rappel</SheetTitle>
+              <SheetDescription>
+                Assignez une prochaine action datée à un dossier d&apos;Antoine ou Michel.
+              </SheetDescription>
+            </SheetHeader>
+
+            {reminderLead ? (
+              <div className="grid gap-5 px-4">
+                <div className="grid gap-2">
+                  <Label>Dossier</Label>
+                  <Select value={reminderLead.id} onValueChange={(value) => setReminderLeadId(String(value))}>
+                    <SelectTrigger>
+                      <SelectValue>{(value) => activeLeads.find((lead) => lead.id === value)?.contactName ?? "Choisir un dossier"}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {activeLeads.map((lead) => (
+                        <SelectItem key={lead.id} value={lead.id}>
+                          {lead.contactName} · {lead.assignedToName ?? "Non attribué"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="riviera-reminder-title">Action à réaliser</Label>
+                  <Input
+                    id="riviera-reminder-title"
+                    value={getDraft(reminderLead.id).title}
+                    onChange={(event) => updateDraft(reminderLead.id, { title: event.target.value })}
+                    placeholder="Appeler pour qualifier le projet"
+                    required
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="riviera-reminder-due">Échéance</Label>
+                  <Input
+                    id="riviera-reminder-due"
+                    type="datetime-local"
+                    value={getDraft(reminderLead.id).dueAt}
+                    onChange={(event) => updateDraft(reminderLead.id, { dueAt: event.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label>Priorité</Label>
+                  <Select
+                    value={getDraft(reminderLead.id).priority}
+                    onValueChange={(value) => updateDraft(reminderLead.id, { priority: value as LeadPriority })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue>{(value) => getPrioritySelectLabel(value)}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {leadPriorities.map((value) => (
+                        <SelectItem key={value} value={value}>
+                          {leadPriorityLabels[value]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            ) : (
+              <p className="px-4 text-sm text-[var(--crm-riviera-text-secondary)]">
+                Aucun dossier actif disponible pour créer un rappel.
+              </p>
+            )}
+
+            <SheetFooter>
+              <Button
+                type="button"
+                disabled={
+                  !reminderLead ||
+                  !getDraft(reminderLead.id).title.trim() ||
+                  !getDraft(reminderLead.id).dueAt ||
+                  pendingId === `task-${reminderLead.id}`
+                }
+                onClick={() => {
+                  if (reminderLead) void createTask(reminderLead);
+                }}
+                className="bg-[var(--crm-riviera-bg-action)] text-white hover:bg-[var(--crm-riviera-bg-header)]"
+              >
+                <Plus className="size-4" />
+                Enregistrer le rappel
+              </Button>
+            </SheetFooter>
+          </SheetContent>
+        </Sheet>
+      </>
+    );
   }
 
   return (
@@ -4839,6 +5603,8 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
   const [estimationLeads, setEstimationLeads] = useState(() => normalizeEstimations(estimations));
   const [pipelineLeads, setPipelineLeads] = useState<PipelineLead[]>([]);
   const [pipelineTasks, setPipelineTasks] = useState<PipelineTask[]>([]);
+  const [pipelineMetrics, setPipelineMetrics] = useState<PipelineMetrics>(emptyPipelineMetrics);
+  const [overviewSnapshot, setOverviewSnapshot] = useState<CrmOverviewSnapshot | null>(null);
   const [teamMembers, setTeamMembers] = useState<AdminTeamMember[]>([]);
   const [pipelineError, setPipelineError] = useState("");
   const [activities, setActivities] = useState(initialActivities);
@@ -4893,6 +5659,7 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
     setPipelineLeads(payload.leads ?? []);
     setPipelineTasks(payload.tasks ?? []);
     setTeamMembers(payload.team ?? []);
+    setPipelineMetrics(payload.metrics ?? emptyPipelineMetrics);
   }
 
   useEffect(() => {
@@ -4906,10 +5673,11 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
       setLoading(true);
       setLoadError("");
 
-      const [response, propertiesResponse, pipelineResponse] = await Promise.all([
+      const [response, propertiesResponse, pipelineResponse, overviewResponse] = await Promise.all([
         fetch("/api/admin/leads"),
         fetch("/api/admin/properties"),
         fetch("/api/admin/pipeline"),
+        fetch("/api/admin/overview"),
       ]);
       const payload = (await response.json().catch(() => null)) as {
         message?: string;
@@ -4921,6 +5689,7 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
         properties?: Property[];
       } | null;
       const pipelinePayload = (await pipelineResponse.json().catch(() => null)) as PipelineResponse | null;
+      const overviewPayload = (await overviewResponse.json().catch(() => null)) as OverviewResponse | null;
 
       if (cancelled) return;
       setLoading(false);
@@ -4944,9 +5713,14 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
         setPipelineLeads(pipelinePayload.leads ?? []);
         setPipelineTasks(pipelinePayload.tasks ?? []);
         setTeamMembers(pipelinePayload.team ?? []);
+        setPipelineMetrics(pipelinePayload.metrics ?? emptyPipelineMetrics);
       } else {
         if (pipelineResponse.status === 401) window.location.assign("/admin/login");
         setPipelineError(pipelinePayload?.message ?? "Le pipeline CRM n'a pas pu etre charge.");
+      }
+
+      if (overviewResponse.ok && overviewPayload?.success) {
+        setOverviewSnapshot(overviewPayload.overview ?? null);
       }
     }
 
@@ -5031,7 +5805,7 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
         loading={loading}
         userName={userName}
         priorityCount={dailyPriorities.length}
-        appointmentCount={metrics.appointments}
+        visitCount={overviewSnapshot?.metrics.visits ?? metrics.appointments}
         contactsToQualify={metrics.contactsToQualify}
         contactsReady={metrics.contactsReadyForPipeline}
         selectedContact={selectedContact}
@@ -5041,7 +5815,7 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
         onCreateContact={openContactCreation}
         onLogout={() => void logout()}
       />
-      <div className="mx-auto w-full max-w-screen-2xl min-w-0 px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
+      <div className="mx-auto w-full max-w-screen-xl min-w-0 px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
 
         {!connected ? (
           <section
@@ -5065,6 +5839,7 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
               <TabsContent value="overview" className="w-full">
                 <BentoDesignDashboard
                   metrics={metrics}
+                  overview={overviewSnapshot}
                   setActiveTab={setActiveTab}
                   priorities={dailyPriorities}
                   pipelineTasks={pipelineTasks}
@@ -5079,6 +5854,7 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
                   tasks={pipelineTasks}
                   setTasks={setPipelineTasks}
                   team={teamMembers}
+                  metrics={pipelineMetrics}
                   connected={connected}
                   error={pipelineError}
                   onRefresh={refreshPipeline}

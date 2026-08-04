@@ -54,7 +54,7 @@ export function RivieraPanel({
   return (
     <Component
       className={cn(
-        "min-w-0 rounded-2xl border border-[var(--crm-riviera-border-default)] bg-[var(--crm-riviera-bg-surface)] shadow-[var(--crm-riviera-shadow-card)]",
+        "w-full min-w-0 max-w-full overflow-hidden rounded-2xl border border-[var(--crm-riviera-border-default)] bg-[var(--crm-riviera-bg-surface)] shadow-[var(--crm-riviera-shadow-card)]",
         className
       )}
     >
@@ -121,7 +121,7 @@ export function RivieraActionCard({
   return (
     <article
       className={cn(
-        "grid min-w-0 gap-3 rounded-2xl border bg-[var(--crm-riviera-bg-surface)] p-4 shadow-[var(--crm-riviera-shadow-card)]",
+        "grid w-full min-w-0 max-w-full gap-2 rounded-2xl border bg-[var(--crm-riviera-bg-surface)] p-3 shadow-[var(--crm-riviera-shadow-card)] sm:gap-3 sm:p-4",
         borderClass
       )}
     >
@@ -132,19 +132,19 @@ export function RivieraActionCard({
         </span>
       </div>
       <div className="min-w-0">
-        <h3 className="text-base font-semibold leading-6 text-[var(--crm-riviera-text-primary)] sm:text-lg">
+        <h3 className="text-base font-semibold leading-6 text-[var(--crm-riviera-text-primary)]">
           {title}
         </h3>
-        <p className="mt-2 line-clamp-2 text-sm leading-5 text-[var(--crm-riviera-text-secondary)]">
+        <p className="mt-1 line-clamp-2 text-sm leading-5 text-[var(--crm-riviera-text-secondary)]">
           {context}
         </p>
       </div>
       <button
         type="button"
         onClick={onAction}
-        className="ml-auto inline-flex min-h-11 items-center justify-end gap-1.5 rounded-lg px-1 text-sm font-semibold text-[var(--crm-riviera-text-action)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--crm-riviera-bg-action)]"
+        className="ml-auto inline-flex min-h-8 max-w-full items-center justify-end gap-1.5 rounded-lg px-1 text-sm font-semibold text-[var(--crm-riviera-text-action)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--crm-riviera-bg-action)]"
       >
-        {actionLabel}
+        <span className="truncate">{actionLabel}</span>
         <ArrowRight className="size-4" />
       </button>
     </article>
@@ -152,7 +152,7 @@ export function RivieraActionCard({
 }
 
 export const rivieraPrimaryButtonClass =
-  "h-12 rounded-2xl bg-[var(--crm-riviera-bg-action)] px-5 font-semibold text-white hover:bg-[var(--crm-riviera-bg-header)] sm:h-11";
+  "h-12 min-w-0 shrink rounded-2xl bg-[var(--crm-riviera-bg-action)] px-4 font-semibold whitespace-normal text-white hover:bg-[var(--crm-riviera-bg-header)] sm:h-11 sm:px-5";
 
 export const rivieraSecondaryButtonClass =
-  "h-12 rounded-2xl border-0 bg-[var(--crm-riviera-bg-accent)] px-5 font-semibold text-[var(--crm-riviera-text-primary)] hover:bg-[#cedbc8] sm:h-11";
+  "h-12 min-w-0 shrink rounded-2xl border-0 bg-[var(--crm-riviera-bg-accent)] px-4 font-semibold whitespace-normal text-[var(--crm-riviera-text-primary)] hover:bg-[#cedbc8] sm:h-11 sm:px-5";

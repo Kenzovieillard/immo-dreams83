@@ -119,8 +119,22 @@ export type PipelineLead = {
   contactPhone: string | null;
   linkedPropertyId: string | null;
   linkedPropertyTitle: string | null;
+  hasActiveAppointment: boolean;
+  hasActiveOffer: boolean;
+  hasActiveMandate: boolean;
   notes: string | null;
   archived: boolean;
+};
+
+export type PipelineMetrics = {
+  visits: number;
+  offers: number;
+  mandates: number;
+  sources: {
+    visits: "real" | "missing";
+    offers: "real" | "missing";
+    mandates: "real" | "missing";
+  };
 };
 
 export type PipelineTask = {
@@ -145,4 +159,27 @@ export type PipelineTask = {
   emailReminderLastError: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type CrmOverviewMetricSource = "real" | "derived" | "missing";
+
+export type CrmOverviewSnapshot = {
+  generatedAt: string;
+  metrics: {
+    totalLeads: number;
+    newLeads: number;
+    visits: number;
+    offers: number;
+    availableProperties: number;
+    propertiesWithoutPhotos: number;
+    contactsToQualify: number;
+    openTasks: number;
+    todayTasks: number;
+  };
+  sources: {
+    leads: CrmOverviewMetricSource;
+    visits: CrmOverviewMetricSource;
+    offers: CrmOverviewMetricSource;
+    properties: CrmOverviewMetricSource;
+  };
 };
