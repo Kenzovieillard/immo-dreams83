@@ -1991,6 +1991,10 @@ type Props = {
   connected: boolean;
   userName: string;
   userRole: AdminRole;
+  initialTab?: AdminTab;
+  initialContactId?: string | null;
+  initialPropertyId?: string | null;
+  initialSearch?: string;
 };
 
 function normalizeContacts(items: ContactLead[]): AdminLead[] {
@@ -3483,14 +3487,16 @@ function PropertyManager({
   connected,
   createOpen,
   onCreateOpenChange,
+  initialPropertyId,
 }: {
   properties: Property[];
   setProperties: React.Dispatch<React.SetStateAction<Property[]>>;
   connected: boolean;
   createOpen: boolean;
   onCreateOpenChange: (open: boolean) => void;
+  initialPropertyId: string | null;
 }) {
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialPropertyId ?? "");
   const [displayMode, setDisplayMode] = useState<PropertyDisplayMode>("list");
   const [sortMode, setSortMode] = useState<PropertySortMode>("site");
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -3504,6 +3510,7 @@ function PropertyManager({
     return properties
       .filter((property) => {
         const haystack = [
+          property.id,
           property.reference,
           property.mandateNumber,
           property.title,
@@ -5591,13 +5598,24 @@ function scrollToCrmSection(id: string) {
   });
 }
 
-export function AdminDashboard({ contacts, estimations, activities: initialActivities, properties, connected, userName }: Props) {
+export function AdminDashboard({
+  contacts,
+  estimations,
+  activities: initialActivities,
+  properties,
+  connected,
+  userName,
+  initialTab = "overview",
+  initialContactId = null,
+  initialPropertyId = null,
+  initialSearch = "",
+}: Props) {
   const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(connected);
-  const [activeTab, setActiveTab] = useState<AdminTab>("overview");
+  const [activeTab, setActiveTab] = useState<AdminTab>(initialTab);
   const [contactCreateOpen, setContactCreateOpen] = useState(false);
-  const [contactSearch, setContactSearch] = useState("");
-  const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
+  const [contactSearch, setContactSearch] = useState(initialSearch);
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(initialContactId);
   const [propertyCreateOpen, setPropertyCreateOpen] = useState(false);
   const [contactLeads, setContactLeads] = useState(() => normalizeContacts(contacts));
   const [estimationLeads, setEstimationLeads] = useState(() => normalizeEstimations(estimations));
@@ -5909,6 +5927,7 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
                   connected={connected}
                   createOpen={propertyCreateOpen}
                   onCreateOpenChange={setPropertyCreateOpen}
+                  initialPropertyId={initialPropertyId}
                 />
               </TabsContent>
               <TabsContent value="activities" className="w-full">

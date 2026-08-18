@@ -1,4 +1,9 @@
-export type LeadStatus = "NEW" | "CONTACTED" | "APPOINTMENT" | "MANDATE_SIGNED" | "LOST";
+export type LeadStatus =
+  | "NEW"
+  | "CONTACTED"
+  | "APPOINTMENT"
+  | "MANDATE_SIGNED"
+  | "LOST";
 
 export type LeadPriority = "low" | "normal" | "high" | "urgent";
 
@@ -17,7 +22,123 @@ export type TaskRecurrenceRule = "NONE" | "WEEKLY" | "MONTHLY";
 
 export type TaskReminderChannel = "NONE" | "EMAIL";
 
-export type TaskEmailReminderStatus = "NOT_SCHEDULED" | "PENDING" | "SENT" | "FAILED";
+export type TaskEmailReminderStatus =
+  | "NOT_SCHEDULED"
+  | "PENDING"
+  | "SENT"
+  | "FAILED";
+
+export type CommercialOfferStatus =
+  | "DRAFT"
+  | "TO_BE_SIGNED"
+  | "SIGNED_BY_BUYER"
+  | "SENT_TO_SELLER"
+  | "NEGOTIATING"
+  | "ACCEPTED"
+  | "REJECTED"
+  | "WITHDRAWN"
+  | "EXPIRED";
+
+export type OfferFinancingType = "CASH" | "LOAN" | "MIXED" | "UNKNOWN";
+
+export type NegotiationStatus =
+  | "IN_PROGRESS"
+  | "WAITING_SELLER"
+  | "WAITING_BUYER"
+  | "COUNTER_OFFER"
+  | "ACCEPTED"
+  | "REJECTED"
+  | "EXPIRED"
+  | "CONCLUDED";
+
+export type NegotiationParty = {
+  id: string | null;
+  name: string;
+  email: string | null;
+  phone: string | null;
+};
+
+export type NegotiationProperty = {
+  id: string;
+  slug?: string | null;
+  reference: string | null;
+  title: string;
+  city: string;
+  postalCode: string | null;
+  imageUrl: string | null;
+};
+
+export type NegotiationStep = {
+  id: string;
+  stepNumber: number;
+  label: string;
+  amount: number | null;
+  authorRole: "BUYER" | "SELLER" | null;
+  status: "SENT" | "REVIEW" | "ACCEPTED" | "REJECTED" | "PENDING";
+  isCurrent: boolean;
+  comment: string | null;
+  createdAt: string;
+};
+
+export type NegotiationExchange = {
+  id: string;
+  type: string;
+  amount: number | null;
+  authorName: string | null;
+  comment: string | null;
+  isInternalNote: boolean;
+  createdAt: string;
+};
+
+export type NegotiationDocument = {
+  id: string;
+  fileName: string;
+  documentType: string | null;
+  mimeType: string | null;
+  createdAt: string;
+};
+
+export type CommercialNegotiation = {
+  id: string;
+  offerId: string;
+  property: NegotiationProperty;
+  buyer: NegotiationParty;
+  seller: NegotiationParty | null;
+  responsible: NegotiationParty;
+  status: NegotiationStatus;
+  initialAmount: number;
+  currentAmount: number;
+  askingPrice: number;
+  currentGapPercent: number;
+  currentStep: number;
+  totalSteps: number;
+  responseDeadline: string | null;
+  isUrgent: boolean;
+  daysWithoutActivity: number;
+  lastActivityAt: string;
+  finalAmount: number | null;
+  concludedAt: string | null;
+  internalNotes: string | null;
+  financingType: OfferFinancingType;
+  downPaymentAmount: number | null;
+  loanAmount: number | null;
+  suspensiveConditions: string | null;
+  includedFurniture: string | null;
+  steps: NegotiationStep[];
+  exchanges: NegotiationExchange[];
+  documents: NegotiationDocument[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type NegotiationKpis = {
+  active: number;
+  awaitingResponse: number;
+  actionRequired: number;
+  acceptedThisMonth: number;
+  averageGap: number | null;
+  totalVolume: number;
+};
 
 export type ContactLead = {
   id: string;

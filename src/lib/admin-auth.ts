@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getSupabaseAdminClient, getSupabaseClient } from "@/lib/supabase";
 import { adminRoles, type AdminProfile, type AdminRole, type AdminSession } from "@/types/admin";
+import type { Json } from "@/types/supabase";
 
 const accessTokenCookie = "immo_admin_access_token";
 const refreshTokenCookie = "immo_admin_refresh_token";
@@ -18,15 +19,18 @@ export const adminRoleLabels: Record<AdminRole, string> = {
 export type AdminPermission =
   | "crm.read"
   | "lead.write"
+  | "lead.delete"
+  | "offer.write"
+  | "offer.decide"
   | "property.write"
   | "photo.write"
   | "audit.read"
   | "users.manage";
 
 const permissionMatrix: Record<AdminRole, AdminPermission[]> = {
-  ADMIN: ["crm.read", "lead.write", "property.write", "photo.write", "audit.read", "users.manage"],
-  DIRECTOR: ["crm.read", "lead.write", "property.write", "photo.write", "audit.read"],
-  AGENT: ["crm.read", "lead.write", "property.write", "photo.write"],
+  ADMIN: ["crm.read", "lead.write", "lead.delete", "offer.write", "offer.decide", "property.write", "photo.write", "audit.read", "users.manage"],
+  DIRECTOR: ["crm.read", "lead.write", "lead.delete", "offer.write", "offer.decide", "property.write", "photo.write", "audit.read"],
+  AGENT: ["crm.read", "lead.write", "offer.write", "property.write", "photo.write"],
   ASSISTANT: ["crm.read", "lead.write", "property.write", "photo.write"],
   MARKETING: ["crm.read", "property.write", "photo.write"],
   READ_ONLY: ["crm.read"],
@@ -167,6 +171,7 @@ export async function writeAdminAuditLog(
 ) {
   const supabase = getSupabaseAdminClient();
   if (!supabase) return;
+  const auditMetadata = JSON.parse(JSON.stringify(metadata ?? {})) as Json;
 
   await supabase.from("audit_logs").insert({
     actor_id: session?.user.id ?? null,
@@ -175,6 +180,6 @@ export async function writeAdminAuditLog(
     action,
     entity_type: entityType,
     entity_id: entityId ?? null,
-    metadata: metadata ?? {},
+    metadata: auditMetadata,
   });
 }
