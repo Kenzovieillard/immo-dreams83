@@ -16,7 +16,10 @@ import {
 } from "@/lib/lead-validation";
 import { formatClimateDiagnostic, formatEnergyDiagnostic, parseDiagnosticValue } from "@/lib/dpe";
 import { getSupabaseAdminClient } from "@/lib/supabase";
+import { parsePropertyNumber, propertyDetailSchema, propertyWorkspaceFields } from "@/lib/property-workspace";
 import type { AdminSession } from "@/types/admin";
+import type { Json } from "@/types/supabase";
+import { z } from "zod";
 
 const propertyTypes = ["apartment", "house", "land", "commercial", "parking", "other"] as const satisfies PropertyType[];
 const propertyStatuses = ["available", "under_offer", "sold"] as const satisfies PropertyStatus[];
@@ -59,6 +62,14 @@ type PropertyRow = {
   unpublished_at: string | null;
   archived_at: string | null;
   archived_by: string | null;
+  street_address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  owner_contact_id?: string | null;
+  advisor_id?: string | null;
+  workspace_details?: Json;
+  scheduled_publication_at?: string | null;
+  publication_schedule_error?: string | null;
 };
 
 type PropertyHistoryRow = {
@@ -178,6 +189,7 @@ function normalizeHistory(row: PropertyHistoryRow): PropertyHistoryItem {
 }
 
 function mapPropertyRow(row: PropertyRow, history: PropertyHistoryItem[] = []): Property {
+  const details = propertyDetailSchema.safeParse(row.workspace_details);
   const commercialStatus = row.commercial_status ?? mapLegacyToCommercialStatus(row.status);
   const publicationStatus = row.publication_status ?? (
     row.status === "sold" ? "UNPUBLISHED" : "PUBLISHED"
@@ -214,6 +226,14 @@ function mapPropertyRow(row: PropertyRow, history: PropertyHistoryItem[] = []): 
     updatedAt: row.updated_at,
     publishedAt: row.published_at,
     archivedAt: row.archived_at,
+    streetAddress: row.street_address ?? null,
+    latitude: row.latitude ?? null,
+    longitude: row.longitude ?? null,
+    ownerContactId: row.owner_contact_id ?? null,
+    advisorId: row.advisor_id ?? null,
+    workspaceDetails: details.data,
+    scheduledPublicationAt: row.scheduled_publication_at ?? null,
+    publicationScheduleError: row.publication_schedule_error ?? null,
     mandateNumber: row.mandate_number ?? row.reference,
     history,
   };
@@ -247,6 +267,21 @@ function validatePropertyPayload(payload: unknown) {
     payload && typeof payload === "object" && (payload as Record<string, unknown>).featured
   );
   const fieldErrors: FieldErrors = {};
+  let workspace: z.infer<typeof propertyWorkspaceFields> | undefined;
+  if (payload && typeof payload === "object" && "workspaceDetails" in payload) {
+    const parsed = propertyWorkspaceFields.safeParse(payload);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      fieldErrors[String(issue?.path.at(-1) ?? "workspaceDetails")] = "Vérifiez cette information du dossier.";
+    } else {
+      workspace = parsed.data;
+      const latitude = parsePropertyNumber(workspace.latitude);
+      const longitude = parsePropertyNumber(workspace.longitude);
+      if ((workspace.latitude || workspace.longitude) && !(Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180)) {
+        fieldErrors.latitude = "Indiquez une latitude et une longitude valides, ou laissez les deux champs vides.";
+      }
+    }
+  }
 
   if (!hasRequiredValue(title)) fieldErrors.title = "Le titre est obligatoire.";
   if (!propertyTypes.includes(type as PropertyType)) fieldErrors.type = "Le type de bien est obligatoire.";
@@ -296,9 +331,34 @@ function validatePropertyPayload(payload: unknown) {
       features: Array.from(new Set([...splitMultilineList(featuresText), ...landOptions])),
       photos: photoUrls,
       featured,
+      workspace,
     },
     fieldErrors,
   };
+}
+
+async function verifyPropertyContacts(
+  supabase: NonNullable<ReturnType<typeof getSupabaseAdminClient>>,
+  session: AdminSession,
+  workspace: ReturnType<typeof validatePropertyPayload>["data"]["workspace"],
+  existing?: PropertyRow,
+) {
+  const ownerId = workspace?.ownerContactId;
+  const advisorId = workspace?.advisorId;
+  if (ownerId && ownerId !== existing?.owner_contact_id) {
+    let contacts = supabase.from("contacts").select("id").eq("id", ownerId).eq("archived", false);
+    if (session.profile.role === "AGENT") contacts = contacts.eq("assigned_to", session.user.id);
+    const owner = await contacts.maybeSingle();
+    if (owner.error) return NextResponse.json({ success: false, message: "Le propriétaire ne peut pas être vérifié." }, { status: 503 });
+    if (!owner.data) return NextResponse.json({ success: false, message: "Le propriétaire sélectionné n’est pas accessible." }, { status: 400 });
+  }
+  if (advisorId && advisorId !== existing?.advisor_id) {
+    const advisor = await supabase.from("profiles").select("id").eq("id", advisorId).eq("is_active", true)
+      .in("role", ["ADMIN", "DIRECTOR", "AGENT", "ASSISTANT"]).maybeSingle();
+    if (advisor.error) return NextResponse.json({ success: false, message: "Le conseiller ne peut pas être vérifié." }, { status: 503 });
+    if (!advisor.data) return NextResponse.json({ success: false, message: "Le conseiller sélectionné n’est pas actif." }, { status: 400 });
+  }
+  return null;
 }
 
 function getPublicationPatch(
@@ -356,6 +416,7 @@ function buildPropertyRecord(
   const isLand = data.type === "land";
   const skipsDiagnostics = data.type === "land" || data.type === "parking";
   const publicationPatch = getPublicationPatch(data.publicationStatus, existing);
+  const workspace = data.workspace;
 
   return {
     reference,
@@ -386,6 +447,17 @@ function buildPropertyRecord(
     updated_by: actorId,
     ...publicationPatch,
     archived_by: data.publicationStatus === "ARCHIVED" ? actorId : publicationPatch.archived_by,
+    ...(existing?.scheduled_publication_at && data.publicationStatus === "PUBLISHED" ? {
+      scheduled_publication_at: null, publication_scheduled_by: null, publication_schedule_error: null,
+    } : {}),
+    ...(workspace ? {
+      street_address: workspace.streetAddress || null,
+      latitude: workspace.latitude ? parsePropertyNumber(workspace.latitude) : null,
+      longitude: workspace.longitude ? parsePropertyNumber(workspace.longitude) : null,
+      owner_contact_id: workspace.ownerContactId || null,
+      advisor_id: workspace.advisorId || null,
+      workspace_details: workspace.workspaceDetails,
+    } : {}),
   };
 }
 
@@ -419,6 +491,10 @@ function getChangedFields(previousValue: Record<string, unknown> | null, nextVal
   });
 }
 
+function toJson(value: unknown): Json {
+  return JSON.parse(JSON.stringify(value)) as Json;
+}
+
 async function writePropertyHistory(
   supabase: NonNullable<ReturnType<typeof getSupabaseAdminClient>>,
   session: AdminSession,
@@ -436,8 +512,8 @@ async function writePropertyHistory(
     reference,
     action,
     changed_fields: changedFields,
-    previous_value: previousValue,
-    next_value: nextValue,
+    previous_value: previousValue ? toJson(previousValue) : null,
+    next_value: toJson(nextValue),
     actor_id: session.user.id,
     actor_email: session.user.email,
   });
@@ -577,6 +653,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Supabase serveur n'est pas configure." }, { status: 503 });
   }
 
+  const draftId = getStringField(payload, "draftId");
+  if (draftId) {
+    if (!z.uuid().safeParse(draftId).success) {
+      return NextResponse.json({ success: false, message: "Identifiant de brouillon invalide." }, { status: 400 });
+    }
+    const { data: draft, error: draftError } = await supabase
+      .from("property_drafts").select("id").eq("id", draftId).eq("author_id", auth.session.user.id).maybeSingle();
+    if (draftError) return NextResponse.json({ success: false, message: "Le brouillon n’a pas pu être vérifié." }, { status: 503 });
+    if (!draft) return NextResponse.json({ success: false, message: "Brouillon introuvable." }, { status: 404 });
+    const { data: saved, error: savedError } = await supabase
+      .from("properties").select("*").eq("id", draftId).eq("created_by", auth.session.user.id).maybeSingle();
+    if (savedError) return NextResponse.json({ success: false, message: "Le bien n’a pas pu être retrouvé." }, { status: 503 });
+    if (saved) return NextResponse.json({ success: true, reused: true, property: mapPropertyRow(saved as PropertyRow) });
+  }
+
+  const contactError = await verifyPropertyContacts(supabase, auth.session, data.workspace);
+  if (contactError) return contactError;
+
   const { data: existingProperties, error: referenceError } = await supabase
     .from("properties")
     .select("reference");
@@ -593,6 +687,7 @@ export async function POST(request: NextRequest) {
   const record = {
     ...buildPropertyRecord(data, reference, slug, auth.session.user.id),
     created_by: auth.session.user.id,
+    ...(draftId ? { id: draftId } : {}),
   };
 
   const { data: property, error } = await supabase
@@ -602,6 +697,14 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (error) {
+    if (error.code === "23514" && data.publicationStatus === "PUBLISHED")
+      return NextResponse.json({ success: false, message: error.message }, { status: 422 });
+    if (draftId && error.code === "23505") {
+      const { data: saved } = await supabase.from("properties").select("*")
+        .eq("id", draftId).eq("created_by", auth.session.user.id).maybeSingle();
+      if (saved) return NextResponse.json({ success: true, reused: true, property: mapPropertyRow(saved as PropertyRow) });
+      return NextResponse.json({ success: false, message: "Création concurrente. Réessayez pour obtenir une nouvelle référence." }, { status: 409 });
+    }
     console.error("[IMMO-DREAMS83] Admin property creation failed", error.message);
     return NextResponse.json({ success: false, message: "Le bien n'a pas pu etre cree." }, { status: 500 });
   }
@@ -653,36 +756,51 @@ export async function PATCH(request: NextRequest) {
   }
 
   const reference = data.reference;
-  const { data: existingProperty } = await supabase
+  const { data: existingProperty, error: lookupError } = await supabase
     .from("properties")
     .select("*")
     .eq("reference", reference)
     .maybeSingle();
 
   const existing = existingProperty as PropertyRow | null;
-  const slug = existing?.slug || data.slug || `${slugify(data.title)}-${slugify(data.city)}-${data.postalCode}-ref-${reference}`;
-  const record = buildPropertyRecord(data, reference, slug, auth.session.user.id, existing);
-
-  if (existing) {
-    await supabase.from("property_versions").insert({
-      property_id: existing.id,
-      reference,
-      snapshot: existing,
-      changed_by: auth.session.user.id,
-      change_reason: "admin.patch",
-    });
+  if (lookupError) return NextResponse.json({ success: false, message: "La lecture du bien a échoué." }, { status: 503 });
+  if (!existing) return NextResponse.json({ success: false, message: "Bien introuvable." }, { status: 404 });
+  const contactError = await verifyPropertyContacts(supabase, auth.session, data.workspace, existing);
+  if (contactError) return contactError;
+  const expectedUpdatedAt = getStringField(payload, "expectedUpdatedAt") || existing.updated_at;
+  if (!Number.isFinite(Date.parse(expectedUpdatedAt))) {
+    return NextResponse.json({ success: false, message: "Version du bien invalide." }, { status: 400 });
   }
+  const record = buildPropertyRecord(data, reference, existing.slug, auth.session.user.id, existing);
 
   const { data: property, error } = await supabase
     .from("properties")
-    .upsert(record, { onConflict: "reference" })
+    .update(record)
+    .eq("id", existing.id)
+    .eq("updated_at", expectedUpdatedAt)
     .select("*")
-    .single();
+    .maybeSingle();
 
   if (error) {
+    if (error.code === "23514" && data.publicationStatus === "PUBLISHED")
+      return NextResponse.json({ success: false, message: error.message }, { status: 422 });
     console.error("[IMMO-DREAMS83] Admin property update failed", error.message);
     return NextResponse.json({ success: false, message: "Le bien n'a pas pu etre mis a jour." }, { status: 500 });
   }
+  if (!property) {
+    return NextResponse.json(
+      { success: false, message: "Ce bien a été modifié ailleurs. Rechargez sa dernière version avant de réessayer." },
+      { status: 409 },
+    );
+  }
+
+  await supabase.from("property_versions").insert({
+    property_id: existing.id,
+    reference,
+    snapshot: toJson(existing),
+    changed_by: auth.session.user.id,
+    change_reason: "admin.patch",
+  });
 
   const propertyRow = property as PropertyRow;
   await syncPropertyPhotos(supabase, propertyRow, data.photos, auth.session.user.id);

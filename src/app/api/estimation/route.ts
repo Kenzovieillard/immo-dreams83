@@ -67,6 +67,15 @@ export async function POST(request: NextRequest) {
       const details = [data.message, data.estimatedPrice ? `Prix envisagé : ${data.estimatedPrice} €` : ""]
         .filter(Boolean)
         .join("\n\n");
+      const surface = toNumber(data.surface);
+
+      if (surface === null) {
+        return NextResponse.json(
+          { success: false, message: "La surface doit etre renseignee." },
+          { status: 400 }
+        );
+      }
+
       const { data: lead, error } = await supabase
         .from("estimations")
         .insert({
@@ -76,7 +85,7 @@ export async function POST(request: NextRequest) {
           property_type: data.propertyType,
           city: data.city,
           postal_code: data.postalCode || null,
-          surface: toNumber(data.surface),
+          surface,
           rooms: toNumber(data.rooms),
           message: details || null,
           status: "NEW",

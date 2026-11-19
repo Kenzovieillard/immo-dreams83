@@ -31,7 +31,7 @@ export function RivieraStatusBadge({
   return (
     <span
       className={cn(
-        "inline-flex min-h-7 w-fit items-center gap-2 rounded-full px-3 py-1 text-xs font-medium leading-4",
+        "inline-flex min-h-7 w-fit items-center gap-2 whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium leading-4",
         statusToneClasses[tone],
         className
       )}

@@ -89,9 +89,11 @@
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-inter: var(--font-inter-loaded);
+  --font-geist: var(--font-geist-loaded);
+  --font-sans: var(--font-geist-loaded), "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
-  --font-heading: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-geist-loaded), "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -187,7 +189,7 @@
   --crm-riviera-bg-action: #2f493a;
   --crm-riviera-bg-accent: #dce5d7;
   --crm-riviera-text-primary: #18211f;
-  --crm-riviera-text-secondary: #66716c;
+  --crm-riviera-text-secondary: #59645f;
   --crm-riviera-text-action: #2f493a;
   --crm-riviera-border-default: #dfddd4;
   --crm-riviera-status-success: #4d7a5c;
@@ -414,5 +416,28 @@
 
   &::-webkit-scrollbar {
     display: none;
+  }
+}
+
+.crm-riviera .text-\[\#6f7873\] {
+  color: #5f6964;
+}
+
+.crm-riviera .commercial-negotiation-row {
+  display: grid;
+  gap: 20px;
+  padding: 20px 20px 20px 24px;
+}
+
+@media (min-width: 640px) {
+  .crm-riviera .commercial-negotiation-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1400px) {
+  .crm-riviera .commercial-negotiation-row {
+    grid-template-columns: minmax(170px, 1.3fr) minmax(130px, 1fr) minmax(170px, 1fr) minmax(120px, 0.8fr) auto;
+    align-items: center;
   }
 }

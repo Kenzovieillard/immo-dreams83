@@ -9,7 +9,7 @@ import { StructuredData } from "@/components/site/structured-data";
 
 export function SiteChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const isCrmRoute = pathname.startsWith("/admin");
+  const isCrmRoute = pathname.startsWith("/admin") || pathname.startsWith("/crm-riviera-") || pathname.startsWith("/commercial");
 
   if (isCrmRoute) {
     return children;

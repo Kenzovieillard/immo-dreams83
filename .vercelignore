@@ -1,3 +1,13 @@
 public/images/hero/villa-riviera-scroll-chroma-v1.png
 public/images/hero/villa-riviera-scroll-cutout-v1.png
 public/images/hero/villa-riviera-scroll-cutout-v2.png
+
+# Local QA artefacts (screenshots, logs and temporary reports)
+work
+work/**
+reports
+reports/**
+supabase/.temp
+supabase/.temp/**
+.env*
+*.tsbuildinfo

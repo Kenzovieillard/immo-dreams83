@@ -1,8 +1,21 @@
 import type { Metadata, Viewport } from "next";
+import { Geist, Inter } from "next/font/google";
 import { MobileViewportGuard } from "@/components/site/mobile-viewport-guard";
 import { siteUrl } from "@/components/site/site-config";
 import { SiteChrome } from "@/components/site/site-chrome";
 import "./globals.css";
+
+const geist = Geist({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-geist-loaded",
+});
+
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["400", "600", "700"],
+  variable: "--font-inter-loaded",
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -46,7 +59,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="fr">
+    <html lang="fr" className={`${inter.variable} ${geist.variable}`}>
       <body className="min-h-dvh bg-background">
         <MobileViewportGuard />
         <SiteChrome>{children}</SiteChrome>

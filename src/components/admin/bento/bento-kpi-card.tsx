@@ -21,7 +21,7 @@ export function BentoKpiCard({
     dark: "text-[var(--crm-riviera-text-primary)]",
     orange: "text-[var(--crm-riviera-text-action)]",
     success: "text-[var(--crm-riviera-status-success)]",
-    warning: "text-[var(--crm-riviera-status-warning)]",
+    warning: "text-[#815c1a]",
   }[tone];
 
   return (

@@ -1,9 +1,45 @@
 import type {
+  CommercialOfferStatus,
   ContactQualificationStatus,
   ContactRole,
   LeadPriority,
   LeadStatus,
 } from "@/types/crm";
+
+export const assignableProfileRoles = ["ADMIN", "DIRECTOR", "AGENT"] as const;
+
+export const commercialOfferStatuses = [
+  "DRAFT",
+  "TO_BE_SIGNED",
+  "SIGNED_BY_BUYER",
+  "SENT_TO_SELLER",
+  "NEGOTIATING",
+  "ACCEPTED",
+  "REJECTED",
+  "WITHDRAWN",
+  "EXPIRED",
+] as const satisfies CommercialOfferStatus[];
+
+export const commercialOfferStatusLabels: Record<CommercialOfferStatus, string> = {
+  DRAFT: "Brouillon",
+  TO_BE_SIGNED: "À faire signer",
+  SIGNED_BY_BUYER: "Signée par l'acquéreur",
+  SENT_TO_SELLER: "Transmise au vendeur",
+  NEGOTIATING: "En négociation",
+  ACCEPTED: "Acceptée",
+  REJECTED: "Refusée",
+  WITHDRAWN: "Retirée",
+  EXPIRED: "Expirée",
+};
+
+export const activeCommercialOfferStatuses = [
+  "DRAFT",
+  "TO_BE_SIGNED",
+  "SIGNED_BY_BUYER",
+  "SENT_TO_SELLER",
+  "NEGOTIATING",
+  "ACCEPTED",
+] as const satisfies CommercialOfferStatus[];
 
 export const leadStatuses = [
   "NEW",
@@ -77,6 +113,28 @@ export function isLeadStatus(value: unknown): value is LeadStatus {
 
 export function isLeadPriority(value: unknown): value is LeadPriority {
   return typeof value === "string" && leadPriorities.includes(value as LeadPriority);
+}
+
+export function isAssignableProfileRole(value: unknown) {
+  return (
+    typeof value === "string" &&
+    assignableProfileRoles.includes(value as (typeof assignableProfileRoles)[number])
+  );
+}
+
+export function isCommercialOfferStatus(value: unknown): value is CommercialOfferStatus {
+  return (
+    typeof value === "string" &&
+    commercialOfferStatuses.includes(value as CommercialOfferStatus)
+  );
+}
+
+export function normalizeCrmSearch(value: string | null | undefined) {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("fr-FR")
+    .trim();
 }
 
 export function isContactRole(value: unknown): value is ContactRole {

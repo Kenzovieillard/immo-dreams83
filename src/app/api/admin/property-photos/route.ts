@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { requireAdminSession, writeAdminAuditLog } from "@/lib/admin-auth";
+import { draftAssetsSchema } from "@/lib/property-workspace";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 
 const bucketName = "property-photos";
@@ -102,6 +104,9 @@ export async function POST(request: NextRequest) {
 
   const formData = await request.formData().catch(() => null);
   const files = formData?.getAll("photos").filter((item): item is File => item instanceof File) ?? [];
+  const draftId = formData?.get("draftId");
+  const assetId = formData?.get("assetId");
+  let draftUploadPath: string | undefined;
 
   if (files.length === 0) {
     return NextResponse.json({ success: false, message: "Ajoutez au moins une photo." }, { status: 400 });
@@ -122,6 +127,20 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  if (draftId != null || assetId != null) {
+    const input = z.object({ draftId: z.uuid(), assetId: z.uuid() }).safeParse({ draftId, assetId });
+    if (!input.success || files.length !== 1)
+      return NextResponse.json({ success: false, message: "Identifiant de la photo du brouillon invalide." }, { status: 400 });
+    const draft = await supabase.from("property_drafts").select("attachments")
+      .eq("id", input.data.draftId).eq("author_id", auth.session.user.id).maybeSingle();
+    if (draft.error)
+      return NextResponse.json({ success: false, message: "Le brouillon n’a pas pu être vérifié." }, { status: 503 });
+    const asset = draftAssetsSchema.safeParse(draft.data?.attachments).data?.find(({ id, kind }) => id === input.data.assetId && kind === "photo");
+    if (!asset || asset.mimeType !== files[0].type)
+      return NextResponse.json({ success: false, message: "Photo introuvable dans le brouillon." }, { status: 404 });
+    draftUploadPath = `properties/${input.data.draftId}/${asset.id}.${getFileExtension(files[0])}`;
+  }
+
   const bucketReady = await ensurePhotoBucket(supabase);
   if (!bucketReady) {
     return NextResponse.json(
@@ -136,10 +155,10 @@ export async function POST(request: NextRequest) {
   for (const file of files) {
     const extension = getFileExtension(file);
     const fileName = `${crypto.randomUUID()}-${sanitizeFileName(file.name)}.${extension}`;
-    const path = `properties/${datePrefix}/${fileName}`;
+    const path = draftUploadPath ?? `properties/${datePrefix}/${fileName}`;
     const { error } = await supabase.storage.from(bucketName).upload(path, file, {
       contentType: file.type,
-      upsert: false,
+      upsert: Boolean(draftUploadPath),
     });
 
     if (error) {

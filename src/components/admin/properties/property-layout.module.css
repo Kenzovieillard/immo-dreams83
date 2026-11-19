@@ -1,0 +1,74 @@
+.detailCover {
+  height: clamp(12rem, 27vw, 24rem);
+}
+
+.portfolioCover {
+  height: clamp(9rem, 16vw, 13.5rem);
+}
+
+.draftPhotoPreview {
+  aspect-ratio: 16 / 9;
+  min-height: 5rem;
+}
+
+.publicationWarning {
+  border-color: #db9b42;
+  background-color: #fff7e8;
+}
+
+.overviewColumns,
+.communeColumns {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.desktopTable {
+  display: none;
+}
+
+.communeMarker {
+  display: grid;
+  place-items: center;
+  border: 2px solid white;
+  border-radius: 50%;
+  background: #2f493a;
+  color: white;
+  font:
+    700 0.875rem system-ui,
+    sans-serif;
+  box-shadow: 0 2px 8px #17221e33;
+}
+
+.communeMarkerSelected {
+  background: #815c1a;
+}
+
+.communeMarker:focus-visible {
+  outline: 3px solid #17221e;
+  outline-offset: 2px;
+}
+
+@media (min-width: 80rem) {
+  .overviewColumns {
+    grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+  }
+
+  .communeColumns {
+    grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
+  }
+}
+
+@media (min-width: 85rem) {
+  .wizardSteps {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
+
+  .desktopTable {
+    display: block;
+    overflow-x: auto;
+    contain: inline-size;
+  }
+
+  .mobileTable {
+    display: none;
+  }
+}

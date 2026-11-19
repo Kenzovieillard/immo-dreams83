@@ -1,24 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdminSession, writeAdminAuditLog } from "@/lib/admin-auth";
+import { hasAdminPermission, requireAdminSession, writeAdminAuditLog } from "@/lib/admin-auth";
 import {
+  activeCommercialOfferStatuses,
+  assignableProfileRoles,
   contactRoleLabels,
   isContactQualificationStatus,
   isContactRole,
   isLeadPriority,
   isLeadStatus,
+  isCommercialOfferStatus,
   leadPriorityLabels,
   leadStatusLabels,
 } from "@/lib/crm";
+import {
+  filterAssignableProfiles,
+  isAssignableActiveProfile,
+  isPotentialDuplicateReminder,
+  uniquePipelineRecordsById,
+} from "@/lib/crm-pipeline-rules";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import type {
   ContactQualificationStatus,
   ContactRole,
+  CommercialOfferStatus,
   LeadPriority,
   LeadStatus,
+  PipelineTaskStatus,
   TaskEmailReminderStatus,
   TaskRecurrenceRule,
   TaskReminderChannel,
 } from "@/types/crm";
+import type { TablesInsert, TablesUpdate } from "@/types/supabase";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -49,6 +61,7 @@ type LeadRow = {
   desired_surface?: number | null;
   desired_rooms?: number | null;
   source_code?: string | null;
+  dossier_reference?: string | null;
 };
 
 type ContactRow = {
@@ -76,6 +89,9 @@ type PropertyRow = {
   id: string;
   reference: string | null;
   title: string | null;
+  status?: string | null;
+  commercial_status?: string | null;
+  publication_status?: string | null;
 };
 
 type ProfileRow = {
@@ -97,7 +113,12 @@ type TaskRow = {
   completed_at: string | null;
   completed_by?: string | null;
   priority: string | null;
+  status?: string | null;
   task_type?: string | null;
+  contact_id?: string | null;
+  property_id?: string | null;
+  offer_id?: string | null;
+  appointment_id?: string | null;
   recurrence_rule?: string | null;
   reminder_channel?: string | null;
   email_reminder_enabled?: boolean | null;
@@ -112,10 +133,48 @@ type TaskRow = {
 type PipelineObjectRow = {
   lead_id: string | null;
   status: string | null;
+  appointment_type?: string | null;
+};
+
+type OfferRow = {
+  id: string;
+  lead_id: string | null;
+  contact_id: string | null;
+  property_id: string | null;
+  assigned_to: string | null;
+  buyer_dossier_id?: string | null;
+  buyer_contact_id?: string | null;
+  responsible_user_id?: string | null;
+  amount: number | null;
+  status: string | null;
+  offered_at: string | null;
+  expires_at: string | null;
+  offer_date?: string | null;
+  valid_until?: string | null;
+  next_action?: string | null;
+  next_action_due_at?: string | null;
+  financing_type?: string | null;
+  down_payment_amount?: number | null;
+  loan_amount?: number | null;
+  suspensive_conditions?: string | null;
+  included_furniture?: string | null;
+  negotiation_comment?: string | null;
+  signed_document_id?: string | null;
+  submitted_to_seller_at?: string | null;
+  accepted_at?: string | null;
+  rejected_at?: string | null;
+  withdrawn_at?: string | null;
+  rejection_reason?: string | null;
+  withdrawal_reason?: string | null;
+  created_from_visit_id?: string | null;
+  is_test?: boolean | null;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 const inactiveAppointmentStatuses = new Set(["cancelled", "canceled", "no_show"]);
-const activeOfferStatuses = new Set(["DRAFT", "SUBMITTED", "NEGOTIATING", "ACCEPTED"]);
+const activeOfferStatuses = new Set<string>([...activeCommercialOfferStatuses, "SUBMITTED"]);
 const activeMandateStatuses = new Set(["signed", "active"]);
 
 function compactIds(values: Array<string | null | undefined>) {
@@ -170,12 +229,42 @@ function isMissingColumnError(error: { message?: string } | null) {
   return Boolean(error?.message && /column .* does not exist|Could not find .* column/i.test(error.message));
 }
 
+function safeTaskStatus(value: unknown, completedAt?: string | null): PipelineTaskStatus {
+  if (value === "IN_PROGRESS" || value === "COMPLETED" || value === "CANCELLED") return value;
+  return completedAt ? "COMPLETED" : "TODO";
+}
+
+function safeOfferStatus(value: unknown): CommercialOfferStatus {
+  if (value === "SUBMITTED") return "SENT_TO_SELLER";
+  if (value === "REFUSED") return "REJECTED";
+  return isCommercialOfferStatus(value) ? value : "DRAFT";
+}
+
 function isMissingRelationError(error: { code?: string; message?: string } | null) {
   return Boolean(
     error &&
       (error.code === "42P01" ||
         (error.message && /relation .* does not exist|Could not find the table/i.test(error.message)))
   );
+}
+
+async function loadAssignableProfile(
+  supabase: NonNullable<ReturnType<typeof getSupabaseAdminClient>>,
+  profileId: string
+) {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id,email,full_name,role,is_active")
+    .eq("id", profileId)
+    .maybeSingle();
+
+  if (error) return { profile: null, error };
+  const profile = data as ProfileRow | null;
+  if (!profile || !isAssignableActiveProfile(profile)) {
+    return { profile: null, error: null };
+  }
+
+  return { profile, error: null };
 }
 
 async function loadTasks(supabase: ReturnType<typeof getSupabaseAdminClient>) {
@@ -192,7 +281,12 @@ async function loadTasks(supabase: ReturnType<typeof getSupabaseAdminClient>) {
     "completed_at",
     "completed_by",
     "priority",
+    "status",
     "task_type",
+    "contact_id",
+    "property_id",
+    "offer_id",
+    "appointment_id",
     "recurrence_rule",
     "reminder_channel",
     "email_reminder_enabled",
@@ -225,6 +319,57 @@ async function loadTasks(supabase: ReturnType<typeof getSupabaseAdminClient>) {
   return { data: (fallbackResult.data ?? []) as unknown as TaskRow[], error: fallbackResult.error };
 }
 
+async function loadLeads(supabase: ReturnType<typeof getSupabaseAdminClient>) {
+  if (!supabase) return { data: [] as LeadRow[], error: null };
+
+  const baseColumns = [
+    "id",
+    "contact_id",
+    "estimation_id",
+    "linked_property_id",
+    "source_table",
+    "source_id",
+    "lead_type",
+    "source",
+    "priority",
+    "assigned_to",
+    "status",
+    "notes",
+    "archived",
+    "created_at",
+    "updated_at",
+    "title",
+    "request_type",
+    "project_type",
+    "property_type",
+    "city",
+    "postal_code",
+    "budget_min",
+    "budget_max",
+    "desired_surface",
+    "desired_rooms",
+    "source_code",
+  ];
+
+  const fullResult = await supabase
+    .from("leads")
+    .select([...baseColumns, "dossier_reference"].join(","))
+    .order("updated_at", { ascending: false })
+    .limit(300);
+
+  if (!fullResult.error || !isMissingColumnError(fullResult.error)) {
+    return { data: (fullResult.data ?? []) as unknown as LeadRow[], error: fullResult.error };
+  }
+
+  const fallbackResult = await supabase
+    .from("leads")
+    .select(baseColumns.join(","))
+    .order("updated_at", { ascending: false })
+    .limit(300);
+
+  return { data: (fallbackResult.data ?? []) as unknown as LeadRow[], error: fallbackResult.error };
+}
+
 export async function GET() {
   const auth = await requireAdminSession("crm.read");
   if (auth.response) return auth.response;
@@ -235,56 +380,20 @@ export async function GET() {
   }
 
   const [leadsResult, tasksResult, profilesResult, appointmentsResult, mandatesResult, offersResult] = await Promise.all([
-    supabase
-      .from("leads")
-      .select([
-        "id",
-        "contact_id",
-        "estimation_id",
-        "linked_property_id",
-        "source_table",
-        "source_id",
-        "lead_type",
-        "source",
-        "priority",
-        "assigned_to",
-        "status",
-        "notes",
-        "archived",
-        "created_at",
-        "updated_at",
-        "title",
-        "request_type",
-        "project_type",
-        "property_type",
-        "city",
-        "postal_code",
-        "budget_min",
-        "budget_max",
-        "desired_surface",
-        "desired_rooms",
-        "source_code",
-      ].join(","))
-      .order("updated_at", { ascending: false })
-      .limit(300),
+    loadLeads(supabase),
     loadTasks(supabase),
     supabase
       .from("profiles")
       .select("id,email,full_name,role,is_active")
       .eq("is_active", true)
+      .in("role", [...assignableProfileRoles])
       .order("full_name", { ascending: true }),
-    supabase
-      .from("appointments")
-      .select("lead_id,status")
-      .limit(1000),
+    loadAppointments(supabase),
     supabase
       .from("mandates")
       .select("lead_id,status")
       .limit(1000),
-    supabase
-      .from("offers")
-      .select("lead_id,status")
-      .limit(1000),
+    loadOffers(supabase),
   ]);
 
   const offersMissing = isMissingRelationError(offersResult.error);
@@ -300,22 +409,37 @@ export async function GET() {
     return NextResponse.json({ success: false, message: "Le pipeline CRM n'a pas pu etre charge." }, { status: 500 });
   }
 
-  const leads = (leadsResult.data ?? []) as unknown as LeadRow[];
-  const profiles = (profilesResult.data ?? []) as unknown as ProfileRow[];
+  const leads = uniquePipelineRecordsById((leadsResult.data ?? []) as unknown as LeadRow[]);
+  const profiles = filterAssignableProfiles((profilesResult.data ?? []) as unknown as ProfileRow[]);
   const tasks = (tasksResult.data ?? []) as unknown as TaskRow[];
   const appointments = (appointmentsResult.data ?? []) as unknown as PipelineObjectRow[];
   const mandates = (mandatesResult.data ?? []) as unknown as PipelineObjectRow[];
-  const offers = offersMissing ? [] : (offersResult.data ?? []) as unknown as PipelineObjectRow[];
+  const offers = offersMissing ? [] : (offersResult.data ?? []) as unknown as OfferRow[];
   const activeAppointments = appointments.filter(
-    (appointment) => !inactiveAppointmentStatuses.has((appointment.status ?? "").toLowerCase())
+    (appointment) =>
+      appointment.appointment_type === "VISIT" &&
+      !inactiveAppointmentStatuses.has((appointment.status ?? "").toLowerCase())
   );
-  const activeOffers = offers.filter((offer) => activeOfferStatuses.has((offer.status ?? "").toUpperCase()));
+  const activeOffers = offers.filter(
+    (offer) =>
+      !offer.is_test &&
+      !offer.notes?.includes("[RECETTE:") &&
+      activeOfferStatuses.has((offer.status ?? "").toUpperCase())
+  );
   const activeMandates = mandates.filter((mandate) => activeMandateStatuses.has((mandate.status ?? "").toLowerCase()));
   const appointmentLeadIds = new Set(compactIds(activeAppointments.map((appointment) => appointment.lead_id)));
-  const offerLeadIds = new Set(compactIds(activeOffers.map((offer) => offer.lead_id)));
+  const offerLeadIds = new Set(
+    compactIds(activeOffers.map((offer) => offer.buyer_dossier_id ?? offer.lead_id))
+  );
   const mandateLeadIds = new Set(compactIds(activeMandates.map((mandate) => mandate.lead_id)));
-  const contactIds = compactIds(leads.map((lead) => lead.contact_id));
-  const propertyIds = compactIds(leads.map((lead) => lead.linked_property_id));
+  const contactIds = compactIds([
+    ...leads.map((lead) => lead.contact_id),
+    ...offers.map((offer) => offer.buyer_contact_id ?? offer.contact_id),
+  ]);
+  const propertyIds = compactIds([
+    ...leads.map((lead) => lead.linked_property_id),
+    ...offers.map((offer) => offer.property_id),
+  ]);
 
   const [contactsResult, propertiesResult] = await Promise.all([
     contactIds.length
@@ -327,7 +451,7 @@ export async function GET() {
     propertyIds.length
       ? supabase
           .from("properties")
-          .select("id,reference,title")
+          .select("id,reference,title,status,commercial_status,publication_status")
           .in("id", propertyIds)
       : Promise.resolve({ data: [] as PropertyRow[], error: null }),
   ]);
@@ -341,15 +465,27 @@ export async function GET() {
   const contactsById = new Map(((contactsResult.data ?? []) as ContactRow[]).map((contact) => [contact.id, contact]));
   const propertiesById = new Map(((propertiesResult.data ?? []) as PropertyRow[]).map((property) => [property.id, property]));
   const profilesById = new Map(profiles.map((profile) => [profile.id, profile]));
+  const offersByLead = new Map<string, OfferRow[]>();
+  offers.forEach((offer) => {
+    const leadId = offer.buyer_dossier_id ?? offer.lead_id;
+    if (!leadId || offer.is_test || offer.notes?.includes("[RECETTE:")) return;
+    const current = offersByLead.get(leadId) ?? [];
+    current.push(offer);
+    offersByLead.set(leadId, current);
+  });
 
   const payloadLeads = leads.map((lead) => {
     const contact = lead.contact_id ? contactsById.get(lead.contact_id) : null;
     const assignedProfile = lead.assigned_to ? profilesById.get(lead.assigned_to) : null;
     const linkedProperty = lead.linked_property_id ? propertiesById.get(lead.linked_property_id) : null;
+    const leadOffers = offersByLead.get(lead.id) ?? [];
+    const latestOffer = leadOffers[0] ?? null;
     const requestType = lead.request_type ?? lead.title ?? contact?.request_type ?? lead.lead_type ?? "Demande";
 
     return {
       id: lead.id,
+      dossierReference:
+        lead.dossier_reference ?? `DOS-${lead.id.replaceAll("-", "").slice(0, 8).toUpperCase()}`,
       createdAt: lead.created_at,
       updatedAt: lead.updated_at,
       title: lead.title ?? requestType,
@@ -379,6 +515,9 @@ export async function GET() {
       hasActiveAppointment: appointmentLeadIds.has(lead.id),
       hasActiveOffer: offerLeadIds.has(lead.id),
       hasActiveMandate: mandateLeadIds.has(lead.id),
+      offerCount: leadOffers.length,
+      latestOfferId: latestOffer?.id ?? null,
+      latestOfferStatus: latestOffer ? safeOfferStatus(latestOffer.status) : null,
       notes: lead.notes ?? null,
       archived: Boolean(lead.archived),
     };
@@ -399,7 +538,12 @@ export async function GET() {
       completedAt: task.completed_at,
       completedBy: task.completed_by ?? null,
       priority: safePriority(task.priority),
+      status: safeTaskStatus(task.status, task.completed_at),
       taskType: task.task_type ?? "FOLLOW_UP",
+      contactId: task.contact_id ?? null,
+      propertyId: task.property_id ?? null,
+      offerId: task.offer_id ?? null,
+      appointmentId: task.appointment_id ?? null,
       recurrenceRule: safeRecurrenceRule(task.recurrence_rule),
       reminderChannel: safeReminderChannel(task.reminder_channel),
       emailReminderEnabled: Boolean(task.email_reminder_enabled),
@@ -412,16 +556,77 @@ export async function GET() {
     };
   });
 
+  const payloadOffers = offers
+    .filter((offer) => !offer.is_test && !offer.notes?.includes("[RECETTE:"))
+    .map((offer) => {
+      const buyerDossierId = offer.buyer_dossier_id ?? offer.lead_id ?? "";
+      const buyerContactId = offer.buyer_contact_id ?? offer.contact_id ?? "";
+      const responsibleUserId = offer.responsible_user_id ?? offer.assigned_to ?? "";
+      const buyerContact = buyerContactId ? contactsById.get(buyerContactId) : null;
+      const property = offer.property_id ? propertiesById.get(offer.property_id) : null;
+      const responsibleProfile = responsibleUserId ? profilesById.get(responsibleUserId) : null;
+
+      return {
+        id: offer.id,
+        leadId: buyerDossierId,
+        buyerDossierId,
+        buyerContactId,
+        buyerContactName: buyerContact?.name ?? "Acquéreur non renseigné",
+        propertyId: offer.property_id ?? "",
+        propertyReference: property?.reference ?? null,
+        propertyTitle: property?.title ?? "Bien non renseigné",
+        propertyCommercialStatus: property?.commercial_status ?? property?.status ?? null,
+        responsibleUserId,
+        responsibleUserName: responsibleProfile?.full_name ?? responsibleProfile?.email ?? "Non attribué",
+        amount: Number(offer.amount ?? 0),
+        status: safeOfferStatus(offer.status),
+        offerDate: offer.offer_date ?? offer.offered_at?.slice(0, 10) ?? offer.created_at.slice(0, 10),
+        validUntil: offer.valid_until ?? offer.expires_at?.slice(0, 10) ?? offer.created_at.slice(0, 10),
+        nextAction: offer.next_action ?? "Valider et transmettre l'offre",
+        nextActionDueAt: offer.next_action_due_at ?? offer.expires_at ?? offer.updated_at,
+        financingType:
+          offer.financing_type === "CASH" ||
+          offer.financing_type === "LOAN" ||
+          offer.financing_type === "MIXED"
+            ? offer.financing_type
+            : "UNKNOWN",
+        downPaymentAmount: offer.down_payment_amount == null ? null : Number(offer.down_payment_amount),
+        loanAmount: offer.loan_amount == null ? null : Number(offer.loan_amount),
+        suspensiveConditions: offer.suspensive_conditions ?? null,
+        includedFurniture: offer.included_furniture ?? null,
+        negotiationComment: offer.negotiation_comment ?? offer.notes ?? null,
+        signedDocumentId: offer.signed_document_id ?? null,
+        submittedToSellerAt: offer.submitted_to_seller_at ?? null,
+        acceptedAt: offer.accepted_at ?? null,
+        rejectedAt: offer.rejected_at ?? null,
+        withdrawnAt: offer.withdrawn_at ?? null,
+        rejectionReason: offer.rejection_reason ?? null,
+        withdrawalReason: offer.withdrawal_reason ?? null,
+        createdFromVisitId: offer.created_from_visit_id ?? null,
+        isTest: false,
+        createdAt: offer.created_at,
+        updatedAt: offer.updated_at,
+      };
+    });
+
   return NextResponse.json({
     success: true,
     leads: payloadLeads,
     tasks: payloadTasks,
+    offers: payloadOffers,
     team: profiles.map((profile) => ({
       id: profile.id,
       email: profile.email,
       fullName: profile.full_name,
       role: profile.role,
+      isActive: profile.is_active,
     })),
+    permissions: {
+      canAssignDossiers:
+        auth.session.profile.role === "ADMIN" || auth.session.profile.role === "DIRECTOR",
+      canCreateOffers: hasAdminPermission(auth.session.profile.role, "offer.write"),
+      canDecideOffers: hasAdminPermission(auth.session.profile.role, "offer.decide"),
+    },
     metrics: {
       visits: activeAppointments.length,
       offers: activeOffers.length,
@@ -435,21 +640,121 @@ export async function GET() {
   });
 }
 
+async function loadAppointments(supabase: ReturnType<typeof getSupabaseAdminClient>) {
+  if (!supabase) return { data: [] as PipelineObjectRow[], error: null };
+
+  const fullResult = await supabase
+    .from("appointments")
+    .select("lead_id,status,appointment_type")
+    .limit(1000);
+
+  if (!fullResult.error || !isMissingColumnError(fullResult.error)) {
+    return {
+      data: (fullResult.data ?? []) as unknown as PipelineObjectRow[],
+      error: fullResult.error,
+    };
+  }
+
+  const fallbackResult = await supabase
+    .from("appointments")
+    .select("lead_id,status")
+    .limit(1000);
+
+  return {
+    data: ((fallbackResult.data ?? []) as unknown as PipelineObjectRow[]).map((row) => ({
+      ...row,
+      appointment_type: "MEETING",
+    })),
+    error: fallbackResult.error,
+  };
+}
+
+async function loadOffers(supabase: ReturnType<typeof getSupabaseAdminClient>) {
+  if (!supabase) return { data: [] as OfferRow[], error: null };
+
+  const fullResult = await supabase
+    .from("offers")
+    .select([
+      "id",
+      "lead_id",
+      "contact_id",
+      "property_id",
+      "assigned_to",
+      "buyer_dossier_id",
+      "buyer_contact_id",
+      "responsible_user_id",
+      "amount",
+      "status",
+      "offered_at",
+      "expires_at",
+      "offer_date",
+      "valid_until",
+      "next_action",
+      "next_action_due_at",
+      "financing_type",
+      "down_payment_amount",
+      "loan_amount",
+      "suspensive_conditions",
+      "included_furniture",
+      "negotiation_comment",
+      "signed_document_id",
+      "submitted_to_seller_at",
+      "accepted_at",
+      "rejected_at",
+      "withdrawn_at",
+      "rejection_reason",
+      "withdrawal_reason",
+      "created_from_visit_id",
+      "is_test",
+      "notes",
+      "created_at",
+      "updated_at",
+    ].join(","))
+    .order("created_at", { ascending: false })
+    .limit(1000);
+
+  if (!fullResult.error || !isMissingColumnError(fullResult.error)) {
+    return { data: (fullResult.data ?? []) as unknown as OfferRow[], error: fullResult.error };
+  }
+
+  const fallbackResult = await supabase
+    .from("offers")
+    .select("id,lead_id,contact_id,property_id,assigned_to,amount,status,offered_at,expires_at,notes,created_at,updated_at")
+    .order("created_at", { ascending: false })
+    .limit(1000);
+
+  return { data: (fallbackResult.data ?? []) as unknown as OfferRow[], error: fallbackResult.error };
+}
+
 async function createPipelineTask(payload: JsonRecord, actorId: string) {
   const leadId = getNullableString(payload.leadId);
   const title = getString(payload.title);
   const description = getNullableString(payload.description);
   const dueAt = getNullableDate(payload.dueAt);
-  const assignedTo = getNullableString(payload.assignedTo);
+  const requestedAssignee = getNullableString(payload.assignedTo);
   const priority = safePriority(payload.priority);
   const taskType = getString(payload.taskType) || "FOLLOW_UP";
   const recurrenceRule = safeRecurrenceRule(payload.recurrenceRule);
   const reminderChannel = safeReminderChannel(payload.reminderChannel);
   const emailReminderEnabled = reminderChannel === "EMAIL" && Boolean(dueAt);
   const emailReminderStatus = emailReminderEnabled ? "PENDING" : "NOT_SCHEDULED";
+  const confirmDuplicate = payload.confirmDuplicate === true;
 
-  if (!leadId || !title) {
-    return { response: NextResponse.json({ success: false, message: "Lead et titre de rappel obligatoires." }, { status: 400 }) };
+  if (!leadId || !title || !dueAt) {
+    return {
+      response: NextResponse.json(
+        { success: false, message: "Dossier, titre et échéance du rappel sont obligatoires." },
+        { status: 400 }
+      ),
+    };
+  }
+  if (title.length > 160 || (description?.length ?? 0) > 2000) {
+    return {
+      response: NextResponse.json(
+        { success: false, message: "Le titre ou le commentaire du rappel est trop long." },
+        { status: 400 }
+      ),
+    };
   }
 
   const supabase = getSupabaseAdminClient();
@@ -457,14 +762,119 @@ async function createPipelineTask(payload: JsonRecord, actorId: string) {
     return { response: NextResponse.json({ success: false, message: "Supabase serveur n'est pas configure." }, { status: 503 }) };
   }
 
+  const { data: rawLead, error: leadError } = await supabase
+    .from("leads")
+    .select("id,contact_id,linked_property_id,assigned_to,status,archived")
+    .eq("id", leadId)
+    .maybeSingle();
+
+  if (leadError) {
+    console.error("[IMMO-DREAMS83] Reminder dossier validation failed", leadError.message);
+    return {
+      response: NextResponse.json(
+        { success: false, message: "Le dossier du rappel n'a pas pu être vérifié." },
+        { status: 500 }
+      ),
+    };
+  }
+
+  const lead = rawLead as {
+    id: string;
+    contact_id: string | null;
+    linked_property_id: string | null;
+    assigned_to: string | null;
+    status: string | null;
+    archived: boolean;
+  } | null;
+  if (!lead || lead.archived || lead.status === "LOST") {
+    return {
+      response: NextResponse.json(
+        { success: false, message: "Ce dossier n'est plus actif et ne peut pas recevoir de rappel." },
+        { status: 409 }
+      ),
+    };
+  }
+
+  const assignedTo = requestedAssignee ?? lead.assigned_to ?? actorId;
+  const assigneeResult = await loadAssignableProfile(supabase, assignedTo);
+  if (assigneeResult.error) {
+    console.error("[IMMO-DREAMS83] Reminder assignee validation failed", assigneeResult.error.message);
+    return {
+      response: NextResponse.json(
+        { success: false, message: "Le responsable du rappel n'a pas pu être vérifié." },
+        { status: 500 }
+      ),
+    };
+  }
+  if (!assigneeResult.profile) {
+    return {
+      response: NextResponse.json(
+        { success: false, message: "Choisissez un agent actif autorisé comme responsable." },
+        { status: 400 }
+      ),
+    };
+  }
+
+  if (!confirmDuplicate) {
+    const dueTimestamp = new Date(dueAt).getTime();
+    const windowStart = new Date(dueTimestamp - 30 * 60 * 1000).toISOString();
+    const windowEnd = new Date(dueTimestamp + 30 * 60 * 1000).toISOString();
+    const { data: candidates, error: duplicateError } = await supabase
+      .from("tasks")
+      .select("id,title,due_at,assigned_to")
+      .eq("lead_id", leadId)
+      .is("completed_at", null)
+      .gte("due_at", windowStart)
+      .lte("due_at", windowEnd)
+      .limit(20);
+
+    if (duplicateError) {
+      console.error("[IMMO-DREAMS83] Reminder duplicate lookup failed", duplicateError.message);
+    } else {
+      const duplicate = (candidates ?? []).find((candidate) =>
+        isPotentialDuplicateReminder(
+          {
+            leadId,
+            assignedTo: candidate.assigned_to,
+            title: candidate.title,
+            dueAt: candidate.due_at,
+          },
+          { leadId, assignedTo, title, dueAt }
+        )
+      );
+      if (duplicate) {
+        return {
+          response: NextResponse.json(
+            {
+              success: false,
+              code: "POTENTIAL_DUPLICATE",
+              message: "Un rappel très proche existe déjà pour ce dossier.",
+              duplicateTask: {
+                id: duplicate.id,
+                title: duplicate.title,
+                dueAt: duplicate.due_at,
+              },
+            },
+            { status: 409 }
+          ),
+        };
+      }
+    }
+  }
+
   const fullInsert = {
     lead_id: leadId,
+    contact_id: lead.contact_id,
+    property_id: getNullableString(payload.propertyId) ?? lead.linked_property_id,
+    offer_id: getNullableString(payload.offerId),
+    appointment_id: getNullableString(payload.appointmentId),
     assigned_to: assignedTo,
     created_by: actorId,
     title,
     description,
     due_at: dueAt,
     priority,
+    status: "TODO",
     task_type: taskType,
     recurrence_rule: recurrenceRule,
     reminder_channel: reminderChannel,
@@ -472,7 +882,7 @@ async function createPipelineTask(payload: JsonRecord, actorId: string) {
     email_reminder_status: emailReminderStatus,
     email_reminder_scheduled_at: emailReminderEnabled ? dueAt : null,
   };
-  let result = await supabase.from("tasks").insert(fullInsert).select("*").single();
+  let result = await supabase.from("tasks").insert(fullInsert as TablesInsert<"tasks">).select("*").single();
 
   if (result.error && isMissingColumnError(result.error)) {
     const fallbackInsert = {
@@ -818,7 +1228,7 @@ export async function PATCH(request: NextRequest) {
 
     const { data: currentLead, error: currentError } = await supabase
       .from("leads")
-      .select("id,status")
+      .select("id,status,assigned_to")
       .eq("id", id)
       .single();
 
@@ -827,7 +1237,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Le lead n'a pas pu etre relu." }, { status: 500 });
     }
 
-    const updates: JsonRecord = {};
+    const updates: TablesUpdate<"leads"> = {};
     if ("status" in payload) {
       if (!isLeadStatus(payload.status)) {
         return NextResponse.json({ success: false, message: "Statut invalide." }, { status: 400 });
@@ -840,7 +1250,34 @@ export async function PATCH(request: NextRequest) {
       }
       updates.priority = payload.priority;
     }
-    if ("assignedTo" in payload) updates.assigned_to = getNullableString(payload.assignedTo);
+    if ("assignedTo" in payload) {
+      const requestedAssignee = getNullableString(payload.assignedTo);
+      const canManageAssignments =
+        auth.session.profile.role === "ADMIN" || auth.session.profile.role === "DIRECTOR";
+      if (!canManageAssignments) {
+        return NextResponse.json(
+          { success: false, message: "Seule la direction peut réattribuer un dossier." },
+          { status: 403 }
+        );
+      }
+      if (requestedAssignee) {
+        const assigneeResult = await loadAssignableProfile(supabase, requestedAssignee);
+        if (assigneeResult.error) {
+          console.error("[IMMO-DREAMS83] Pipeline assignee validation failed", assigneeResult.error.message);
+          return NextResponse.json(
+            { success: false, message: "Le responsable n'a pas pu être vérifié." },
+            { status: 500 }
+          );
+        }
+        if (!assigneeResult.profile) {
+          return NextResponse.json(
+            { success: false, message: "Ce profil ne peut pas recevoir de dossier." },
+            { status: 400 }
+          );
+        }
+      }
+      updates.assigned_to = requestedAssignee;
+    }
     if ("notes" in payload) updates.notes = getNullableString(payload.notes);
     if ("archived" in payload && typeof payload.archived === "boolean") updates.archived = payload.archived;
 

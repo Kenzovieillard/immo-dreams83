@@ -1,11 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import {
   BarChart3,
   Building2,
   ClipboardCheck,
+  CalendarDays,
+  FileText,
+  Handshake,
   ContactRound,
   History,
   LayoutDashboard,
@@ -25,6 +29,7 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { commercialLinks } from "@/lib/commercial-navigation";
 
 export type CrmTab =
   | "overview"
@@ -84,12 +89,18 @@ const primaryItems: NavigationItem[] = [
 ];
 
 const secondaryItems: NavigationItem[] = [
-  { value: "pipeline", label: "Pipeline", icon: Target },
-  { value: "estimations", label: "Estimations", icon: ClipboardCheck },
   { value: "legacyReview", label: "Anciennes demandes", icon: ListChecks },
   { value: "activities", label: "Activités", icon: History },
   { value: "statistics", label: "Statistiques", icon: BarChart3 },
 ];
+
+const commercialIcons = {
+  pipeline: Target,
+  estimations: ClipboardCheck,
+  visites: CalendarDays,
+  offres: FileText,
+  negociations: Handshake,
+};
 
 function scrollToPageStart() {
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -99,11 +110,13 @@ function scrollToPageStart() {
 export function CrmMobileNavigation({
   activeTab,
   onTabChange,
+  guardCommercialNavigation,
   onLogout,
   quickAction,
 }: {
   activeTab: CrmTab;
   onTabChange: (tab: CrmTab) => void;
+  guardCommercialNavigation?: (href: string) => boolean;
   onLogout: () => void;
   quickAction?: {
     label: string;
@@ -199,6 +212,15 @@ export function CrmMobileNavigation({
                 </div>
               ) : null}
               <div className="grid grid-cols-2 gap-2 px-4">
+                {commercialLinks.map((item) => {
+                  const Icon = commercialIcons[item.key];
+                  return (
+                    <Link key={item.key} href={item.href} onClick={() => setMenuOpen(false)} onNavigate={(event) => { if (guardCommercialNavigation?.(item.href)) event.preventDefault(); }} className="flex min-h-20 flex-col items-start justify-between rounded-2xl border border-[var(--crm-riviera-border-default)] bg-[var(--crm-riviera-bg-surface)] p-3 text-left text-sm font-semibold text-[var(--crm-riviera-text-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--crm-riviera-bg-action)]">
+                      <Icon className="size-5" aria-hidden="true" />
+                      {item.label}
+                    </Link>
+                  );
+                })}
                 {secondaryItems.map((item) => {
                   const Icon = item.icon;
                   const active = activeTab === item.value;

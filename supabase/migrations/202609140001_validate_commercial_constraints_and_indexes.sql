@@ -1,0 +1,27 @@
+-- Validate existing rules; no data rewrite. Index only active CRM relationships.
+begin;
+set local lock_timeout = '3s';
+set local statement_timeout = '60s';
+alter table public.leads validate constraint leads_pipeline_type_check;
+alter table public.leads validate constraint leads_pipeline_stage_check;
+alter table public.estimations validate constraint estimations_commercial_status_check;
+alter table public.appointments validate constraint appointments_visit_status_check;
+alter table public.appointments validate constraint appointments_interest_level_check;
+alter table public.appointments validate constraint appointments_satisfaction_rating_check;
+alter table public.offers validate constraint offers_asking_price_check;
+alter table public.offer_negotiation_steps validate constraint offer_negotiation_steps_author_role_check;
+alter table public.offer_negotiation_steps validate constraint offer_negotiation_steps_status_check;
+alter table public.offer_exchanges validate constraint offer_exchanges_type_check;
+create index idx_health_appointments_lead_id on public.appointments (lead_id);
+create index idx_health_appointments_property_id on public.appointments (property_id);
+create index idx_health_appointments_contact_id on public.appointments (contact_id);
+create index idx_health_estimations_contact_id on public.estimations (contact_id);
+create index idx_health_leads_estimation_id on public.leads (estimation_id);
+create index idx_health_leads_linked_property_id on public.leads (linked_property_id);
+create index idx_health_lead_status_history_lead_id on public.lead_status_history (lead_id);
+create index idx_health_communications_contact_id on public.communications (contact_id);
+create index idx_health_offers_contact_id on public.offers (contact_id);
+create index idx_health_tasks_appointment_id on public.tasks (appointment_id);
+create index idx_health_negotiations_buyer_contact_id on public.negotiations (buyer_contact_id);
+create index idx_health_negotiations_seller_contact_id on public.negotiations (seller_contact_id);
+commit;

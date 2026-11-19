@@ -5,7 +5,7 @@ export function proxy(request: NextRequest) {
   const isLoginPage = pathname === "/admin/login";
   const hasAdminCookie = Boolean(request.cookies.get("immo_admin_access_token")?.value);
 
-  if (pathname.startsWith("/admin") && !isLoginPage && !hasAdminCookie) {
+  if ((pathname.startsWith("/admin") || pathname.startsWith("/commercial")) && !isLoginPage && !hasAdminCookie) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/admin/login";
     loginUrl.searchParams.set("redirect", pathname);
@@ -16,5 +16,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*"],
+  matcher: ["/admin/:path*", "/commercial/:path*"],
 };

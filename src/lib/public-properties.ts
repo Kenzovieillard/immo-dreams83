@@ -134,7 +134,8 @@ export async function getPublicProperties() {
       "id,reference,mandate_number,slug,title,type,transaction_type,status,commercial_status,publication_status,city,postal_code,price,fees_included,surface,land_surface,rooms,bedrooms,bathrooms,energy_class,climate_class,description_short,description_long,features,photos,featured,created_at,updated_at,published_at,archived_at"
     )
     .order("featured", { ascending: false })
-    .order("updated_at", { ascending: false });
+    .order("updated_at", { ascending: false })
+    .order("id", { ascending: true });
 
   if (error) {
     console.error("[IMMO-DREAMS83] Public properties load failed", error.message);

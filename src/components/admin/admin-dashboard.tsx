@@ -1,20 +1,19 @@
 "use client";
 
 import Image from "next/image";
-import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { commercialHrefForTab } from "@/lib/commercial-navigation";
+import { type CSSProperties, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Archive,
   ArrowDown,
   ArrowUp,
-  Building2,
   CalendarClock,
-  ChevronDown,
-  ChevronUp,
   CheckCircle2,
   ContactRound,
   Clock,
+  FileSignature,
   Info,
-  LayoutDashboard,
   ImagePlus,
   ListChecks,
   Pencil,
@@ -43,6 +42,11 @@ import {
 } from "@/components/admin/crm-mobile-navigation";
 import { CrmRivieraContacts } from "@/components/admin/crm-riviera-contacts";
 import { CrmRivieraHeader } from "@/components/admin/crm-riviera-header";
+import { CrmRivieraOnboarding } from "@/components/admin/crm-riviera-onboarding";
+import { PropertyWorkspace } from "@/components/admin/properties/property-workspace";
+import { OfferComposer } from "@/components/admin/offer-composer";
+import { PipelineDossierDrawer } from "@/components/admin/pipeline-dossier-drawer";
+import { PipelineReminderComposer } from "@/components/admin/pipeline-reminder-composer";
 import {
   CrmRivieraOverview,
   type RivieraOverviewMetrics,
@@ -86,6 +90,7 @@ import {
   contactQualificationStatusLabels,
   contactRoleLabels,
   contactRoles,
+  commercialOfferStatusLabels,
   deriveContactRole,
   hasUsableContactMethod,
   leadPriorities,
@@ -95,19 +100,17 @@ import {
   leadStatuses,
 } from "@/lib/crm";
 import {
+  getPipelineColumnId,
+  getPropertyOfferIneligibility,
+  matchesPipelineDossierSearch,
+} from "@/lib/crm-pipeline-rules";
+import {
   buildCrmDailyPriorities,
   type CrmDailyPriority,
 } from "@/lib/crm-dashboard";
 import {
-  climateUnit,
-  dpeBadgeClasses,
-  dpeLetters,
-  energyUnit,
   formatClimateDiagnostic,
   formatEnergyDiagnostic,
-  getClimateAssessment,
-  getEnergyAssessment,
-  getPropertyDpePosition,
   parseDiagnosticValue,
 } from "@/lib/dpe";
 import type {
@@ -116,13 +119,6 @@ import type {
   PlannedAction,
   SimulatedPayload,
 } from "@/lib/legacy-crm-review";
-import {
-  getPropertyInventoryMetrics,
-  getPropertyPublicationBreakdown,
-  getPropertyStatusBreakdown,
-  getPropertyTypeBreakdown,
-  propertyImportSource,
-} from "@/lib/property-management";
 import { cn } from "@/lib/utils";
 import type { AdminRole } from "@/types/admin";
 import type {
@@ -132,12 +128,17 @@ import type {
   ContactQualificationStatus,
   ContactLead,
   ContactRole,
+  CrmOnboardingProgress,
+  CrmOnboardingStepKey,
   CrmOverviewSnapshot,
+  CommercialOffer,
+  CommercialOfferStatus,
   EstimationLead,
   LeadPriority,
   LeadStatus,
   PipelineLead,
   PipelineMetrics,
+  PipelinePermissions,
   PipelineTask,
   TaskEmailReminderStatus,
   TaskRecurrenceRule,
@@ -208,8 +209,16 @@ type PipelineResponse = {
   message?: string;
   leads?: PipelineLead[];
   tasks?: PipelineTask[];
+  offers?: CommercialOffer[];
   team?: AdminTeamMember[];
   metrics?: PipelineMetrics;
+  permissions?: PipelinePermissions;
+};
+
+const emptyPipelinePermissions: PipelinePermissions = {
+  canAssignDossiers: false,
+  canCreateOffers: false,
+  canDecideOffers: false,
 };
 
 const emptyPipelineMetrics: PipelineMetrics = {
@@ -264,6 +273,12 @@ type OverviewResponse = {
   success?: boolean;
   message?: string;
   overview?: CrmOverviewSnapshot;
+};
+
+type OnboardingResponse = {
+  success?: boolean;
+  message?: string;
+  progress?: CrmOnboardingProgress | null;
 };
 
 const activityEntityTypeLabels: Record<ActivityEntityTypeFilter, string> = {
@@ -377,7 +392,7 @@ const crmRivieraStyle = {
   "--crm-riviera-bg-action": "#2f493a",
   "--crm-riviera-bg-accent": "#dce5d7",
   "--crm-riviera-text-primary": "#18211f",
-  "--crm-riviera-text-secondary": "#66716c",
+  "--crm-riviera-text-secondary": "#59645f",
   "--crm-riviera-text-action": "#2f493a",
   "--crm-riviera-border-default": "#dfddd4",
   "--crm-riviera-status-success": "#4d7a5c",
@@ -388,20 +403,28 @@ const crmRivieraStyle = {
 } as CSSProperties;
 
 type ContactFormState = {
-  fullName: string;
+  firstName: string;
+  lastName: string;
   email: string;
   phone: string;
   requestType: (typeof contactRequestTypes)[number];
   city: string;
+  estimatedBudget: string;
+  source: string;
+  assignedTo: string;
   message: string;
 };
 
 const emptyContactForm: ContactFormState = {
-  fullName: "",
+  firstName: "",
+  lastName: "",
   email: "",
   phone: "",
   requestType: "Achat",
   city: "",
+  estimatedBudget: "",
+  source: "AGENCY",
+  assignedTo: "UNASSIGNED",
   message: "",
 };
 
@@ -428,30 +451,6 @@ type PropertyFormState = {
 };
 
 type PropertyDisplayMode = "list" | "grid";
-type PropertySortMode = "site" | "quality";
-
-const emptyPropertyForm: PropertyFormState = {
-  title: "",
-  type: "house",
-  status: "available",
-  publicationStatus: "DRAFT",
-  city: "",
-  postalCode: "",
-  price: "",
-  surface: "",
-  landSurface: "",
-  rooms: "",
-  bedrooms: "",
-  bathrooms: "",
-  energyClass: "",
-  climateClass: "",
-  descriptionShort: "",
-  descriptionLong: "",
-  featuresText: "",
-  landOptions: [],
-  featured: false,
-};
-
 type UploadedPropertyPhoto = {
   url: string;
   path: string;
@@ -594,18 +593,33 @@ function exportPipelineCsv(leads: PipelineLead[], tasks: PipelineTask[]) {
     const nextTask = sortTasksByUrgency(openTasksByLead.get(lead.id) ?? [])[0];
 
     return [
+      lead.dossierReference,
       lead.contactName,
       lead.requestType,
       lead.city,
+      lead.linkedPropertyTitle ?? "",
       getPipelineLeadStageLabel(lead),
       leadPriorityLabels[lead.priority],
       lead.assignedToName ?? "Non attribué",
+      lead.offerCount,
       nextTask?.title ?? "Aucune prochaine action",
       nextTask?.dueAt ? formatDateTime(nextTask.dueAt) : "",
     ];
   });
   const csv = [
-    ["Contact", "Projet", "Ville", "Étape", "Priorité", "Responsable", "Prochaine action", "Échéance"],
+    [
+      "Référence dossier",
+      "Contact",
+      "Projet",
+      "Ville",
+      "Bien lié",
+      "Étape",
+      "Priorité",
+      "Responsable",
+      "Nombre d'offres",
+      "Prochaine action",
+      "Échéance",
+    ],
     ...rows,
   ]
     .map((row) => row.map(escapePipelineCsvValue).join(";"))
@@ -762,9 +776,14 @@ export function CrmRivieraPipeline({
   error: string;
   feedback: string;
 }) {
-  const assignedAgents = team.filter((member) => member.role === "AGENT");
-  const commercialAgents = assignedAgents.length ? assignedAgents : team;
-  const commercialAgentCount = commercialAgents.length;
+  const commercialAgentCount = team.length;
+  const mobileTaskRows = dailyTasks.slice(0, 2);
+  const mobileUnassignedLeads = activeLeads
+    .filter((lead) => lead.status === "NEW" && !lead.assignedTo)
+    .slice(0, Math.max(0, 2 - mobileTaskRows.length));
+  const mobileActionCount = dailyTasks.length + activeLeads.filter(
+    (lead) => lead.status === "NEW" && !lead.assignedTo
+  ).length;
 
   return (
     <div className="grid min-w-0 gap-4 sm:gap-5">
@@ -774,7 +793,7 @@ export function CrmRivieraPipeline({
             Pipeline commercial
           </h2>
           <p className="mt-1 text-sm text-[var(--crm-riviera-text-secondary)]">
-            Prospects, etapes, rappels et assignations
+            Prospects, étapes, rappels et assignations
           </p>
         </div>
         <Button
@@ -782,8 +801,8 @@ export function CrmRivieraPipeline({
           variant="secondary"
           className={rivieraSecondaryButtonClass}
           onClick={onExport}
-          aria-label="Exporter le pipeline du jour"
-          title="Exporter le pipeline du jour"
+          aria-label="Exporter les dossiers affichés au format CSV"
+          title="Exporter les dossiers affichés au format CSV"
         >
           <ArrowDown className="size-4" />
           Exporter
@@ -796,7 +815,7 @@ export function CrmRivieraPipeline({
       <div className="grid gap-3 md:hidden">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-xl font-bold text-[var(--crm-riviera-text-primary)]">À traiter aujourd&apos;hui</h2>
-          <RivieraStatusBadge>{dailyTasks.length} action{dailyTasks.length > 1 ? "s" : ""}</RivieraStatusBadge>
+          <RivieraStatusBadge>{mobileActionCount} action{mobileActionCount > 1 ? "s" : ""}</RivieraStatusBadge>
         </div>
 
         <div className="grid grid-cols-3 gap-2">
@@ -806,7 +825,10 @@ export function CrmRivieraPipeline({
         </div>
 
         <Select value={assignee} onValueChange={(value) => onAssigneeChange(String(value))}>
-          <SelectTrigger className="min-h-11 rounded-2xl border-[var(--crm-riviera-border-default)] bg-[var(--crm-riviera-bg-surface)]">
+          <SelectTrigger
+            aria-label="Filtrer les dossiers par responsable"
+            className="min-h-11 rounded-2xl border-[var(--crm-riviera-border-default)] bg-[var(--crm-riviera-bg-surface)]"
+          >
             <SelectValue>
               {(value) =>
                 value === "ALL"
@@ -818,7 +840,7 @@ export function CrmRivieraPipeline({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">Toute l&apos;équipe</SelectItem>
-            {commercialAgents.map((member) => (
+            {team.map((member) => (
               <SelectItem key={member.id} value={member.id}>
                 {getTeamMemberLabel(member)}
               </SelectItem>
@@ -827,8 +849,9 @@ export function CrmRivieraPipeline({
           </SelectContent>
         </Select>
 
-        {dailyTasks.length ? (
-          dailyTasks.slice(0, 2).map(({ task, lead }) => (
+        {mobileActionCount ? (
+          <>
+          {mobileTaskRows.map(({ task, lead }) => (
             <article
               key={task.id}
               className="grid gap-3 rounded-2xl border border-[var(--crm-riviera-border-default)] bg-[var(--crm-riviera-bg-surface)] p-4 shadow-[var(--crm-riviera-shadow-card)]"
@@ -865,7 +888,34 @@ export function CrmRivieraPipeline({
                 </button>
               ) : null}
             </article>
-          ))
+          ))}
+          {mobileUnassignedLeads.map((lead) => (
+            <article
+              key={lead.id}
+              className="grid gap-3 rounded-2xl border border-[var(--crm-riviera-border-default)] bg-[var(--crm-riviera-bg-surface)] p-4 shadow-[var(--crm-riviera-shadow-card)]"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <RivieraStatusBadge tone="warning">À attribuer</RivieraStatusBadge>
+                <span className="font-mono text-[10px] text-[var(--crm-riviera-text-secondary)]">
+                  {lead.dossierReference}
+                </span>
+              </div>
+              <div>
+                <p className="font-semibold text-[var(--crm-riviera-text-primary)]">{lead.contactName}</p>
+                <p className="mt-1 text-sm text-[var(--crm-riviera-text-secondary)]">
+                  {lead.requestType} · {lead.city ?? "Ville non renseignée"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => onOpenLead(lead)}
+                className="ml-auto min-h-9 text-sm font-semibold text-[var(--crm-riviera-text-action)]"
+              >
+                Ouvrir le dossier →
+              </button>
+            </article>
+          ))}
+          </>
         ) : (
           <div className="rounded-2xl bg-[var(--crm-riviera-bg-accent)] px-5 py-6 text-center">
             <p className="font-semibold text-[var(--crm-riviera-text-primary)]">Aucune action urgente</p>
@@ -939,7 +989,7 @@ export function CrmRivieraPipeline({
                 </div>
               ))}
               <button type="button" onClick={onRefresh} className="w-fit min-h-9 text-sm font-semibold text-[var(--crm-riviera-text-action)]">
-                Ouvrir les {dailyTasks.length} taches →
+                Ouvrir les {dailyTasks.length} tâches →
               </button>
             </div>
           ) : (
@@ -955,7 +1005,10 @@ export function CrmRivieraPipeline({
                 {commercialAgentCount} agent{commercialAgentCount > 1 ? "s" : ""}
               </RivieraStatusBadge>
               <Select value={assignee} onValueChange={(value) => onAssigneeChange(String(value))}>
-                <SelectTrigger className="h-9 min-w-40 rounded-full border-0 bg-[var(--crm-riviera-bg-accent)] px-3 text-xs font-semibold">
+                <SelectTrigger
+                  aria-label="Filtrer les dossiers par responsable"
+                  className="h-9 min-w-40 rounded-full border-0 bg-[var(--crm-riviera-bg-accent)] px-3 text-xs font-semibold"
+                >
                   <SelectValue>
                     {(value) =>
                       value === "ALL"
@@ -967,7 +1020,7 @@ export function CrmRivieraPipeline({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">Vue équipe</SelectItem>
-                  {commercialAgents.map((member) => (
+                  {team.map((member) => (
                     <SelectItem key={member.id} value={member.id}>
                       {getTeamMemberLabel(member)}
                     </SelectItem>
@@ -986,7 +1039,8 @@ export function CrmRivieraPipeline({
                     <h4 className="text-sm font-semibold text-[var(--crm-riviera-text-primary)]">{column.title}</h4>
                     <RivieraStatusBadge>{column.count}</RivieraStatusBadge>
                   </div>
-                  {column.leads.slice(0, 2).map(({ lead, nextTask }) => (
+                  <div className="grid max-h-[36rem] gap-3 overflow-y-auto pr-1">
+                  {column.leads.map(({ lead, nextTask }) => (
                     <article key={lead.id} className="grid gap-2 rounded-2xl bg-[var(--crm-riviera-bg-surface)] p-3 shadow-[var(--crm-riviera-shadow-card)]">
                       <div className="flex items-center justify-between gap-2">
                         <RivieraStatusBadge
@@ -1009,9 +1063,12 @@ export function CrmRivieraPipeline({
                         </span>
                       </div>
                       <div>
+                        <p className="font-mono text-[10px] text-[var(--crm-riviera-text-secondary)]">
+                          {lead.dossierReference}
+                        </p>
                         <p className="font-semibold text-[var(--crm-riviera-text-primary)]">{lead.contactName}</p>
                         <p className="mt-1 line-clamp-2 text-xs text-[var(--crm-riviera-text-secondary)]">
-                          {lead.requestType} · {lead.city ?? "Ville non renseignee"}
+                          {lead.requestType} · {lead.city ?? "Ville non renseignée"}
                         </p>
                         <p className="mt-2 line-clamp-2 text-xs font-medium text-[var(--crm-riviera-text-primary)]">
                           {nextTask?.title ?? "Aucune prochaine action planifiée"}
@@ -1019,6 +1076,11 @@ export function CrmRivieraPipeline({
                         {lead.linkedPropertyTitle ? (
                           <p className="mt-1 line-clamp-1 text-xs text-[var(--crm-riviera-text-secondary)]">
                             Bien : {lead.linkedPropertyTitle}
+                          </p>
+                        ) : null}
+                        {lead.latestOfferStatus ? (
+                          <p className="mt-1 text-xs font-semibold text-[var(--crm-riviera-text-action)]">
+                            {lead.offerCount} offre{lead.offerCount > 1 ? "s" : ""} · {commercialOfferStatusLabels[lead.latestOfferStatus]}
                           </p>
                         ) : null}
                         <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-[var(--crm-riviera-text-action)]">
@@ -1035,12 +1097,14 @@ export function CrmRivieraPipeline({
                       </button>
                     </article>
                   ))}
+                  </div>
                   <button
                     type="button"
                     onClick={() => onStartReminder(column.leads[0]?.lead.id)}
                     className="hidden min-h-8 w-fit text-xs font-semibold text-[var(--crm-riviera-text-action)] md:inline-flex md:items-center"
                   >
-                    + Créer un rappel
+                    <Plus className="size-4" aria-hidden="true" />
+                    Créer un rappel
                   </button>
                 </section>
               ))}
@@ -1048,7 +1112,7 @@ export function CrmRivieraPipeline({
           ) : (
             <div className="rounded-2xl bg-[var(--crm-riviera-bg-accent)] px-5 py-8 text-center">
               <p className="font-semibold text-[var(--crm-riviera-text-primary)]">Aucun dossier actif</p>
-              <p className="mt-2 text-sm text-[var(--crm-riviera-text-secondary)]">Les prochains prospects apparaitront ici.</p>
+              <p className="mt-2 text-sm text-[var(--crm-riviera-text-secondary)]">Les prochains prospects apparaîtront ici.</p>
             </div>
           )}
         </RivieraPanel>
@@ -1075,44 +1139,16 @@ function getPropertyFeatureList(form: PropertyFormState) {
   ]);
 }
 
-function getPropertyFeaturesText(form: PropertyFormState) {
-  return getPropertyFeatureList(form).join("\n");
-}
-
 function getCommercialStatusFromLegacy(status: PropertyStatus) {
   if (status === "under_offer") return "UNDER_OFFER" as const;
   if (status === "sold") return "SOLD" as const;
   return "AVAILABLE" as const;
 }
 
-function upsertProperties(currentItems: Property[], incomingItems: Property[]) {
-  const seen = new Set<string>();
-  return [...incomingItems, ...currentItems].filter((property) => {
-    const key = property.reference || property.id;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-function getNextLocalReference(properties: Property[]) {
-  const maxReference = properties.reduce((max, property) => {
-    if (!/^\d+$/.test(property.reference)) return max;
-    return Math.max(max, Number(property.reference));
-  }, 0);
-
-  return String(maxReference + 1).padStart(3, "0");
-}
-
 function toNumberOrNull(value: string) {
   if (!value.trim()) return null;
   const parsed = Number(value.replace(",", ".").replace(/\s/g, ""));
   return Number.isFinite(parsed) ? parsed : null;
-}
-
-function formatFileSize(size: number) {
-  if (size < 1024 * 1024) return `${Math.round(size / 1024)} Ko`;
-  return `${(size / 1024 / 1024).toFixed(1)} Mo`;
 }
 
 function getNumericDiagnosticInput(value: string) {
@@ -1147,18 +1183,6 @@ function propertyToForm(property: Property): PropertyFormState {
   };
 }
 
-function buildPropertyPayload(property: Property, form: PropertyFormState, photoUrls = property.photos) {
-  return {
-    reference: property.reference,
-    mandateNumber: property.mandateNumber,
-    slug: property.slug,
-    sourceUrl: property.sourceUrl,
-    ...form,
-    featuresText: getPropertyFeaturesText(form),
-    photoUrls,
-  };
-}
-
 function buildUpdatedProperty(property: Property, form: PropertyFormState, photoUrls = property.photos): Property {
   const now = new Date().toISOString();
   const isLand = form.type === "land";
@@ -1187,7 +1211,6 @@ function buildUpdatedProperty(property: Property, form: PropertyFormState, photo
     featured: form.featured,
     publishedAt: form.publicationStatus === "PUBLISHED" ? property.publishedAt ?? now : property.publishedAt ?? null,
     archivedAt: form.publicationStatus === "ARCHIVED" ? property.archivedAt ?? now : null,
-    updatedAt: now,
   };
 }
 
@@ -1250,30 +1273,6 @@ function getPropertyQualityIssues(property: Property) {
   if (property.featured && !isPublic) issues.push("A la une non publiee");
 
   return issues;
-}
-
-function getPropertySortTimestamp(property: Property) {
-  const value = property.publishedAt ?? property.createdAt ?? property.updatedAt;
-  const date = value ? new Date(value) : null;
-  return date && !Number.isNaN(date.getTime()) ? date.getTime() : 0;
-}
-
-function comparePropertiesForSiteDisplay(a: Property, b: Property) {
-  const aVisible = a.publicationStatus === "PUBLISHED" && a.status !== "sold";
-  const bVisible = b.publicationStatus === "PUBLISHED" && b.status !== "sold";
-  if (aVisible !== bVisible) return aVisible ? -1 : 1;
-  if (a.featured !== b.featured) return a.featured ? -1 : 1;
-
-  const dateDiff = getPropertySortTimestamp(b) - getPropertySortTimestamp(a);
-  if (dateDiff !== 0) return dateDiff;
-
-  return a.reference.localeCompare(b.reference, "fr", { numeric: true });
-}
-
-function comparePropertiesForQualityCleanup(a: Property, b: Property) {
-  const issueDiff = getPropertyQualityIssues(b).length - getPropertyQualityIssues(a).length;
-  if (issueDiff !== 0) return issueDiff;
-  return comparePropertiesForSiteDisplay(a, b);
 }
 
 function getCityStats(properties: Property[], leads: AdminLead[]) {
@@ -1556,14 +1555,22 @@ function BentoDesignDashboard({
   pipelineTasks,
   onPriorityAction,
   onCreateContact,
+  onboardingProgress,
+  onboardingSavingStep,
+  onboardingError,
+  onToggleOnboardingStep,
 }: {
   metrics: AdminMetrics;
   overview?: CrmOverviewSnapshot | null;
-  setActiveTab: React.Dispatch<React.SetStateAction<AdminTab>>;
+  setActiveTab: (tab: AdminTab) => void;
   priorities?: CrmDailyPriority[];
   pipelineTasks?: PipelineTask[];
   onPriorityAction?: (priority: CrmDailyPriority) => void;
   onCreateContact?: () => void;
+  onboardingProgress?: CrmOnboardingProgress | null;
+  onboardingSavingStep?: CrmOnboardingStepKey | null;
+  onboardingError?: string;
+  onToggleOnboardingStep?: (step: CrmOnboardingStepKey, completed: boolean) => void;
 }) {
   if (priorities && pipelineTasks && onPriorityAction && onCreateContact) {
     const overviewMetrics: RivieraOverviewMetrics = {
@@ -1577,6 +1584,33 @@ function BentoDesignDashboard({
       openTasks: overview?.metrics.openTasks ?? pipelineTasks.filter((task) => !task.completedAt).length,
       todayTasks: overview?.metrics.todayTasks ?? pipelineTasks.filter((task) => isTaskDueToday(task)).length,
     };
+    const isEmptyWorkspace =
+      overviewMetrics.totalLeads === 0 &&
+      overviewMetrics.availableProperties === 0 &&
+      overviewMetrics.visits === 0 &&
+      overviewMetrics.offers === 0 &&
+      overviewMetrics.openTasks === 0;
+
+    if (!onboardingProgress?.completedAt && (isEmptyWorkspace || Boolean(onboardingProgress))) {
+      return (
+        <CrmRivieraOnboarding
+          profileCompleted={onboardingProgress?.profileCompleted ?? false}
+          contactsCompleted={onboardingProgress?.contactsCompleted ?? false}
+          pipelineCompleted={onboardingProgress?.pipelineCompleted ?? false}
+          appointmentCompleted={onboardingProgress?.appointmentCompleted ?? false}
+          savingStep={onboardingSavingStep}
+          saveError={onboardingError}
+          onToggleStep={onToggleOnboardingStep}
+          onOpenProfile={() => setActiveTab("statistics")}
+          onOpenContacts={() => {
+            onCreateContact();
+            setActiveTab("contacts");
+          }}
+          onOpenPipeline={() => setActiveTab("pipeline")}
+          onPlanAppointment={() => setActiveTab("pipeline")}
+        />
+      );
+    }
 
     return (
       <CrmRivieraOverview
@@ -1587,6 +1621,7 @@ function BentoDesignDashboard({
         onOpenPipeline={() => setActiveTab("pipeline")}
         onOpenContacts={() => setActiveTab("contacts")}
         onOpenProperties={() => setActiveTab("properties")}
+        onOpenEstimations={() => setActiveTab("estimations")}
         onCreateContact={onCreateContact}
         overview={overview}
       />
@@ -1991,6 +2026,11 @@ type Props = {
   connected: boolean;
   userName: string;
   userRole: AdminRole;
+  initialTab?: AdminTab;
+  initialContactId?: string | null;
+  initialPropertyId?: string | null;
+  canWriteProperties?: boolean;
+  initialSearch?: string;
 };
 
 function normalizeContacts(items: ContactLead[]): AdminLead[] {
@@ -2017,6 +2057,22 @@ function normalizeContacts(items: ContactLead[]): AdminLead[] {
       (!lead.archived && lead.status !== "LOST" && hasUsableContactMethod(lead.email, lead.phone)),
     qualifiedAt: lead.qualified_at ?? null,
     pipelineLeadId: lead.pipeline_lead_id ?? null,
+    assignedTo: lead.assigned_to ?? null,
+    address: lead.address ?? "",
+    postalCode: lead.postal_code ?? "",
+    contactPreference: lead.contact_preference ?? "",
+    personalSituation: lead.personal_situation ?? "",
+    profession: lead.profession ?? "",
+    currentResidence: lead.current_residence ?? "",
+    interestScore: lead.interest_score ?? null,
+    estimatedBudget: lead.estimated_budget ?? null,
+    priority: lead.priority ?? "normal",
+    contactSource: lead.contact_source ?? "LEGACY_IMPORT",
+    lastContactedAt: lead.last_contacted_at ?? null,
+    normalizedEmail: lead.normalized_email ?? null,
+    normalizedPhone: lead.normalized_phone ?? null,
+    canonicalContactId: lead.canonical_contact_id ?? null,
+    dedupeStatus: lead.dedupe_status ?? "UNREVIEWED",
   }));
 }
 
@@ -2040,6 +2096,22 @@ function normalizeEstimations(items: EstimationLead[]): AdminLead[] {
     activeProspect: false,
     qualifiedAt: null,
     pipelineLeadId: null,
+    assignedTo: null,
+    address: "",
+    postalCode: lead.postal_code ?? "",
+    contactPreference: "",
+    personalSituation: "",
+    profession: "",
+    currentResidence: "",
+    interestScore: null,
+    estimatedBudget: null,
+    priority: "normal",
+    contactSource: "ESTIMATION_FORM",
+    lastContactedAt: null,
+    normalizedEmail: null,
+    normalizedPhone: null,
+    canonicalContactId: null,
+    dedupeStatus: "UNREVIEWED",
   }));
 }
 
@@ -2048,11 +2120,15 @@ function CreateContactCard({
   connected,
   open,
   onOpenChange,
+  onCreated,
+  team,
 }: {
   setLeads: React.Dispatch<React.SetStateAction<AdminLead[]>>;
   connected: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCreated: (id: string) => void;
+  team: AdminTeamMember[];
 }) {
   const [form, setForm] = useState<ContactFormState>(emptyContactForm);
   const [submitting, setSubmitting] = useState(false);
@@ -2074,7 +2150,7 @@ function CreateContactCard({
         id,
         kind: "contacts",
         createdAt: now,
-        name: form.fullName.trim(),
+        name: `${form.firstName.trim()} ${form.lastName.trim()}`.trim(),
         email: form.email.trim(),
         phone: form.phone.trim() || "Non renseigné",
         category: form.requestType,
@@ -2089,6 +2165,22 @@ function CreateContactCard({
         activeProspect: hasUsableContactMethod(form.email, form.phone),
         qualifiedAt: null,
         pipelineLeadId: null,
+        assignedTo: form.assignedTo === "UNASSIGNED" ? null : form.assignedTo,
+        address: "",
+        postalCode: "",
+        contactPreference: "",
+        personalSituation: "",
+        profession: "",
+        currentResidence: "",
+        interestScore: null,
+        estimatedBudget: form.estimatedBudget ? Number(form.estimatedBudget) : null,
+        priority: "normal",
+        contactSource: form.source,
+        lastContactedAt: null,
+        normalizedEmail: form.email.trim().toLowerCase() || null,
+        normalizedPhone: form.phone.replace(/\D/g, "") || null,
+        canonicalContactId: null,
+        dedupeStatus: "UNREVIEWED",
       },
       ...current,
     ]);
@@ -2098,10 +2190,10 @@ function CreateContactCard({
     event.preventDefault();
     setFeedback(null);
 
-    if (!form.fullName.trim() || !form.email.trim() || !form.message.trim()) {
+    if (!form.lastName.trim() || !form.phone.trim() || !form.message.trim()) {
       setFeedback({
         type: "error",
-        message: "Nom, email et message sont nécessaires pour créer un contact.",
+        message: "Nom, téléphone et description du projet sont nécessaires pour créer un contact.",
       });
       return;
     }
@@ -2138,25 +2230,24 @@ function CreateContactCard({
     setLeads((current) => [normalizeContacts([payload.contact!])[0], ...current]);
     setForm(emptyContactForm);
     setFeedback({ type: "success", message: payload.message ?? "Contact créé." });
+    onOpenChange(false);
+    onCreated(payload.contact.id);
   }
 
   return (
     <BentoCard
       id="crm-create-contact"
       span="full"
-      title="Créer un contact"
-      description="Ajoutez manuellement un prospect reçu par téléphone, email ou passage agence."
+      title="Nouveau contact"
+      description="Ajoutez les coordonnées et le projet immobilier du contact."
       action={
         <Button
           type="button"
           variant="outline"
           className="h-11 rounded-xl border-[var(--crm-riviera-border-default)] bg-[var(--crm-riviera-bg-surface)]"
-          onClick={() => onOpenChange(!open)}
-          aria-expanded={open}
-          aria-controls="crm-create-contact-form"
+          onClick={() => onOpenChange(false)}
         >
-          {open ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-          {open ? "Replier" : "Créer"}
+          <X className="size-4" /> Annuler
         </Button>
       }
     >
@@ -2172,17 +2263,18 @@ function CreateContactCard({
         </p>
       ) : null}
       {open ? (
-        <form id="crm-create-contact-form" onSubmit={(event) => void submitContact(event)} className="grid gap-5">
-          <div className="grid gap-5 sm:grid-cols-2">
-            <div className="grid gap-2">
-              <Label htmlFor="contact-full-name">Nom complet</Label>
-              <Input
-                id="contact-full-name"
-                value={form.fullName}
-                onChange={(event) => updateField("fullName", event.target.value)}
-                placeholder="Nom du prospect"
-              />
-            </div>
+        <form id="crm-create-contact-form" onSubmit={(event) => void submitContact(event)} className="grid gap-6">
+          <section className="grid gap-5 rounded-2xl border border-[var(--crm-riviera-border-default)] bg-[var(--crm-riviera-bg-surface)] p-4 sm:p-6">
+            <div><h3 className="text-lg font-semibold text-[var(--crm-riviera-text-primary)]">Coordonnées</h3><p className="mt-1 text-sm text-[var(--crm-riviera-text-secondary)]">Informations nécessaires pour joindre le contact.</p></div>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor="contact-first-name">Prénom</Label>
+                <Input id="contact-first-name" value={form.firstName} onChange={(event) => updateField("firstName", event.target.value)} placeholder="Camille" className="h-11 rounded-xl" />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="contact-last-name">Nom *</Label>
+                <Input id="contact-last-name" value={form.lastName} onChange={(event) => updateField("lastName", event.target.value)} placeholder="Martin" required className="h-11 rounded-xl" />
+              </div>
             <div className="grid gap-2">
               <Label htmlFor="contact-email">Email</Label>
               <Input
@@ -2191,6 +2283,7 @@ function CreateContactCard({
                 value={form.email}
                 onChange={(event) => updateField("email", event.target.value)}
                 placeholder="prospect@email.fr"
+                className="h-11 rounded-xl"
               />
             </div>
             <div className="grid gap-2">
@@ -2200,8 +2293,14 @@ function CreateContactCard({
                 value={form.phone}
                 onChange={(event) => updateField("phone", event.target.value)}
                 placeholder="06 00 00 00 00"
+                className="h-11 rounded-xl"
               />
             </div>
+            </div>
+          </section>
+          <section className="grid gap-5 rounded-2xl border border-[var(--crm-riviera-border-default)] bg-[var(--crm-riviera-bg-surface)] p-4 sm:p-6">
+            <div><h3 className="text-lg font-semibold text-[var(--crm-riviera-text-primary)]">Projet immobilier</h3><p className="mt-1 text-sm text-[var(--crm-riviera-text-secondary)]">Demande initiale, secteur et informations utiles.</p></div>
+            <div className="grid gap-5 sm:grid-cols-2">
             <div className="grid gap-2">
               <Label>Type de demande</Label>
               <Select
@@ -2210,7 +2309,7 @@ function CreateContactCard({
                   updateField("requestType", value as ContactFormState["requestType"])
                 }
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="h-11 w-full rounded-xl">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -2222,33 +2321,70 @@ function CreateContactCard({
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid gap-2 sm:col-span-2">
+            <div className="grid gap-2">
               <Label htmlFor="contact-city">Ville concernée</Label>
               <Input
                 id="contact-city"
                 value={form.city}
                 onChange={(event) => updateField("city", event.target.value)}
                 placeholder="Solliès-Pont, Toulon, Hyères..."
+                className="h-11 rounded-xl"
               />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="contact-budget">Budget estimé</Label>
+              <Input
+                id="contact-budget"
+                type="number"
+                min="0"
+                step="1000"
+                value={form.estimatedBudget}
+                onChange={(event) => updateField("estimatedBudget", event.target.value)}
+                placeholder="450000"
+                className="h-11 rounded-xl"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Source</Label>
+              <Select value={form.source} onValueChange={(value) => value && updateField("source", value)}>
+                <SelectTrigger className="h-11 w-full rounded-xl" aria-label="Source du contact"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="AGENCY">Agence</SelectItem>
+                  <SelectItem value="WEBSITE">Site web</SelectItem>
+                  <SelectItem value="REFERRAL">Recommandation</SelectItem>
+                  <SelectItem value="PORTAL">Portail immobilier</SelectItem>
+                  <SelectItem value="SOCIAL">Réseaux sociaux</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2 sm:col-span-2">
+              <Label>Vendeur responsable</Label>
+              <Select value={form.assignedTo} onValueChange={(value) => value && updateField("assignedTo", value)}>
+                <SelectTrigger className="h-11 w-full rounded-xl" aria-label="Vendeur responsable"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="UNASSIGNED">Non attribué</SelectItem>
+                  {team.filter((member) => member.isActive).map((member) => (
+                    <SelectItem key={member.id} value={member.id}>{member.fullName ?? member.email}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="contact-message">Message</Label>
+            <Label htmlFor="contact-message">Description du projet</Label>
             <Textarea
               id="contact-message"
               value={form.message}
               onChange={(event) => updateField("message", event.target.value)}
               placeholder="Besoin exprimé, budget, délai, informations utiles..."
+              className="min-h-32 rounded-xl"
             />
           </div>
-          <Button
-            type="submit"
-            disabled={submitting}
-            className="h-12 w-full rounded-2xl bg-[var(--crm-riviera-bg-action)] text-white hover:bg-[var(--crm-riviera-bg-header)] sm:h-11 sm:w-fit"
-          >
-            <ContactRound className="size-4" />
-            {submitting ? "Création..." : "Créer le contact"}
-          </Button>
+          </section>
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <Button type="button" variant="outline" className="h-11 rounded-xl border-[var(--crm-riviera-border-default)]" onClick={() => onOpenChange(false)}>Annuler</Button>
+            <Button type="submit" disabled={submitting} className="h-11 rounded-xl bg-[var(--crm-riviera-bg-action)] px-5 text-white hover:bg-[var(--crm-riviera-bg-header)]"><ContactRound className="size-4" />{submitting ? "Enregistrement…" : "Enregistrer le contact"}</Button>
+          </div>
         </form>
       ) : (
         <div className="rounded-xl border border-[var(--crm-riviera-border-default)] bg-[var(--crm-riviera-bg-accent)] p-4 text-sm leading-6 text-[var(--crm-riviera-text-secondary)]">
@@ -2259,624 +2395,24 @@ function CreateContactCard({
   );
 }
 
-function CreatePropertyCard({
-  properties,
-  setProperties,
-  connected,
-  open,
-  onOpenChange,
-}: {
-  properties: Property[];
-  setProperties: React.Dispatch<React.SetStateAction<Property[]>>;
-  connected: boolean;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const [form, setForm] = useState<PropertyFormState>(emptyPropertyForm);
-  const [selectedPhotos, setSelectedPhotos] = useState<File[]>([]);
-  const [uploadedPhotos, setUploadedPhotos] = useState<UploadedPropertyPhoto[]>([]);
-  const [photoInputKey, setPhotoInputKey] = useState(0);
-  const [submitting, setSubmitting] = useState(false);
-  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
-  const nextReference = getNextLocalReference(properties);
-  const isLand = form.type === "land";
-  const energyAssessment = isLand ? null : getEnergyAssessment(form.energyClass);
-  const climateAssessment = isLand ? null : getClimateAssessment(form.climateClass);
-  const dpePosition = isLand ? null : getPropertyDpePosition(form.energyClass, form.climateClass);
-
-  function updateField(field: keyof PropertyFormState, value: string | boolean) {
-    setForm((current) => ({ ...current, [field]: value }));
-  }
-
-  function updatePropertyType(value: PropertyType) {
-    setForm((current) => ({
-      ...current,
-      type: value,
-      ...(value === "land"
-        ? {
-            landSurface: "",
-            rooms: "",
-            bedrooms: "",
-            bathrooms: "",
-            energyClass: "",
-            climateClass: "",
-          }
-        : {
-            landOptions: [],
-          }),
-    }));
-  }
-
-  function toggleLandOption(option: string) {
-    setForm((current) => ({
-      ...current,
-      landOptions: current.landOptions.includes(option)
-        ? current.landOptions.filter((item) => item !== option)
-        : [...current.landOptions, option],
-    }));
-  }
-
-  function hasRequiredFields() {
-    return Boolean(
-      form.title.trim() &&
-        form.city.trim() &&
-        form.postalCode.trim() &&
-        form.price.trim() &&
-        form.surface.trim() &&
-        form.descriptionShort.trim()
-    );
-  }
-
-  function updateSelectedPhotos(files: FileList | null) {
-    setSelectedPhotos(Array.from(files ?? []));
-    setUploadedPhotos([]);
-  }
-
-  async function uploadSelectedPhotos() {
-    if (selectedPhotos.length === 0) return uploadedPhotos;
-
-    if (!connected) {
-      setFeedback({
-        type: "error",
-        message: "Le stockage Supabase doit être connecté pour ajouter des photos depuis l'ordinateur.",
-      });
-      return null;
-    }
-
-    setFeedback({ type: "success", message: "Envoi des photos en cours..." });
-    const uploadBody = new FormData();
-    selectedPhotos.forEach((file) => uploadBody.append("photos", file));
-
-    const response = await fetch("/api/admin/property-photos", {
-      method: "POST",
-      body: uploadBody,
-    }).catch(() => null);
-    const payload = response
-      ? ((await response.json().catch(() => null)) as {
-          message?: string;
-          photos?: UploadedPropertyPhoto[];
-        } | null)
-      : null;
-
-    if (!response?.ok || !payload?.photos) {
-      setFeedback({
-        type: "error",
-        message: payload?.message ?? "Les photos n'ont pas pu être envoyées.",
-      });
-      return null;
-    }
-
-    setUploadedPhotos(payload.photos);
-    setSelectedPhotos([]);
-    setPhotoInputKey((current) => current + 1);
-    return payload.photos;
-  }
-
-  async function submitProperty(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setFeedback(null);
-
-    if (!hasRequiredFields()) {
-      setFeedback({
-        type: "error",
-        message: "Titre, ville, code postal, prix, surface et description courte sont obligatoires.",
-      });
-      return;
-    }
-
-    if (!connected) {
-      setFeedback({
-        type: "error",
-        message: "Supabase doit etre connecte pour creer un bien dans le catalogue officiel.",
-      });
-      return;
-    }
-
-    setSubmitting(true);
-    const photos = await uploadSelectedPhotos();
-    if (!photos) {
-      setSubmitting(false);
-      return;
-    }
-    const photoUrls = photos.map((photo) => photo.url);
-
-    const response = await fetch("/api/admin/properties", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, featuresText: getPropertyFeaturesText(form), photoUrls }),
-    }).catch(() => null);
-    const payload = response
-      ? ((await response.json().catch(() => null)) as {
-          message?: string;
-          property?: Property;
-        } | null)
-      : null;
-    setSubmitting(false);
-
-    if (!response?.ok || !payload?.property) {
-      setFeedback({
-        type: "error",
-        message: payload?.message ?? "Le bien n'a pas pu être créé.",
-      });
-      return;
-    }
-
-    setProperties((current) => upsertProperties(current, [payload.property!]));
-    setForm(emptyPropertyForm);
-    setUploadedPhotos([]);
-    setPhotoInputKey((current) => current + 1);
-    setFeedback({ type: "success", message: payload.message ?? "Bien créé." });
-  }
-
-  return (
-    <BentoCard
-      id="crm-create-property"
-      span="full"
-      title="Créer un bien"
-      description="La référence sera attribuée automatiquement au moment de l'enregistrement."
-      action={
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <Badge className="w-fit border-0 bg-orange-100 text-orange-800">
-            Prochaine réf. {nextReference}
-          </Badge>
-          <Button
-            type="button"
-            variant="outline"
-            className="h-10 border-orange-200 bg-white"
-            onClick={() => onOpenChange(!open)}
-            aria-expanded={open}
-            aria-controls="crm-create-property-form"
-          >
-            {open ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-            {open ? "Replier" : "Créer"}
-          </Button>
-        </div>
-      }
-    >
-      {feedback ? (
-        <p
-          className={
-            feedback.type === "success"
-              ? "rounded-md bg-emerald-50 p-3 text-sm font-medium text-emerald-800"
-              : "rounded-md bg-red-50 p-3 text-sm font-medium text-red-700"
-          }
-        >
-          {feedback.message}
-        </p>
-      ) : null}
-      {open ? (
-        <form id="crm-create-property-form" onSubmit={(event) => void submitProperty(event)} className="grid gap-5">
-          <div className="grid gap-4 lg:grid-cols-3">
-            <div className="grid gap-2 lg:col-span-2">
-              <Label htmlFor="property-title">Titre de l&apos;annonce</Label>
-              <Input
-                id="property-title"
-                value={form.title}
-                onChange={(event) => updateField("title", event.target.value)}
-                placeholder="Maison familiale avec jardin"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label>Type de bien</Label>
-              <Select
-                value={form.type}
-                onValueChange={(value) => updatePropertyType(value as PropertyType)}
-              >
-                <SelectTrigger className="w-full">
-                  <span className="flex flex-1 text-left text-gray-900">
-                    {propertyTypeLabels[form.type]}
-                  </span>
-                </SelectTrigger>
-                <SelectContent>
-                  {propertyTypes.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {propertyTypeLabels[type]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label>Statut</Label>
-              <Select
-                value={form.status}
-                onValueChange={(value) => updateField("status", value as PropertyStatus)}
-              >
-                <SelectTrigger className="w-full">
-                  <span className="flex flex-1 text-left text-gray-900">
-                    {propertyStatusLabels[form.status]}
-                  </span>
-                </SelectTrigger>
-                <SelectContent>
-                  {propertyStatuses.map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {propertyStatusLabels[status]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label>Publication</Label>
-              <Select
-                value={form.publicationStatus}
-                onValueChange={(value) => updateField("publicationStatus", value as PropertyPublicationStatus)}
-              >
-                <SelectTrigger className="w-full">
-                  <span className="flex flex-1 text-left text-gray-900">
-                    {propertyPublicationStatusLabels[form.publicationStatus]}
-                  </span>
-                </SelectTrigger>
-                <SelectContent>
-                  {propertyPublicationStatuses.map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {propertyPublicationStatusLabels[status]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="property-city">Ville</Label>
-              <Input
-                id="property-city"
-                value={form.city}
-                onChange={(event) => updateField("city", event.target.value)}
-                placeholder="Solliès-Pont"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="property-postal-code">Code postal</Label>
-              <Input
-                id="property-postal-code"
-                value={form.postalCode}
-                onChange={(event) => updateField("postalCode", event.target.value)}
-                placeholder="83210"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="property-price">Prix affiché honoraires inclus</Label>
-              <Input
-                id="property-price"
-                inputMode="numeric"
-                value={form.price}
-                onChange={(event) => updateField("price", event.target.value)}
-                placeholder="450000"
-              />
-              <p className="text-xs leading-5 text-gray-500">
-                Anciennement “Prix FAI” : frais d&apos;agence inclus dans le prix affiché.
-              </p>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="property-surface">
-                {isLand ? "Surface du terrain" : "Surface habitable"}
-              </Label>
-              <Input
-                id="property-surface"
-                inputMode="decimal"
-                value={form.surface}
-                onChange={(event) => updateField("surface", event.target.value)}
-                placeholder={isLand ? "650" : "120"}
-              />
-              <p className="text-xs text-gray-500">
-                {isLand ? "Surface du terrain en m²." : "Surface habitable en m²."}
-              </p>
-            </div>
-            {!isLand ? (
-              <>
-                <div className="grid gap-2">
-                  <Label htmlFor="property-land-surface">Surface terrain</Label>
-                  <Input
-                    id="property-land-surface"
-                    inputMode="decimal"
-                    value={form.landSurface}
-                    onChange={(event) => updateField("landSurface", event.target.value)}
-                    placeholder="650"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="property-rooms">Pièces</Label>
-                  <Input
-                    id="property-rooms"
-                    inputMode="numeric"
-                    value={form.rooms}
-                    onChange={(event) => updateField("rooms", event.target.value)}
-                    placeholder="5"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="property-bedrooms">Chambres</Label>
-                  <Input
-                    id="property-bedrooms"
-                    inputMode="numeric"
-                    value={form.bedrooms}
-                    onChange={(event) => updateField("bedrooms", event.target.value)}
-                    placeholder="3"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="property-bathrooms">Salles d&apos;eau</Label>
-                  <Input
-                    id="property-bathrooms"
-                    inputMode="numeric"
-                    value={form.bathrooms}
-                    onChange={(event) => updateField("bathrooms", event.target.value)}
-                    placeholder="2"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="property-energy">Consommation énergie</Label>
-                  <div className="relative">
-                    <Input
-                      id="property-energy"
-                      inputMode="decimal"
-                      value={form.energyClass}
-                      onChange={(event) => updateField("energyClass", event.target.value)}
-                      placeholder="120"
-                      className="pr-32"
-                    />
-                    <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[11px] font-semibold text-gray-500 sm:text-xs">
-                      {energyUnit}
-                    </span>
-                  </div>
-                  {energyAssessment ? (
-                    <p className="text-xs font-medium text-gray-600">
-                      Classe {energyAssessment.letter} · tranche {energyAssessment.range} {energyAssessment.unit}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-gray-500">Entrez uniquement le nombre du diagnostic.</p>
-                  )}
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="property-climate">Émissions climat</Label>
-                  <div className="relative">
-                    <Input
-                      id="property-climate"
-                      inputMode="decimal"
-                      value={form.climateClass}
-                      onChange={(event) => updateField("climateClass", event.target.value)}
-                      placeholder="4"
-                      className="pr-36"
-                    />
-                    <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[11px] font-semibold text-gray-500 sm:text-xs">
-                      {climateUnit}
-                    </span>
-                  </div>
-                  {climateAssessment ? (
-                    <p className="text-xs font-medium text-gray-600">
-                      Classe {climateAssessment.letter} · tranche {climateAssessment.range} {climateAssessment.unit}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-gray-500">Entrez uniquement le nombre du diagnostic GES.</p>
-                  )}
-                </div>
-              </>
-            ) : null}
-          </div>
-          {!isLand ? (
-            <div className="grid gap-4 rounded-xl border border-orange-100 bg-orange-50/60 p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p className="text-sm font-bold text-[#111111]">Baromètre DPE / GES automatique</p>
-                  <p className="mt-1 text-sm leading-6 text-gray-600">
-                    La position retenue correspond au résultat le plus défavorable entre énergie et climat.
-                  </p>
-                </div>
-                {dpePosition ? (
-                  <Badge className={cn("w-fit border-0 px-3 py-1 text-sm", dpeBadgeClasses[dpePosition.letter])}>
-                    Classe {dpePosition.letter}
-                  </Badge>
-                ) : (
-                  <Badge className="w-fit border border-orange-100 bg-white text-gray-700">
-                    En attente de saisie
-                  </Badge>
-                )}
-              </div>
-              <div className="grid grid-cols-7 gap-1">
-                {dpeLetters.map((letter) => {
-                  const isActive = dpePosition?.letter === letter;
-
-                  return (
-                    <div
-                      key={letter}
-                      className={cn(
-                        "rounded-md px-2 py-2 text-center text-xs font-black shadow-sm ring-offset-2 transition",
-                        dpeBadgeClasses[letter],
-                        isActive ? "scale-105 ring-2 ring-orange-500" : "opacity-70"
-                      )}
-                    >
-                      {letter}
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-lg border border-orange-100 bg-white p-3">
-                  <DiagnosticBar kind="energy" value={form.energyClass} />
-                </div>
-                <div className="rounded-lg border border-orange-100 bg-white p-3">
-                  <DiagnosticBar kind="climate" value={form.climateClass} />
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="rounded-xl border border-orange-100 bg-orange-50/70 p-4">
-              <div className="flex items-start gap-3">
-                <span className="mt-0.5 rounded-lg bg-white p-2 text-orange-600">
-                  <Info className="size-5" />
-                </span>
-                <div>
-                  <p className="text-sm font-bold text-[#111111]">Mode terrain sélectionné</p>
-                  <p className="mt-1 text-sm leading-6 text-gray-600">
-                    Le DPE n&apos;est pas demandé ici. La fiche met plutôt l&apos;accent sur les informations utiles à la vente d&apos;un terrain.
-                  </p>
-                </div>
-              </div>
-              <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                {landSaleOptions.map((option) => (
-                  <button
-                    key={option.label}
-                    type="button"
-                    onClick={() => toggleLandOption(option.label)}
-                    className={cn(
-                      "flex gap-2 rounded-lg border p-3 text-left text-sm transition",
-                      form.landOptions.includes(option.label)
-                        ? "border-orange-300 bg-white text-[#111111] shadow-sm"
-                        : "border-orange-100 bg-white/75 text-gray-700 hover:border-orange-200 hover:bg-white"
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded border text-xs font-black",
-                        form.landOptions.includes(option.label)
-                          ? "border-orange-500 bg-orange-500 text-white"
-                          : "border-orange-200 text-transparent"
-                      )}
-                    >
-                      ✓
-                    </span>
-                    <span>
-                      <strong className="block">{option.label}</strong>
-                      <span className="mt-1 block text-xs leading-5 text-gray-500">{option.description}</span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div className="grid gap-2">
-              <Label htmlFor="property-description-short">Description courte</Label>
-              <Textarea
-                id="property-description-short"
-                value={form.descriptionShort}
-                onChange={(event) => updateField("descriptionShort", event.target.value)}
-                placeholder="Résumé visible dans les cartes du site."
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="property-description-long">Description complète</Label>
-              <Textarea
-                id="property-description-long"
-                value={form.descriptionLong}
-                onChange={(event) => updateField("descriptionLong", event.target.value)}
-                placeholder="Texte détaillé de présentation du bien."
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="property-features">Atouts du bien</Label>
-              <Textarea
-                id="property-features"
-                value={form.featuresText}
-                onChange={(event) => updateField("featuresText", event.target.value)}
-                placeholder={
-                  isLand
-                    ? "Terrain constructible\nViabilisation à préciser\nBornage à confirmer\nLibre constructeur"
-                    : "Piscine\nTerrasse\nGarage\nVue dégagée"
-                }
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="property-photos">Photos</Label>
-              <Input
-                key={photoInputKey}
-                id="property-photos"
-                type="file"
-                multiple
-                accept="image/jpeg,image/png,image/webp,image/avif"
-                onChange={(event) => updateSelectedPhotos(event.target.files)}
-                className="h-auto cursor-pointer py-2"
-              />
-              <p className="text-xs text-gray-500">
-                JPG, PNG, WebP ou AVIF. Maximum 12 photos, 8 Mo par photo.
-              </p>
-              {selectedPhotos.length > 0 ? (
-                <div className="grid gap-2 rounded-lg border border-orange-100 bg-orange-50 p-3">
-                  <p className="text-xs font-bold uppercase tracking-wide text-orange-700">
-                    {selectedPhotos.length} photo(s) sélectionnée(s)
-                  </p>
-                  {selectedPhotos.map((file) => (
-                    <div key={`${file.name}-${file.size}`} className="flex items-center justify-between gap-3 text-xs text-gray-700">
-                      <span className="truncate">{file.name}</span>
-                      <span className="shrink-0">{formatFileSize(file.size)}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-              {uploadedPhotos.length > 0 ? (
-                <div className="grid gap-2 rounded-lg border border-emerald-100 bg-emerald-50 p-3">
-                  <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">
-                    {uploadedPhotos.length} photo(s) stockée(s)
-                  </p>
-                  {uploadedPhotos.map((photo) => (
-                    <div key={photo.path} className="flex items-center gap-2 text-xs text-emerald-800">
-                      <ImagePlus className="size-3.5" />
-                      <span className="truncate">{photo.name}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          </div>
-          <label className="flex w-fit items-center gap-3 rounded-lg border border-orange-100 bg-orange-50 px-3 py-2 text-sm font-semibold text-[#111111]">
-            <input
-              type="checkbox"
-              checked={form.featured}
-              onChange={(event) => updateField("featured", event.target.checked)}
-              className="size-4 accent-orange-500"
-            />
-            Mettre ce bien à la une
-          </label>
-          <Button
-            type="submit"
-            disabled={submitting}
-            className="h-11 w-full bg-orange-500 text-white hover:bg-orange-600 sm:w-fit"
-          >
-            <Plus className="size-4" />
-            {submitting ? "Création..." : "Créer le bien"}
-          </Button>
-        </form>
-      ) : (
-        <div className="rounded-xl border border-orange-100 bg-orange-50/60 p-4 text-sm leading-6 text-gray-600">
-          Le formulaire de création est replié pour faciliter la lecture du catalogue. Cliquez sur Créer pour ajouter un bien avec ses photos.
-        </div>
-      )}
-    </BentoCard>
-  );
-}
-
 function PropertyEditorCard({
   property,
   connected,
   onPersist,
+  onCreateOffer,
+  canCreateOffers,
   displayMode,
+  initiallyEditing = false,
 }: {
   property: Property;
   connected: boolean;
   onPersist: (property: Property) => Promise<boolean>;
+  onCreateOffer: (property: Property) => void;
+  canCreateOffers: boolean;
   displayMode: PropertyDisplayMode;
+  initiallyEditing?: boolean;
 }) {
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(initiallyEditing);
   const [form, setForm] = useState<PropertyFormState>(() => propertyToForm(property));
   const [photoOrder, setPhotoOrder] = useState<string[]>(() => property.photos);
   const [removedPhotoUrls, setRemovedPhotoUrls] = useState<string[]>([]);
@@ -3050,7 +2586,7 @@ function PropertyEditorCard({
 
   async function quickUpdate(updates: Partial<Pick<Property, "status" | "featured" | "publicationStatus">>) {
     setFeedback(null);
-    const nextProperty = { ...property, ...updates, updatedAt: new Date().toISOString() };
+    const nextProperty = { ...property, ...updates };
     await onPersist(nextProperty);
   }
 
@@ -3212,20 +2748,34 @@ function PropertyEditorCard({
               Afficher à la une
             </label>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            className="h-12 border-orange-200 bg-white sm:h-10"
-            onClick={() => {
-              setForm(propertyToForm(property));
-              setPhotoOrder(property.photos);
-              setRemovedPhotoUrls([]);
-              setEditing((current) => !current);
-            }}
-          >
-            {editing ? <X className="size-4" /> : <Pencil className="size-4" />}
-            {editing ? "Fermer" : "Modifier"}
-          </Button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button
+              type="button"
+              disabled={
+                !canCreateOffers ||
+                getPropertyOfferIneligibility(property) !== null
+              }
+              className="h-12 bg-[#2f493a] text-white hover:bg-[#16251e] sm:h-10"
+              onClick={() => onCreateOffer(property)}
+            >
+              <FileSignature className="size-4" />
+              Créer une offre
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-12 border-orange-200 bg-white sm:h-10"
+              onClick={() => {
+                setForm(propertyToForm(property));
+                setPhotoOrder(property.photos);
+                setRemovedPhotoUrls([]);
+                setEditing((current) => !current);
+              }}
+            >
+              {editing ? <X className="size-4" /> : <Pencil className="size-4" />}
+              {editing ? "Fermer" : "Modifier"}
+            </Button>
+          </div>
         </div>
 
         {editing ? (
@@ -3477,249 +3027,6 @@ function PropertyEditorCard({
   );
 }
 
-function PropertyManager({
-  properties,
-  setProperties,
-  connected,
-  createOpen,
-  onCreateOpenChange,
-}: {
-  properties: Property[];
-  setProperties: React.Dispatch<React.SetStateAction<Property[]>>;
-  connected: boolean;
-  createOpen: boolean;
-  onCreateOpenChange: (open: boolean) => void;
-}) {
-  const [search, setSearch] = useState("");
-  const [displayMode, setDisplayMode] = useState<PropertyDisplayMode>("list");
-  const [sortMode, setSortMode] = useState<PropertySortMode>("site");
-  const [feedback, setFeedback] = useState<string | null>(null);
-  const propertyInventoryMetrics = useMemo(() => getPropertyInventoryMetrics(properties), [properties]);
-  const propertyStatusBreakdown = useMemo(() => getPropertyStatusBreakdown(properties), [properties]);
-  const propertyPublicationBreakdown = useMemo(() => getPropertyPublicationBreakdown(properties), [properties]);
-  const propertyTypeBreakdown = useMemo(() => getPropertyTypeBreakdown(properties), [properties]);
-  const filteredProperties = useMemo(() => {
-    const query = search.toLowerCase();
-
-    return properties
-      .filter((property) => {
-        const haystack = [
-          property.reference,
-          property.mandateNumber,
-          property.title,
-          property.city,
-          property.postalCode,
-          propertyTypeLabels[property.type],
-          propertyStatusLabels[property.status],
-          propertyPublicationStatusLabels[property.publicationStatus ?? "DRAFT"],
-        ]
-          .join(" ")
-          .toLowerCase();
-
-        return haystack.includes(query);
-      })
-      .sort(sortMode === "quality" ? comparePropertiesForQualityCleanup : comparePropertiesForSiteDisplay);
-  }, [properties, search, sortMode]);
-  const propertiesWithQualityIssues = useMemo(
-    () => properties.filter((property) => getPropertyQualityIssues(property).length > 0).length,
-    [properties]
-  );
-
-  async function persistProperty(property: Property) {
-    if (!connected) {
-      void property;
-      setFeedback("Modification refusee : Supabase doit etre connecte pour enregistrer le catalogue officiel.");
-      return false;
-    }
-
-    const response = await fetch("/api/admin/properties", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(buildPropertyPayload(property, propertyToForm(property), property.photos)),
-    }).catch(() => null);
-    const payload = response
-      ? ((await response.json().catch(() => null)) as {
-          message?: string;
-          property?: Property;
-        } | null)
-      : null;
-
-    if (!response?.ok || !payload?.property) {
-      setFeedback(payload?.message ?? "La modification du bien n'a pas pu être enregistrée.");
-      return false;
-    }
-
-    setProperties((current) => upsertProperties(current, [payload.property!]));
-    setFeedback(payload.message ?? "Bien mis à jour.");
-    return true;
-  }
-
-  return (
-    <BentoGrid>
-      <CreatePropertyCard
-        properties={properties}
-        setProperties={setProperties}
-        connected={connected}
-        open={createOpen}
-        onOpenChange={onCreateOpenChange}
-      />
-
-      {propertyInventoryMetrics.map((metric) => (
-        <BentoKpiCard
-          key={metric.label}
-          label={metric.label}
-          value={metric.value}
-          description={metric.description}
-          span="medium"
-        />
-      ))}
-
-      <BentoCard
-        span="full"
-        variant="muted"
-        title="Source catalogue"
-        description="Suivi de la transition vers un catalogue 100 % Supabase."
-      >
-        <div className="grid gap-2 text-sm text-gray-700">
-          <p><strong>{propertyImportSource.name}</strong></p>
-          <p>Source actuelle : <span className="font-mono text-xs">Supabase public_properties</span></p>
-          <p>Source cible : {propertyImportSource.futureSource}</p>
-          <p>
-            Publication :{" "}
-            {propertyPublicationBreakdown.map((item) => `${item.label} ${item.count}`).join(" / ")}
-          </p>
-          <p className="text-gray-500">{propertyImportSource.note}</p>
-        </div>
-      </BentoCard>
-
-      <BentoCard span="large" title="Répartition par statut">
-        <div className="grid gap-3">
-          {propertyStatusBreakdown.map((item) => (
-            <p key={item.key} className="flex items-center justify-between border-b border-orange-100 pb-2 text-sm">
-              <span>{item.label}</span>
-              <strong>{item.count}</strong>
-            </p>
-          ))}
-        </div>
-      </BentoCard>
-
-      <BentoCard span="large" title="Répartition par type">
-        <div className="grid gap-3">
-          {propertyTypeBreakdown.map((item) => (
-            <p key={item.key} className="flex items-center justify-between border-b border-orange-100 pb-2 text-sm">
-              <span>{item.label}</span>
-              <strong>{item.count}</strong>
-            </p>
-          ))}
-        </div>
-      </BentoCard>
-
-      <BentoCard
-        span="full"
-        title="Catalogue des biens"
-        description="Recherche, disponibilité, mise à la une et édition rapide des biens."
-        contentClassName="gap-5"
-      >
-        <div className="grid gap-3 xl:grid-cols-[1fr_auto_auto] xl:items-center">
-          <div className="relative">
-            <Search className="absolute left-3 top-2.5 size-4 text-gray-400" />
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Rechercher un bien par référence, ville, titre ou statut"
-              className="pl-9"
-            />
-          </div>
-          <Select value={sortMode} onValueChange={(value) => setSortMode(value as PropertySortMode)}>
-            <SelectTrigger className="h-12 w-full bg-white sm:h-10 xl:w-64">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="site">Tri affichage site original</SelectItem>
-              <SelectItem value="quality">Tri nettoyage qualite</SelectItem>
-            </SelectContent>
-          </Select>
-          <div className="grid grid-cols-2 rounded-lg border border-orange-100 bg-white p-1">
-            <Button
-              type="button"
-              variant={displayMode === "list" ? "default" : "ghost"}
-              className={cn(
-                "h-10",
-                displayMode === "list" ? "bg-[#111111] text-white hover:bg-[#111111]" : "text-gray-700 hover:bg-orange-50"
-              )}
-              onClick={() => setDisplayMode("list")}
-              aria-pressed={displayMode === "list"}
-            >
-              <ListChecks className="size-4" />
-              Liste
-            </Button>
-            <Button
-              type="button"
-              variant={displayMode === "grid" ? "default" : "ghost"}
-              className={cn(
-                "h-10",
-                displayMode === "grid" ? "bg-[#111111] text-white hover:bg-[#111111]" : "text-gray-700 hover:bg-orange-50"
-              )}
-              onClick={() => setDisplayMode("grid")}
-              aria-pressed={displayMode === "grid"}
-            >
-              <LayoutDashboard className="size-4" />
-              Cartes
-            </Button>
-          </div>
-        </div>
-
-        <div className="grid gap-3 rounded-xl border border-orange-100 bg-orange-50/70 p-4 text-sm text-gray-700 sm:grid-cols-3">
-          <p>
-            <strong className="block text-[#111111]">{filteredProperties.length}</strong>
-            bien(s) dans la vue actuelle
-          </p>
-          <p>
-            <strong className="block text-[#111111]">{propertiesWithQualityIssues}</strong>
-            bien(s) a verifier
-          </p>
-          <p>
-            <strong className="block text-[#111111]">{sortMode === "site" ? "Affichage public" : "A corriger"}</strong>
-            ordre de tri actif
-          </p>
-        </div>
-
-        {feedback ? (
-          <p className="rounded-md bg-emerald-50 p-3 text-sm font-medium text-emerald-800">
-            {feedback}
-          </p>
-        ) : null}
-
-        {filteredProperties.length === 0 ? (
-          <BentoEmptyState
-            icon={<Building2 className="size-5" />}
-            title="Aucun bien trouvé"
-            description="Modifiez la recherche ou créez un nouveau bien."
-            className="py-12"
-          />
-        ) : (
-          <div
-            className={cn(
-              "grid gap-4",
-              displayMode === "grid" ? "sm:grid-cols-2 xl:grid-cols-3" : "grid-cols-1"
-            )}
-          >
-            {filteredProperties.map((property) => (
-              <PropertyEditorCard
-                key={`${property.reference}-${property.updatedAt}`}
-                property={property}
-                connected={connected}
-                onPersist={persistProperty}
-                displayMode={displayMode}
-              />
-            ))}
-          </div>
-        )}
-      </BentoCard>
-    </BentoGrid>
-  );
-}
-
 type PipelineTaskDraft = {
   title: string;
   dueAt: string;
@@ -3741,21 +3048,27 @@ function PipelinePanel({
   setLeads,
   tasks,
   setTasks,
+  offers,
   team,
   metrics,
+  permissions,
   connected,
   error,
   onRefresh,
+  onCreateOffer,
 }: {
   leads: PipelineLead[];
   setLeads: React.Dispatch<React.SetStateAction<PipelineLead[]>>;
   tasks: PipelineTask[];
   setTasks: React.Dispatch<React.SetStateAction<PipelineTask[]>>;
+  offers: CommercialOffer[];
   team: AdminTeamMember[];
   metrics: PipelineMetrics;
+  permissions: PipelinePermissions;
   connected: boolean;
   error: string;
   onRefresh: () => Promise<void>;
+  onCreateOffer: (lead: PipelineLead) => void;
 }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("ALL");
@@ -3763,13 +3076,14 @@ function PipelinePanel({
   const [feedback, setFeedback] = useState("");
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [selectedPipelineLeadId, setSelectedPipelineLeadId] = useState<string | null>(null);
+  const router = useRouter();
   const [reminderComposerOpen, setReminderComposerOpen] = useState(false);
   const [reminderLeadId, setReminderLeadId] = useState<string | null>(null);
   const [taskDrafts, setTaskDrafts] = useState<Record<string, PipelineTaskDraft>>({});
   const teamById = useMemo(() => new Map(team.map((member) => [member.id, member])), [team]);
   const leadsById = useMemo(() => new Map(leads.map((lead) => [lead.id, lead])), [leads]);
   const tasksByLead = useMemo(() => groupTasksByLead(tasks), [tasks]);
-  const activeLeads = leads.filter((lead) => !lead.archived);
+  const activeLeads = leads.filter((lead) => !lead.archived && lead.status !== "LOST");
   const openTasks = tasks.filter(isOpenTask);
   const overdueTasks = sortTasksByUrgency(openTasks.filter(isTaskOverdue));
   const todayTasks = sortTasksByUrgency(openTasks.filter(isTaskDueToday));
@@ -3789,21 +3103,7 @@ function PipelinePanel({
     1
   );
   const visibleLeads = activeLeads.filter((lead) => {
-    const haystack = [
-      lead.contactName,
-      lead.contactEmail,
-      lead.contactPhone,
-      lead.city,
-      lead.title,
-      lead.requestType,
-      lead.projectType,
-      lead.sourceCode,
-      lead.linkedPropertyTitle,
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
-    const matchesSearch = !search.trim() || haystack.includes(search.trim().toLowerCase());
+    const matchesSearch = !search.trim() || matchesPipelineDossierSearch(lead, search);
     const matchesStatus = status === "ALL" || lead.status === status;
     const matchesAssignee =
       assignee === "ALL" ||
@@ -3822,55 +3122,42 @@ function PipelinePanel({
     {
       id: "new",
       title: "Nouveaux",
-      count: activeLeads.filter(
-        (lead) => lead.status === "NEW" && !lead.hasActiveAppointment && !lead.hasActiveOffer
-      ).length,
-      leads: activePipelineLeads.filter(
-        (lead) => lead.status === "NEW" && !lead.hasActiveAppointment && !lead.hasActiveOffer
-      ).map(toPipelineItem),
+      count: activePipelineLeads.filter((lead) => getPipelineColumnId(lead) === "new").length,
+      leads: activePipelineLeads.filter((lead) => getPipelineColumnId(lead) === "new").map(toPipelineItem),
     },
     {
       id: "contacted",
-      title: "Contactes",
-      count: activeLeads.filter(
-        (lead) => lead.status === "CONTACTED" && !lead.hasActiveAppointment && !lead.hasActiveOffer
-      ).length,
-      leads: activePipelineLeads.filter(
-        (lead) => lead.status === "CONTACTED" && !lead.hasActiveAppointment && !lead.hasActiveOffer
-      ).map(toPipelineItem),
+      title: "Contactés",
+      count: activePipelineLeads.filter((lead) => getPipelineColumnId(lead) === "contacted").length,
+      leads: activePipelineLeads.filter((lead) => getPipelineColumnId(lead) === "contacted").map(toPipelineItem),
     },
     {
       id: "appointment",
       title: "Rendez-vous",
-      count: activeLeads.filter(
-        (lead) => !lead.hasActiveOffer && (lead.hasActiveAppointment || lead.status === "APPOINTMENT")
-      ).length,
-      leads: activePipelineLeads.filter(
-        (lead) => !lead.hasActiveOffer && (lead.hasActiveAppointment || lead.status === "APPOINTMENT")
-      ).map(toPipelineItem),
+      count: activePipelineLeads.filter((lead) => getPipelineColumnId(lead) === "appointment").length,
+      leads: activePipelineLeads.filter((lead) => getPipelineColumnId(lead) === "appointment").map(toPipelineItem),
     },
     {
       id: "offers",
       title: "Offres",
-      count: activeLeads.filter((lead) => lead.hasActiveOffer).length,
-      leads: activePipelineLeads.filter((lead) => lead.hasActiveOffer).map(toPipelineItem),
+      count: activePipelineLeads.filter((lead) => getPipelineColumnId(lead) === "offers").length,
+      leads: activePipelineLeads.filter((lead) => getPipelineColumnId(lead) === "offers").map(toPipelineItem),
     },
   ];
   const dailyTaskRows = dailyTasks.map((task) => ({
     task,
     lead: task.leadId ? leadsById.get(task.leadId) ?? null : null,
   }));
-  const reminderLead = reminderLeadId
-    ? leadsById.get(reminderLeadId) ?? null
-    : activePipelineLeads[0] ?? null;
   const selectedPipelineLead = selectedPipelineLeadId
     ? leadsById.get(selectedPipelineLeadId) ?? null
     : null;
+  const reminderLead = reminderLeadId
+    ? leadsById.get(reminderLeadId) ?? null
+    : activePipelineLeads[0] ?? null;
   const selectedPipelineLeadNextTask = selectedPipelineLead
     ? getLeadNextOpenTask(tasksByLead.get(selectedPipelineLead.id) ?? [])
     : null;
-  const commercialAgents = team.filter((member) => member.role === "AGENT");
-  const assignableAgents = commercialAgents.length ? commercialAgents : team;
+  const assignableAgents = team;
 
   function getDraft(leadId: string) {
     return taskDrafts[leadId] ?? emptyPipelineTaskDraft;
@@ -3913,7 +3200,7 @@ function PipelinePanel({
 
     if (!response?.ok) {
       setLeads(previousLeads);
-      if (response?.status === 401) window.location.assign("/admin/login");
+      if (response?.status === 401) router.push("/admin/login");
       setFeedback(payload?.message ?? "La mise a jour du pipeline a echoue.");
       return;
     }
@@ -3954,7 +3241,7 @@ function PipelinePanel({
     setPendingId(null);
 
     if (!response?.ok) {
-      if (response?.status === 401) window.location.assign("/admin/login");
+      if (response?.status === 401) router.push("/admin/login");
       setFeedback(payload?.message ?? "Le rappel n'a pas pu etre cree.");
       return;
     }
@@ -3989,12 +3276,48 @@ function PipelinePanel({
 
     if (!response?.ok) {
       setTasks(previousTasks);
-      if (response?.status === 401) window.location.assign("/admin/login");
+      if (response?.status === 401) router.push("/admin/login");
       setFeedback(payload?.message ?? "Le rappel n'a pas pu etre mis a jour.");
       return;
     }
 
     setFeedback(payload?.message ?? "Rappel mis a jour.");
+  }
+
+  async function updateOfferStatus(
+    offer: CommercialOffer,
+    nextStatus: CommercialOfferStatus,
+    options?: { reason?: string; confirmPropertyUnderOffer?: boolean }
+  ) {
+    if (!connected) {
+      setFeedback("Supabase doit être connecté pour modifier une offre réelle.");
+      return;
+    }
+
+    setPendingId(`offer-${offer.id}`);
+    const response = await fetch("/api/admin/offers", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: offer.id,
+        status: nextStatus,
+        reason: options?.reason,
+        confirmPropertyUnderOffer: options?.confirmPropertyUnderOffer,
+      }),
+    }).catch(() => null);
+    const payload = response
+      ? ((await response.json().catch(() => null)) as { message?: string } | null)
+      : null;
+    setPendingId(null);
+
+    if (!response?.ok) {
+      if (response?.status === 401) router.push("/admin/login");
+      setFeedback(payload?.message ?? "Le statut de l'offre n'a pas pu être modifié.");
+      return;
+    }
+
+    await onRefresh();
+    setFeedback(payload?.message ?? "Offre mise à jour.");
   }
 
   const useRivieraPipeline = true;
@@ -4006,7 +3329,7 @@ function PipelinePanel({
           activeLeads={activePipelineLeads}
           dailyTasks={dailyTaskRows}
           columns={pipelineColumns}
-          totalLeads={activeLeads.length}
+          totalLeads={activePipelineLeads.length}
           metrics={metrics}
           urgentCount={overdueTasks.length}
           team={team}
@@ -4030,8 +3353,43 @@ function PipelinePanel({
           feedback={feedback}
         />
 
-        <Sheet
+        <PipelineDossierDrawer
+          lead={selectedPipelineLead}
           open={Boolean(selectedPipelineLead)}
+          onOpenChange={(open) => {
+            if (!open) setSelectedPipelineLeadId(null);
+          }}
+          tasks={tasks}
+          offers={offers}
+          team={team}
+          permissions={permissions}
+          pending={Boolean(pendingId)}
+          onUpdateLead={persistLead}
+          onCreateReminder={(leadId) => {
+            setSelectedPipelineLeadId(null);
+            setReminderLeadId(leadId);
+            setReminderComposerOpen(true);
+          }}
+          onCreateOffer={(lead) => {
+            setSelectedPipelineLeadId(null);
+            onCreateOffer(lead);
+          }}
+          onUpdateOfferStatus={updateOfferStatus}
+        />
+
+        <PipelineReminderComposer
+          open={reminderComposerOpen}
+          onOpenChange={setReminderComposerOpen}
+          leads={activeLeads}
+          team={team}
+          initialLeadId={reminderLeadId}
+          connected={connected}
+          onSaved={onRefresh}
+          onFeedback={setFeedback}
+        />
+
+        <Sheet
+          open={false}
           onOpenChange={(open) => {
             if (!open) setSelectedPipelineLeadId(null);
           }}
@@ -4158,7 +3516,7 @@ function PipelinePanel({
           </SheetContent>
         </Sheet>
 
-        <Sheet open={reminderComposerOpen} onOpenChange={setReminderComposerOpen}>
+        <Sheet open={false} onOpenChange={() => undefined}>
           <SheetContent className="w-[min(92vw,28rem)] overflow-y-auto bg-[var(--crm-riviera-bg-surface)] sm:max-w-md">
             <SheetHeader>
               <SheetTitle>Créer un rappel</SheetTitle>
@@ -4799,6 +4157,7 @@ const contactQualificationOrder: Record<ContactQualificationStatus, number> = {
 };
 
 function LeadManager({
+  userRole = "READ_ONLY",
   leads,
   setLeads,
   connected,
@@ -4811,6 +4170,12 @@ function LeadManager({
   onContactSearchChange = () => {},
   selectedContactId = null,
   onSelectedContactChange = () => {},
+  onCreateContact = () => {},
+  activities = [],
+  pipelineLeads = [],
+  pipelineTasks = [],
+  properties = [],
+  team = [],
 }: {
   leads: AdminLead[];
   setLeads: React.Dispatch<React.SetStateAction<AdminLead[]>>;
@@ -4818,13 +4183,21 @@ function LeadManager({
   title: string;
   description: string;
   enableQualification?: boolean;
+  userRole?: AdminRole;
   onPipelineChanged?: () => Promise<void> | void;
   onOpenPipeline?: () => void;
   contactSearch?: string;
   onContactSearchChange?: (value: string) => void;
   selectedContactId?: string | null;
   onSelectedContactChange?: (id: string | null) => void;
+  onCreateContact?: () => void;
+  activities?: Activity[];
+  pipelineLeads?: PipelineLead[];
+  pipelineTasks?: PipelineTask[];
+  properties?: Property[];
+  team?: AdminTeamMember[];
 }) {
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("ALL");
   const [qualificationFilter, setQualificationFilter] = useState("ALL");
@@ -4866,11 +4239,9 @@ function LeadManager({
   };
 
   async function persist(lead: AdminLead, updates: Partial<AdminLead>) {
-    const previousLeads = leads;
-    setLeads((current) => current.map((item) => item.id === lead.id ? { ...item, ...updates } : item));
     if (!connected) {
-      setFeedback("Modification conservée dans cette session locale.");
-      return true;
+      setFeedback("Connexion à Supabase nécessaire pour enregistrer.");
+      return false;
     }
 
     const response = await fetch("/api/admin/leads", {
@@ -4886,8 +4257,7 @@ function LeadManager({
       : null;
 
     if (!response?.ok) {
-      setLeads(previousLeads);
-      if (response?.status === 401) window.location.assign("/admin/login");
+      if (response?.status === 401) router.push("/admin/login");
       setFeedback(payload?.message ?? "Mise à jour impossible.");
       return false;
     }
@@ -4901,6 +4271,14 @@ function LeadManager({
     }
     setFeedback(payload?.message ?? "Mise à jour enregistrée.");
     return true;
+  }
+
+  async function refreshContacts() {
+    const response = await fetch("/api/admin/leads", { cache: "no-store" }).catch(() => null);
+    const payload = response ? await response.json().catch(() => null) as { contacts?: ContactLead[] } | null : null;
+    if (response?.ok && payload?.contacts) setLeads(normalizeContacts(payload.contacts));
+    else setFeedback("L'action est enregistrée, mais l'actualisation a échoué. Rechargez la liste.");
+    await onPipelineChanged?.();
   }
 
   async function saveQualification(lead: AdminLead) {
@@ -4944,7 +4322,7 @@ function LeadManager({
       : null;
 
     if (!response?.ok || !payload?.leadId) {
-      if (response?.status === 401) window.location.assign("/admin/login");
+      if (response?.status === 401) router.push("/admin/login");
       setFeedback(payload?.message ?? "Le prospect n'a pas pu être créé.");
       setPendingId(null);
       return;
@@ -4961,6 +4339,8 @@ function LeadManager({
   if (enableQualification) {
     return (
       <CrmRivieraContacts
+        userRole={userRole}
+        onDataChanged={refreshContacts}
         leads={leads}
         setLeads={setLeads}
         connected={connected}
@@ -4974,6 +4354,12 @@ function LeadManager({
         onCreateProspect={createProspect}
         onPersist={persist}
         onOpenPipeline={onOpenPipeline ?? (() => {})}
+        onCreateContact={onCreateContact}
+        activities={activities}
+        pipelineLeads={pipelineLeads}
+        pipelineTasks={pipelineTasks}
+        properties={properties}
+        team={team}
       />
     );
   }
@@ -5221,6 +4607,7 @@ function getMatchFilterLabel(value: LegacyMatchFilter) {
 }
 
 function LegacyReviewPanel({ connected }: { connected: boolean }) {
+  const router = useRouter();
   const [review, setReview] = useState<LegacyReviewResponse | null>(null);
   const [loading, setLoading] = useState(connected);
   const [error, setError] = useState("");
@@ -5248,7 +4635,7 @@ function LegacyReviewPanel({ connected }: { connected: boolean }) {
     setLoading(false);
 
     if (!response?.ok || !payload?.success) {
-      if (response?.status === 401) window.location.assign("/admin/login");
+      if (response?.status === 401) router.push("/admin/login");
       setError(payload?.message ?? "La revue des anciennes demandes n'a pas pu etre chargee.");
       return;
     }
@@ -5591,22 +4978,38 @@ function scrollToCrmSection(id: string) {
   });
 }
 
-export function AdminDashboard({ contacts, estimations, activities: initialActivities, properties, connected, userName }: Props) {
+export function AdminDashboard({ contacts, estimations, activities: initialActivities, properties, connected, userName, userRole, initialTab = "overview", initialContactId = null, initialPropertyId = null, initialSearch = "", canWriteProperties = false }: Props) {
+  const router = useRouter();
   const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(connected);
-  const [activeTab, setActiveTab] = useState<AdminTab>("overview");
+  const [activeTab, setActiveTab] = useState<AdminTab>(initialTab);
   const [contactCreateOpen, setContactCreateOpen] = useState(false);
-  const [contactSearch, setContactSearch] = useState("");
-  const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
+  const [contactSearch, setContactSearch] = useState(initialSearch);
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(initialContactId);
   const [propertyCreateOpen, setPropertyCreateOpen] = useState(false);
+  const propertyCreationLeave = useRef<((after?: () => void) => void) | null>(null);
+  const registerPropertyCreationLeave = useCallback((handler: typeof propertyCreationLeave.current) => {
+    propertyCreationLeave.current = handler;
+  }, []);
+  const [propertyLoadError, setPropertyLoadError] = useState("");
   const [contactLeads, setContactLeads] = useState(() => normalizeContacts(contacts));
   const [estimationLeads, setEstimationLeads] = useState(() => normalizeEstimations(estimations));
   const [pipelineLeads, setPipelineLeads] = useState<PipelineLead[]>([]);
   const [pipelineTasks, setPipelineTasks] = useState<PipelineTask[]>([]);
+  const [pipelineOffers, setPipelineOffers] = useState<CommercialOffer[]>([]);
   const [pipelineMetrics, setPipelineMetrics] = useState<PipelineMetrics>(emptyPipelineMetrics);
+  const [pipelinePermissions, setPipelinePermissions] = useState<PipelinePermissions>(emptyPipelinePermissions);
+  const [offerComposerContext, setOfferComposerContext] = useState<{
+    leadId: string | null;
+    propertyId: string | null;
+  } | null>(null);
   const [overviewSnapshot, setOverviewSnapshot] = useState<CrmOverviewSnapshot | null>(null);
+  const [onboardingProgress, setOnboardingProgress] = useState<CrmOnboardingProgress | null>(null);
+  const [onboardingSavingStep, setOnboardingSavingStep] = useState<CrmOnboardingStepKey | null>(null);
+  const [onboardingError, setOnboardingError] = useState("");
   const [teamMembers, setTeamMembers] = useState<AdminTeamMember[]>([]);
   const [pipelineError, setPipelineError] = useState("");
+  const [offerFeedback, setOfferFeedback] = useState("");
   const [activities, setActivities] = useState(initialActivities);
   const [propertyItems, setPropertyItems] = useState(properties);
   const [activitySearch, setActivitySearch] = useState("");
@@ -5632,12 +5035,19 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
       }),
     [contactLeads, pipelineLeads, pipelineTasks]
   );
+  const pipelinePriorityCount = dailyPriorities.filter((priority) => priority.tab === "pipeline").length;
   const selectedContact =
     contactLeads.find((contact) => contact.id === selectedContactId && !contact.archived) ?? null;
   const filteredActivities = useMemo(
     () => filterActivities(activities, activitySearch, activityEntityType, activityAction, activityPeriod, activityVisibility),
     [activities, activityAction, activityEntityType, activityPeriod, activitySearch, activityVisibility]
   );
+
+  useEffect(() => {
+    if (!offerFeedback) return;
+    const timeoutId = window.setTimeout(() => setOfferFeedback(""), 5000);
+    return () => window.clearTimeout(timeoutId);
+  }, [offerFeedback]);
 
   async function refreshPipeline() {
     if (!connected) {
@@ -5651,15 +5061,27 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
       : null;
 
     if (!response?.ok || !payload?.success) {
-      if (response?.status === 401) window.location.assign("/admin/login");
+      if (response?.status === 401) router.push("/admin/login");
       setPipelineError(payload?.message ?? "Le pipeline CRM n'a pas pu etre charge.");
       return;
     }
 
     setPipelineLeads(payload.leads ?? []);
     setPipelineTasks(payload.tasks ?? []);
+    setPipelineOffers(payload.offers ?? []);
     setTeamMembers(payload.team ?? []);
     setPipelineMetrics(payload.metrics ?? emptyPipelineMetrics);
+    setPipelinePermissions(payload.permissions ?? emptyPipelinePermissions);
+  }
+
+  function openOfferComposer({
+    leadId = null,
+    propertyId = null,
+  }: {
+    leadId?: string | null;
+    propertyId?: string | null;
+  }) {
+    setOfferComposerContext({ leadId, propertyId });
   }
 
   useEffect(() => {
@@ -5673,11 +5095,12 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
       setLoading(true);
       setLoadError("");
 
-      const [response, propertiesResponse, pipelineResponse, overviewResponse] = await Promise.all([
+      const [response, propertiesResponse, pipelineResponse, overviewResponse, onboardingResponse] = await Promise.all([
         fetch("/api/admin/leads"),
         fetch("/api/admin/properties"),
         fetch("/api/admin/pipeline"),
         fetch("/api/admin/overview"),
+        fetch("/api/admin/onboarding"),
       ]);
       const payload = (await response.json().catch(() => null)) as {
         message?: string;
@@ -5687,16 +5110,18 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
       } | null;
       const propertiesPayload = (await propertiesResponse.json().catch(() => null)) as {
         properties?: Property[];
+        message?: string;
       } | null;
       const pipelinePayload = (await pipelineResponse.json().catch(() => null)) as PipelineResponse | null;
       const overviewPayload = (await overviewResponse.json().catch(() => null)) as OverviewResponse | null;
+      const onboardingPayload = (await onboardingResponse.json().catch(() => null)) as OnboardingResponse | null;
 
       if (cancelled) return;
       setLoading(false);
 
       if (!response.ok) {
         setLoadError(payload?.message ?? "Le CRM n'a pas pu etre charge.");
-        if (response.status === 401) window.location.assign("/admin/login");
+        if (response.status === 401) router.push("/admin/login");
         return;
       }
 
@@ -5704,32 +5129,102 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
       setEstimationLeads(normalizeEstimations(payload?.estimations ?? []));
       setActivities(payload?.activities ?? []);
 
-      if (propertiesResponse.ok) {
-        setPropertyItems(propertiesPayload?.properties ?? []);
+      if (propertiesResponse.ok && propertiesPayload?.properties) {
+        setPropertyItems(propertiesPayload.properties);
+        setPropertyLoadError("");
+      } else {
+        setPropertyLoadError(propertiesPayload?.message ?? "Le portefeuille n’a pas pu être chargé.");
       }
 
       if (pipelineResponse.ok && pipelinePayload?.success) {
         setPipelineError("");
         setPipelineLeads(pipelinePayload.leads ?? []);
         setPipelineTasks(pipelinePayload.tasks ?? []);
+        setPipelineOffers(pipelinePayload.offers ?? []);
         setTeamMembers(pipelinePayload.team ?? []);
         setPipelineMetrics(pipelinePayload.metrics ?? emptyPipelineMetrics);
+        setPipelinePermissions(pipelinePayload.permissions ?? emptyPipelinePermissions);
       } else {
-        if (pipelineResponse.status === 401) window.location.assign("/admin/login");
+        if (pipelineResponse.status === 401) router.push("/admin/login");
         setPipelineError(pipelinePayload?.message ?? "Le pipeline CRM n'a pas pu etre charge.");
       }
 
       if (overviewResponse.ok && overviewPayload?.success) {
         setOverviewSnapshot(overviewPayload.overview ?? null);
       }
+
+      let currentOnboardingProgress = onboardingResponse.ok && onboardingPayload?.success
+        ? onboardingPayload.progress ?? null
+        : null;
+      if (!onboardingResponse.ok) {
+        setOnboardingError(onboardingPayload?.message ?? "La progression de démarrage n'a pas pu être chargée.");
+      } else {
+        setOnboardingError("");
+      }
+
+      const overviewMetrics = overviewPayload?.overview?.metrics;
+      const isEmptyWorkspace = Boolean(
+        overviewResponse.ok &&
+        overviewMetrics &&
+        overviewMetrics.totalLeads === 0 &&
+        overviewMetrics.availableProperties === 0 &&
+        overviewMetrics.visits === 0 &&
+        overviewMetrics.offers === 0 &&
+        overviewMetrics.openTasks === 0
+      );
+      if (isEmptyWorkspace && !currentOnboardingProgress) {
+        const startResponse = await fetch("/api/admin/onboarding", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ start: true }),
+        }).catch(() => null);
+        const startPayload = startResponse
+          ? ((await startResponse.json().catch(() => null)) as OnboardingResponse | null)
+          : null;
+        if (startResponse?.ok && startPayload?.success && startPayload.progress) {
+          currentOnboardingProgress = startPayload.progress;
+          setOnboardingError("");
+        } else {
+          setOnboardingError(startPayload?.message ?? "La progression de démarrage n'a pas pu être initialisée.");
+        }
+      }
+      setOnboardingProgress(currentOnboardingProgress);
     }
 
-    void loadCrmData();
+    void loadCrmData().catch(() => {
+      if (cancelled) return;
+      setLoading(false);
+      setLoadError("Connexion interrompue. Réessayez pour charger les données CRM.");
+    });
 
     return () => {
       cancelled = true;
     };
-  }, [connected, properties]);
+  }, [connected, properties, router]);
+
+  async function toggleOnboardingStep(step: CrmOnboardingStepKey, completed: boolean) {
+    if (!connected || onboardingSavingStep) return;
+
+    setOnboardingSavingStep(step);
+    setOnboardingError("");
+    const response = await fetch("/api/admin/onboarding", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ step, completed }),
+    }).catch(() => null);
+    const payload = response
+      ? ((await response.json().catch(() => null)) as OnboardingResponse | null)
+      : null;
+    setOnboardingSavingStep(null);
+
+    if (!response?.ok || !payload?.success || !payload.progress) {
+      if (response?.status === 401) router.push("/admin/login");
+      setOnboardingError(payload?.message ?? "La progression n'a pas pu être enregistrée.");
+      return;
+    }
+
+    setOnboardingProgress(payload.progress);
+  }
 
   async function logout() {
     const response = await fetch("/api/admin/auth/logout", { method: "POST" }).catch(() => null);
@@ -5737,26 +5232,50 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
       ? ((await response.json().catch(() => null)) as { redirectTo?: string } | null)
       : null;
 
-    window.location.assign(payload?.redirectTo ?? "/admin/login");
+    router.replace(payload?.redirectTo ?? "/admin/login");
+  }
+
+  function afterPropertyCreation(action: () => void) {
+    if (propertyCreationLeave.current) propertyCreationLeave.current(action);
+    else action();
+  }
+
+  function guardCommercialNavigation(href: string) {
+    if (!propertyCreationLeave.current) return false;
+    propertyCreationLeave.current(() => router.push(href));
+    return true;
   }
 
   function changeTab(tab: AdminTab) {
-    setActiveTab(tab);
-    if (tab !== "contacts") setSelectedContactId(null);
+    if (tab === activeTab) return;
+    afterPropertyCreation(() => {
+      const href = commercialHrefForTab(tab);
+      if (href) router.push(href);
+      else {
+        setActiveTab(tab);
+        if (tab !== "contacts") setSelectedContactId(null);
+      }
+    });
   }
 
   function openContactCreation() {
-    setSelectedContactId(null);
-    setActiveTab("contacts");
-    setContactCreateOpen(true);
-    scrollToCrmSection("crm-create-contact");
+    if (!connected || !["ADMIN", "DIRECTOR", "AGENT", "ASSISTANT"].includes(userRole)) {
+      setOfferFeedback(!connected ? "Connexion à Supabase nécessaire pour créer un contact." : "Votre rôle ne permet pas de créer un contact.");
+      return;
+    }
+    afterPropertyCreation(() => {
+      setSelectedContactId(null);
+      setActiveTab("contacts");
+      setContactCreateOpen(true);
+      scrollToCrmSection("crm-create-contact");
+    });
   }
 
   function handlePriorityAction(priority: CrmDailyPriority) {
     if (priority.tab === "contacts") {
       setSelectedContactId(priority.contactId ?? null);
     }
-    setActiveTab(priority.tab);
+    changeTab(priority.tab);
     window.scrollTo({ top: 0 });
   }
 
@@ -5767,7 +5286,7 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
           icon: Plus,
           onClick: openContactCreation,
         }
-      : activeTab === "properties" && !propertyCreateOpen
+      : activeTab === "properties" && canWriteProperties && !propertyCreateOpen
         ? {
             label: "Nouveau bien",
             icon: Plus,
@@ -5799,12 +5318,13 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
       style={crmRivieraStyle}
     >
       <CrmRivieraHeader
+        guardCommercialNavigation={guardCommercialNavigation}
         activeTab={activeTab}
         onTabChange={changeTab}
         connected={connected}
         loading={loading}
         userName={userName}
-        priorityCount={dailyPriorities.length}
+        priorityCount={activeTab === "pipeline" ? pipelinePriorityCount : dailyPriorities.length}
         visitCount={overviewSnapshot?.metrics.visits ?? metrics.appointments}
         contactsToQualify={metrics.contactsToQualify}
         contactsReady={metrics.contactsReadyForPipeline}
@@ -5813,9 +5333,9 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
         contactSearch={contactSearch}
         onContactSearchChange={setContactSearch}
         onCreateContact={openContactCreation}
-        onLogout={() => void logout()}
+        onLogout={() => afterPropertyCreation(() => void logout())}
       />
-      <div className="mx-auto w-full max-w-screen-xl min-w-0 px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
+      <div className="mx-auto w-full min-w-0 px-3 py-4 sm:px-6 sm:py-6 md:ml-60 md:w-[calc(100%-15rem)] lg:px-8 xl:px-10 xl:py-8">
 
         {!connected ? (
           <section
@@ -5829,6 +5349,12 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
           </section>
         ) : null}
 
+        {offerFeedback ? (
+          <p role="status" className="mb-5 rounded-lg bg-[var(--crm-riviera-bg-accent)] px-4 py-3 text-sm font-semibold text-[var(--crm-riviera-text-primary)]">
+            {offerFeedback}
+          </p>
+        ) : null}
+
         <Tabs value={activeTab} onValueChange={(value) => changeTab(value as AdminTab)} className="w-full min-w-0 gap-6 sm:gap-8">
           {loading ? (
             <CrmLoadingState />
@@ -5840,11 +5366,17 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
                 <BentoDesignDashboard
                   metrics={metrics}
                   overview={overviewSnapshot}
-                  setActiveTab={setActiveTab}
+                  setActiveTab={changeTab}
                   priorities={dailyPriorities}
                   pipelineTasks={pipelineTasks}
                   onPriorityAction={handlePriorityAction}
                   onCreateContact={openContactCreation}
+                  onboardingProgress={onboardingProgress}
+                  onboardingSavingStep={onboardingSavingStep}
+                  onboardingError={onboardingError}
+                  onToggleOnboardingStep={onboardingProgress
+                    ? (step, completed) => void toggleOnboardingStep(step, completed)
+                    : undefined}
                 />
               </TabsContent>
               <TabsContent value="pipeline" className="w-full">
@@ -5853,11 +5385,19 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
                   setLeads={setPipelineLeads}
                   tasks={pipelineTasks}
                   setTasks={setPipelineTasks}
+                  offers={pipelineOffers}
                   team={teamMembers}
                   metrics={pipelineMetrics}
+                  permissions={pipelinePermissions}
                   connected={connected}
                   error={pipelineError}
                   onRefresh={refreshPipeline}
+                  onCreateOffer={(lead) =>
+                    openOfferComposer({
+                      leadId: lead.id,
+                      propertyId: lead.linkedPropertyId,
+                    })
+                  }
                 />
               </TabsContent>
               <TabsContent value="contacts">
@@ -5866,15 +5406,18 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
                     <BentoGrid>
                       <CreateContactCard
                         setLeads={setContactLeads}
+                        onCreated={setSelectedContactId}
                         connected={connected}
                         open={contactCreateOpen}
                         onOpenChange={setContactCreateOpen}
+                        team={teamMembers}
                       />
                     </BentoGrid>
                   </div>
                 ) : null}
                 <LeadManager
                   title="Contacts"
+                  userRole={userRole}
                   description="Demandes entrantes, prospects créés manuellement et suivi commercial rapide."
                   leads={contactLeads}
                   setLeads={setContactLeads}
@@ -5886,6 +5429,12 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
                   onContactSearchChange={setContactSearch}
                   selectedContactId={selectedContactId}
                   onSelectedContactChange={setSelectedContactId}
+                  onCreateContact={openContactCreation}
+                  activities={activities}
+                  pipelineLeads={pipelineLeads}
+                  pipelineTasks={pipelineTasks}
+                  properties={propertyItems}
+                  team={teamMembers}
                 />
               </TabsContent>
               <TabsContent value="estimations" className="w-full">
@@ -5902,13 +5451,32 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
               <TabsContent value="legacyReview" className="w-full">
                 <LegacyReviewPanel connected={connected} />
               </TabsContent>
-              <TabsContent value="properties" className="w-full">
-                <PropertyManager
+              <TabsContent value="properties" className="w-full min-w-0">
+                <PropertyWorkspace
                   properties={propertyItems}
                   setProperties={setPropertyItems}
                   connected={connected}
+                  loading={loading}
+                  catalogueError={propertyLoadError || loadError}
+                  canWrite={canWriteProperties}
+                  canDelete={userRole === "ADMIN" || userRole === "DIRECTOR"}
+                  canCreateOffer={pipelinePermissions.canCreateOffers}
                   createOpen={propertyCreateOpen}
                   onCreateOpenChange={setPropertyCreateOpen}
+                  registerCreateLeave={registerPropertyCreationLeave}
+                  initialPropertyId={initialPropertyId}
+                  renderEditor={({ property, onPersist }) => (
+                    <PropertyEditorCard
+                      key={property.updatedAt}
+                      property={property}
+                      onPersist={onPersist}
+                      connected={connected}
+                      canCreateOffers={pipelinePermissions.canCreateOffers}
+                      onCreateOffer={(item) => openOfferComposer({ propertyId: item.id })}
+                      displayMode="list"
+                      initiallyEditing
+                    />
+                  )}
                 />
               </TabsContent>
               <TabsContent value="activities" className="w-full">
@@ -5935,10 +5503,27 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
           )}
         </Tabs>
       </div>
+      <OfferComposer
+        open={Boolean(offerComposerContext)}
+        onOpenChange={(open) => {
+          if (!open) setOfferComposerContext(null);
+        }}
+        leads={pipelineLeads}
+        properties={propertyItems}
+        team={teamMembers}
+        initialLeadId={offerComposerContext?.leadId ?? null}
+        initialPropertyId={offerComposerContext?.propertyId ?? null}
+        connected={connected}
+        onSaved={async (message) => {
+          await refreshPipeline();
+          setOfferFeedback(message);
+        }}
+      />
       <CrmMobileNavigation
+        guardCommercialNavigation={guardCommercialNavigation}
         activeTab={activeTab}
         onTabChange={changeTab}
-        onLogout={() => void logout()}
+        onLogout={() => afterPropertyCreation(() => void logout())}
         quickAction={mobileQuickAction}
       />
     </main>

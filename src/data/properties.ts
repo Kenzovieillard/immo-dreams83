@@ -3,6 +3,7 @@ export type PropertyType = "apartment" | "house" | "land" | "commercial" | "park
 export type TransactionType = "sale";
 
 export type PropertyStatus = "available" | "under_offer" | "sold";
+export const homeFeaturedPropertyLimit = 6;
 
 export type PropertyCommercialStatus = "AVAILABLE" | "UNDER_OFFER" | "SOLD";
 
@@ -51,6 +52,14 @@ export type Property = {
   archivedAt?: string | null;
   mandateNumber: string;
   history?: PropertyHistoryItem[];
+  streetAddress?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  ownerContactId?: string | null;
+  advisorId?: string | null;
+  workspaceDetails?: import("@/lib/property-workspace").PropertyWorkspaceDetails;
+  scheduledPublicationAt?: string | null;
+  publicationScheduleError?: string | null;
 };
 
 export const propertyTypeLabels: Record<PropertyType, string> = {

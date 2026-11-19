@@ -7,6 +7,7 @@ import { PropertyCard } from "@/components/site/property-card";
 import { RivieraCtaBand } from "@/components/site/riviera-cta-band";
 import { RivieraHomeHero } from "@/components/site/riviera-home-hero";
 import { StatsSection } from "@/components/site/stats-section";
+import { homeFeaturedPropertyLimit } from "@/data/properties";
 import { getFeaturedPublicProperties } from "@/lib/public-properties";
 
 export const dynamic = "force-dynamic";
@@ -46,7 +47,7 @@ const serviceItems = [
 
 export default async function Home() {
   const featuredProperties = await getFeaturedPublicProperties();
-  const visibleFeaturedProperties = featuredProperties.slice(0, 6);
+  const visibleFeaturedProperties = featuredProperties.slice(0, homeFeaturedPropertyLimit);
 
   return (
     <>
