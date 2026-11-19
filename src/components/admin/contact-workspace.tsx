@@ -717,7 +717,7 @@ export function ContactRelated({
           {canWrite && (
             <Link
               className="inline-flex items-center gap-2 text-sm font-semibold underline"
-              href={`/commercial/visites/nouvelle?contact_id=${contactId}`}
+              href={`/admin?tab=agenda&create=VISIT&agendaContact=${contactId}`}
             >
               <CalendarDays className="size-4" />
               Planifier une visite

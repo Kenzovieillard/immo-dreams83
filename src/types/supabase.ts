@@ -90,6 +90,8 @@ export type Database = {
       }
       appointments: {
         Row: {
+          agenda_details: Json
+          agenda_reminder_minutes: number | null
           additional_comments: string | null
           appointment_type: string
           assigned_to: string | null
@@ -119,6 +121,8 @@ export type Database = {
           visit_status: string
         }
         Insert: {
+          agenda_details?: Json
+          agenda_reminder_minutes?: number | null
           additional_comments?: string | null
           appointment_type?: string
           assigned_to?: string | null
@@ -148,6 +152,8 @@ export type Database = {
           visit_status?: string
         }
         Update: {
+          agenda_details?: Json
+          agenda_reminder_minutes?: number | null
           additional_comments?: string | null
           appointment_type?: string
           assigned_to?: string | null
@@ -606,6 +612,8 @@ export type Database = {
       }
       estimations: {
         Row: {
+          agenda_details: Json
+          agenda_reminder_minutes: number | null
           appointment_at: string | null
           appointment_location: string | null
           archived: boolean
@@ -645,6 +653,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          agenda_details?: Json
+          agenda_reminder_minutes?: number | null
           appointment_at?: string | null
           appointment_location?: string | null
           archived?: boolean
@@ -684,6 +694,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          agenda_details?: Json
+          agenda_reminder_minutes?: number | null
           appointment_at?: string | null
           appointment_location?: string | null
           archived?: boolean
@@ -2647,6 +2659,8 @@ export type Database = {
       }
       tasks: {
         Row: {
+          agenda_details: Json
+          agenda_reminder_minutes: number | null
           appointment_id: string | null
           assigned_to: string | null
           completed_at: string | null
@@ -2674,6 +2688,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          agenda_details?: Json
+          agenda_reminder_minutes?: number | null
           appointment_id?: string | null
           assigned_to?: string | null
           completed_at?: string | null
@@ -2701,6 +2717,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          agenda_details?: Json
+          agenda_reminder_minutes?: number | null
           appointment_id?: string | null
           assigned_to?: string | null
           completed_at?: string | null
@@ -2946,6 +2964,10 @@ export type Database = {
       }
     }
     Functions: {
+      apply_agenda_mutation: {
+        Args: { actor_key: string; request_key: string; payload: Json }
+        Returns: Json
+      }
       apply_property_workspace_action: {
         Args: { property_key: string; expected_updated_at: string; actor_key: string; property_action: string; action_value?: string }
         Returns: Json

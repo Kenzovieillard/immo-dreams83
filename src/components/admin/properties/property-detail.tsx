@@ -1101,7 +1101,7 @@ export function PropertyDetail({
           {canWrite ? (
             <Link
               className={cn(commercialPrimaryButton, "w-fit")}
-              href={`/commercial/visites/nouvelle?bien_id=${property.id}`}
+              href={`/admin?tab=agenda&create=VISIT&agendaProperty=${property.id}`}
             >
               Planifier une visite
             </Link>

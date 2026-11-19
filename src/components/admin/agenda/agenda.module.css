@@ -1,0 +1,216 @@
+.body {
+  display: grid;
+  min-width: 0;
+  gap: 1rem;
+}
+.timelineDesktop {
+  display: none;
+}
+.timelineMobile {
+  display: grid;
+  gap: 0.85rem;
+}
+.timelineGrid {
+  display: grid;
+  min-width: 0;
+}
+.timelineDay {
+  min-height: 2.75rem;
+  min-width: 0;
+  text-align: center;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.timelineDay[aria-pressed="true"] {
+  background: #dce5d7;
+  border-radius: 0.65rem;
+}
+.hours {
+  display: grid;
+  grid-auto-rows: 60px;
+  font-size: 0.72rem;
+  color: #59645f;
+}
+.timelineColumn {
+  min-width: 0;
+  position: relative;
+  border-left: 1px solid #dfddd4;
+}
+.slot {
+  display: grid;
+  place-content: center;
+  height: 30px;
+  width: 100%;
+  border-top: 1px solid #e9e6df;
+  color: #56715f;
+}
+.slot:nth-child(2n) {
+  border-top-style: dashed;
+}
+.slot svg {
+  opacity: 0;
+}
+.slot:is(:hover, :focus-visible) {
+  background: #e9efe7;
+}
+.slot:is(:hover, :focus-visible) svg {
+  opacity: 1;
+}
+.positioned {
+  position: absolute;
+  padding: 0 2px;
+  min-width: 0;
+}
+.positioned .event {
+  height: 100%;
+  padding: 0.12rem 0.25rem;
+  line-height: 1.05;
+  overflow: hidden;
+}
+.positioned .event > span {
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+.currentLine {
+  pointer-events: none;
+  position: absolute;
+  z-index: 2;
+  width: 100%;
+  border-top: 2px solid #b44e41;
+}
+.currentLine::before {
+  content: "";
+  display: block;
+  width: 0.4rem;
+  height: 0.4rem;
+  background: #b44e41;
+  border-radius: 50%;
+  transform: translateY(-0.24rem);
+}
+.event,
+.monthPreview {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  color: #18211f;
+  text-align: left;
+  border-radius: 0.5rem;
+  background: #ebece5;
+}
+.event {
+  border-left: 3px solid #748779;
+  padding: 0.6rem;
+}
+.event:hover,
+.monthPreview:hover {
+  filter: brightness(0.95);
+}
+.green {
+  background: #dce8dd;
+  border-color: #487757;
+}
+.amber {
+  background: #fff3d9;
+  border-color: #ae7720;
+}
+.rust {
+  background: #f8e6e2;
+  border-color: #ad4c45;
+}
+.violet {
+  background: #ebe7f1;
+  border-color: #755f89;
+}
+.closed {
+  opacity: 0.72;
+}
+.month {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  min-width: 0;
+}
+.monthDay {
+  min-width: 0;
+  border-top: 1px solid #dfddd4;
+  padding: 0.12rem;
+}
+.fullMonthDay {
+  min-height: 3.1rem;
+}
+.adjacentMonth {
+  color: #64716a;
+}
+.dayNumber {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 2.55rem;
+  border-radius: 0.5rem;
+  font-size: 0.82rem;
+}
+.dayNumber:hover {
+  background: #edf0e8;
+}
+.dayNumber[aria-current="date"] {
+  text-decoration: underline;
+  font-weight: 700;
+}
+.dayNumber[aria-pressed="true"] {
+  background: #2f493a;
+  color: #fff;
+  font-weight: 700;
+}
+.monthCount {
+  position: absolute;
+  font-size: 0.64rem;
+  right: 0.1rem;
+  bottom: 0.05rem;
+  color: #566b5c;
+}
+.dayNumber[aria-pressed="true"] .monthCount {
+  color: #fff;
+}
+.monthPreviews {
+  display: none;
+  min-width: 0;
+}
+.monthPreview {
+  min-height: 1.65rem;
+  margin-top: 0.12rem;
+  padding: 0.17rem 0.26rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 0.69rem;
+}
+.body :is(button, a, summary, select, input, textarea):focus-visible,
+.event:focus-visible,
+.timelineDay:focus-visible,
+.monthPreview:focus-visible {
+  outline: 2px solid #2f493a;
+  outline-offset: 2px;
+}
+@media (min-width: 64rem) {
+  .timelineMobile {
+    display: none;
+  }
+  .timelineDesktop {
+    display: block;
+  }
+  .fullMonthDay {
+    min-height: 5.4rem;
+  }
+  .monthPreviews {
+    display: grid;
+    gap: 0.05rem;
+  }
+}
+@media (min-width: 80rem) {
+  .body {
+    grid-template-columns: minmax(0, 1.8fr) minmax(17rem, 1fr);
+    align-items: start;
+  }
+}

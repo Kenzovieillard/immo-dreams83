@@ -2,6 +2,7 @@
 import { useCommercialResourceSync } from "./use-commercial-resource-sync";
 
 import Link from "next/link";
+import { agendaEntryHref } from "@/lib/agenda-time";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -428,6 +429,7 @@ export function EstimationDetailConnected({
         description={`${commercialLabel(detail.status)} · Réf. ${detail.reference ?? "—"} · ${detail.contactName}`}
         action={
           <>
+            <Link href={agendaEntryHref("estimation", detail.id, detail.appointmentAt)} className={commercialSecondaryButton}>Voir dans l’agenda</Link>
             {!detail.convertedPropertyId ? (
               <button
                 onClick={() => setTransformOpen(true)}

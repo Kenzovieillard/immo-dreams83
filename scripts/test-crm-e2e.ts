@@ -7,6 +7,7 @@ import { createClient } from "@supabase/supabase-js";
 import { chromium, expect, type Browser, type BrowserContext, type Page, type Request as BrowserRequest } from "@playwright/test";
 import type { Database } from "../src/types/supabase";
 import { verifyPropertyWorkspace } from "./test-property-workspace";
+import { verifyAgendaWorkspace } from "./test-agenda-workspace";
 
 type JsonObject = Record<string, unknown>;
 
@@ -1595,13 +1596,18 @@ async function main() {
     server = startServer();
     await waitForServer();
     adminCookie = await login(adminEmail);
-    if (process.argv.includes("--properties")) {
+    if (process.argv.includes("--properties") || process.argv.includes("--agenda")) {
       browser = await chromium.launch({ headless: true, executablePath: chromeExecutable() });
       const writer = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
       const reader = await browser.newContext();
       await addAdminCookies(writer);
       await addAdminCookies(reader, await login(readOnlyEmail));
-      await verifyPropertyWorkspace({
+      if (process.argv.includes("--agenda")) await verifyAgendaWorkspace({
+        browserContext: writer, readOnlyContext: reader, supabase, baseUrl, runId,
+        adminId: ids.adminUserId, readerId: ids.readOnlyUserId, ownerId: ids.sellerContactId,
+        buyerId: ids.buyerContactId, runSql, record,
+      });
+      else await verifyPropertyWorkspace({
         browserContext: writer, readOnlyContext: reader, supabase,
         anonymous: createClient<Database>(supabaseUrl, anonKey, { auth: { persistSession: false } }),
         baseUrl, runId, adminId: ids.adminUserId, ownerId: ids.sellerContactId,

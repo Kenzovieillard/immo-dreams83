@@ -40,7 +40,7 @@ const mainItems: SidebarItem[] = [
 
 const resourceItems: SidebarItem[] = [
   { value: "properties", label: "Biens", icon: Building2 },
-  { value: "activities", label: "Agenda", icon: CalendarDays },
+  { value: "agenda", label: "Agenda", icon: CalendarDays },
   { value: "statistics", label: "Statistiques", icon: BarChart3 },
 ];
 

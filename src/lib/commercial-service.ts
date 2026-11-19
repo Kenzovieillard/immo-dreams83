@@ -472,7 +472,7 @@ function estimationSummary(
     propertyType: row.property_type,
     surface: row.surface,
     rooms: row.rooms,
-    appointmentAt: row.appointment_at,
+    appointmentAt: row.agenda_details && typeof row.agenda_details === "object" && !Array.isArray(row.agenda_details) && row.agenda_details.state === "cancelled" ? null : row.appointment_at,
     timeSlot: row.time_slot,
     assignedTo: row.assigned_to,
     assignedToName: profile?.full_name ?? profile?.email ?? null,

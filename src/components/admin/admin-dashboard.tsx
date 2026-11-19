@@ -44,6 +44,7 @@ import { CrmRivieraContacts } from "@/components/admin/crm-riviera-contacts";
 import { CrmRivieraHeader } from "@/components/admin/crm-riviera-header";
 import { CrmRivieraOnboarding } from "@/components/admin/crm-riviera-onboarding";
 import { PropertyWorkspace } from "@/components/admin/properties/property-workspace";
+import { AgendaWorkspace } from "@/components/admin/agenda/agenda-workspace";
 import { OfferComposer } from "@/components/admin/offer-composer";
 import { PipelineDossierDrawer } from "@/components/admin/pipeline-dossier-drawer";
 import { PipelineReminderComposer } from "@/components/admin/pipeline-reminder-composer";
@@ -1607,7 +1608,7 @@ function BentoDesignDashboard({
             setActiveTab("contacts");
           }}
           onOpenPipeline={() => setActiveTab("pipeline")}
-          onPlanAppointment={() => setActiveTab("pipeline")}
+          onPlanAppointment={() => setActiveTab("agenda")}
         />
       );
     }
@@ -1728,7 +1729,7 @@ function BentoDesignDashboard({
       </BentoCard>
 
       <BentoCard span="medium" title="Agenda" description="Visites et rendez-vous du jour.">
-        <BentoEmptyState title="Aucune visite programmee" description="Le module agenda sera relie aux rendez-vous V3." />
+        <Button variant="outline" onClick={() => setActiveTab("agenda")}>Ouvrir l’agenda</Button>
       </BentoCard>
 
       <BentoCard span="medium" title="Mandats" description="Suivi des echeances commerciales.">
@@ -4983,6 +4984,15 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
   const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(connected);
   const [activeTab, setActiveTab] = useState<AdminTab>(initialTab);
+  useEffect(() => {
+    function restoreTab() {
+      const tab = new URLSearchParams(window.location.search).get("tab");
+      if (tab === "agenda" || tab === "overview" || tab === "properties" || tab === "contacts" || tab === "activities" || tab === "statistics" || tab === "legacyReview") setActiveTab(tab);
+      else if (!tab) setActiveTab("overview");
+    }
+    window.addEventListener("popstate", restoreTab);
+    return () => window.removeEventListener("popstate", restoreTab);
+  }, []);
   const [contactCreateOpen, setContactCreateOpen] = useState(false);
   const [contactSearch, setContactSearch] = useState(initialSearch);
   const [selectedContactId, setSelectedContactId] = useState<string | null>(initialContactId);
@@ -5252,6 +5262,7 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
       const href = commercialHrefForTab(tab);
       if (href) router.push(href);
       else {
+        if (tab === "agenda" || activeTab === "agenda") router.push(`/admin?tab=${tab}`);
         setActiveTab(tab);
         if (tab !== "contacts") setSelectedContactId(null);
       }
@@ -5478,6 +5489,9 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
                     />
                   )}
                 />
+              </TabsContent>
+              <TabsContent value="agenda" className="w-full min-w-0">
+                <AgendaWorkspace onChanged={() => { void refreshPipeline(); }} />
               </TabsContent>
               <TabsContent value="activities" className="w-full">
                 <ActivityPanel

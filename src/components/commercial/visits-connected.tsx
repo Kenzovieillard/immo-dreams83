@@ -2,6 +2,7 @@
 import { useCommercialResourceSync } from "./use-commercial-resource-sync";
 
 import Link from "next/link";
+import { agendaEntryHref } from "@/lib/agenda-time";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
@@ -296,6 +297,7 @@ export function VisitDetailConnected({
         description={`${detail.contactName ?? "Contact non relié"} · ${new Date(detail.startsAt).toLocaleString("fr-FR")}`}
         action={
           <>
+            <Link href={agendaEntryHref("appointment", detail.id, detail.startsAt)} className={commercialSecondaryButton}>Voir dans l’agenda</Link>
             {detail.offerId ? (
               <Link
                 href={"/commercial/offres/" + detail.offerId}

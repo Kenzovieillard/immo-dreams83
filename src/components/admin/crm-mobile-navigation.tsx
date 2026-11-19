@@ -38,6 +38,7 @@ export type CrmTab =
   | "estimations"
   | "legacyReview"
   | "properties"
+  | "agenda"
   | "activities"
   | "statistics";
 
@@ -72,6 +73,7 @@ export const crmTabMeta: Record<CrmTab, { title: string; description: string }> 
     title: "Biens",
     description: "Catalogue, qualité et publication.",
   },
+  agenda: { title: "Agenda & Tâches", description: "Planification, échéances et rappels internes." },
   activities: {
     title: "Activités",
     description: "Historique opérationnel de l'agence.",
@@ -89,6 +91,7 @@ const primaryItems: NavigationItem[] = [
 ];
 
 const secondaryItems: NavigationItem[] = [
+  { value: "agenda", label: "Agenda", icon: CalendarDays },
   { value: "legacyReview", label: "Anciennes demandes", icon: ListChecks },
   { value: "activities", label: "Activités", icon: History },
   { value: "statistics", label: "Statistiques", icon: BarChart3 },

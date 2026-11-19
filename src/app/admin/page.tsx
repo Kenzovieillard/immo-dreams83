@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { AdminDashboard } from "@/components/admin/admin-dashboard";
+import type { CrmTab } from "@/components/admin/crm-mobile-navigation";
 import { getAdminSession, hasAdminPermission } from "@/lib/admin-auth";
 import { commercialHrefForTab } from "@/lib/commercial-navigation";
 
@@ -9,7 +10,7 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false, nocache: true },
 };
 
-const validTabs = new Set(["overview", "pipeline", "contacts", "estimations", "legacyReview", "properties", "activities", "statistics"]);
+const validTabs = new Set(["overview", "pipeline", "contacts", "estimations", "legacyReview", "properties", "agenda", "activities", "statistics"]);
 
 export default async function AdminPage({ searchParams }: { searchParams: Promise<{ tab?: string; contact?: string; property?: string; q?: string; dossier?: string }> }) {
   const session = await getAdminSession();
@@ -26,10 +27,11 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       : "";
     redirect(`${commercialHref}${suffix}`);
   }
-  const initialTab = validTabs.has(query.tab ?? "") ? query.tab as "overview" | "pipeline" | "contacts" | "estimations" | "legacyReview" | "properties" | "activities" | "statistics" : "overview";
+  const initialTab = validTabs.has(query.tab ?? "") ? query.tab as CrmTab : "overview";
 
   return (
     <AdminDashboard
+      key={`${initialTab}:${query.contact ?? ""}:${query.property ?? ""}`}
       contacts={[]}
       estimations={[]}
       activities={[]}
