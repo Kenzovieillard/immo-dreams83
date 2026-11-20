@@ -379,6 +379,30 @@ export type Database = {
           },
         ]
       }
+      crm_sales: {
+        Row: {
+          property_id: string
+          advisor_id: string | null
+          signed_on: string
+          sale_price: number
+          fee_excl_tax: number
+          recorded_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          property_id: string
+          advisor_id?: string | null
+          signed_on: string
+          sale_price: number
+          fee_excl_tax: number
+          recorded_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Database["public"]["Tables"]["crm_sales"]["Insert"]>
+        Relationships: []
+      }
       contacts: {
         Row: {
           active_prospect: boolean
@@ -2964,6 +2988,18 @@ export type Database = {
       }
     }
     Functions: {
+      record_crm_sale: {
+        Args: {
+          p_actor: string
+          p_property: string
+          p_advisor: string | null
+          p_signed_on: string
+          p_sale_price: number
+          p_fee: number
+          p_expected: string | null
+        }
+        Returns: string
+      }
       apply_agenda_mutation: {
         Args: { actor_key: string; request_key: string; payload: Json }
         Returns: Json

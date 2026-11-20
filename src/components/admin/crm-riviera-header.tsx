@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowLeft,
@@ -102,6 +103,7 @@ function SidebarButton({
 export function CrmRivieraHeader({
   activeTab,
   onTabChange,
+  statisticsNavigation,
   guardCommercialNavigation,
   connected,
   loading,
@@ -119,6 +121,7 @@ export function CrmRivieraHeader({
 }: {
   activeTab: CrmTab;
   onTabChange: (tab: CrmTab) => void;
+  statisticsNavigation?: ReactNode;
   guardCommercialNavigation?: (href: string) => boolean;
   connected: boolean;
   loading: boolean;
@@ -186,12 +189,12 @@ export function CrmRivieraHeader({
         </div>
       </header>
 
-      <aside className="fixed inset-y-0 left-0 z-50 hidden w-60 flex-col bg-[var(--crm-riviera-bg-header)] px-5 py-6 text-white md:flex">
+      <aside className="fixed inset-y-0 left-0 z-50 hidden w-60 flex-col overflow-y-auto bg-[var(--crm-riviera-bg-header)] px-5 py-6 text-white md:flex">
         <div>
           <p className="text-lg font-bold tracking-[-0.03em]">IMMO DREAMS83</p>
           <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#b8c7b9]">CRM Riviera v2</p>
         </div>
-        <div className="my-5 h-px bg-white/10" />
+        <div className="my-5 h-px shrink-0 bg-white/10" />
         <nav aria-label="Navigation principale du CRM" className="grid gap-1">
           {mainItems.map((item) => <SidebarButton key={item.value} item={item} active={activeTab === item.value} onSelect={onTabChange} />)}
           <CommercialSidebarMenu icon={Target}>
@@ -212,10 +215,11 @@ export function CrmRivieraHeader({
           </CommercialSidebarMenu>
           <div className="mt-1 grid gap-1">
             {resourceItems.map((item) => <SidebarButton key={item.label} item={item} active={activeTab === item.value} onSelect={onTabChange} />)}
+            {statisticsNavigation}
           </div>
         </nav>
 
-        <div className="mt-auto grid gap-3">
+        <div className="mt-auto grid shrink-0 gap-3">
           <div className="h-px bg-white/10" />
           <button type="button" onClick={() => onTabChange("statistics")} className="flex min-h-10 items-center gap-3 rounded-lg px-4 text-[13px] font-medium text-[#cbd5e1] hover:bg-white/8 hover:text-white">
             <Settings className="size-[18px]" /> Paramètres

@@ -8,6 +8,7 @@ import { chromium, expect, type Browser, type BrowserContext, type Page, type Re
 import type { Database } from "../src/types/supabase";
 import { verifyPropertyWorkspace } from "./test-property-workspace";
 import { verifyAgendaWorkspace } from "./test-agenda-workspace";
+import { verifyStatisticsWorkspace } from "./test-statistics-workspace";
 
 type JsonObject = Record<string, unknown>;
 
@@ -1553,6 +1554,7 @@ async function cleanup() {
   if (mandateIdList.length) assertOperation(await supabase.from("mandates").delete().in("id", mandateIdList), "delete mandates");
   if (leadIdList.length) assertOperation(await supabase.from("leads").delete().in("id", leadIdList), "delete leads");
   if (estimationIdList.length) assertOperation(await supabase.from("estimations").delete().in("id", estimationIdList), "delete estimations");
+  if (process.argv.includes("--statistics") && propertyIdList.length) assertOperation(await supabase.from("crm_sales").delete().in("property_id", propertyIdList), "delete recipe sales");
   if (propertyIdList.length) assertOperation(await supabase.from("properties").delete().in("id", propertyIdList), "delete properties");
   if (contactIds.length) assertOperation(await supabase.from("contacts").delete().in("id", contactIds), "delete contacts");
   if (userIds.length) {
@@ -1596,13 +1598,17 @@ async function main() {
     server = startServer();
     await waitForServer();
     adminCookie = await login(adminEmail);
-    if (process.argv.includes("--properties") || process.argv.includes("--agenda")) {
+    if (process.argv.includes("--properties") || process.argv.includes("--agenda") || process.argv.includes("--statistics")) {
       browser = await chromium.launch({ headless: true, executablePath: chromeExecutable() });
       const writer = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
       const reader = await browser.newContext();
       await addAdminCookies(writer);
       await addAdminCookies(reader, await login(readOnlyEmail));
-      if (process.argv.includes("--agenda")) await verifyAgendaWorkspace({
+      if (process.argv.includes("--statistics")) await verifyStatisticsWorkspace({
+        writer, reader, supabase, baseUrl, runId, adminId: ids.adminUserId, readerId: ids.readOnlyUserId,
+        contactId: ids.buyerContactId, onPropertyCreated: (id) => { ids.propertyId = id; }, record,
+      });
+      else if (process.argv.includes("--agenda")) await verifyAgendaWorkspace({
         browserContext: writer, readOnlyContext: reader, supabase, baseUrl, runId,
         adminId: ids.adminUserId, readerId: ids.readOnlyUserId, ownerId: ids.sellerContactId,
         buyerId: ids.buyerContactId, runSql, record,

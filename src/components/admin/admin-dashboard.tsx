@@ -42,6 +42,7 @@ import {
 } from "@/components/admin/crm-mobile-navigation";
 import { CrmRivieraContacts } from "@/components/admin/crm-riviera-contacts";
 import { CrmRivieraHeader } from "@/components/admin/crm-riviera-header";
+import { StatisticsSidebarLinks, StatisticsWorkspace } from "@/components/admin/statistics/statistics-workspace";
 import { CrmRivieraOnboarding } from "@/components/admin/crm-riviera-onboarding";
 import { PropertyWorkspace } from "@/components/admin/properties/property-workspace";
 import { AgendaWorkspace } from "@/components/admin/agenda/agenda-workspace";
@@ -1796,98 +1797,6 @@ function BentoDesignDashboard({
           <MetricLine label="Biens sans DPE/GES" value={metrics.propertiesWithoutDiagnostics} />
           <MetricLine label="Biens non mis a la une" value={metrics.propertiesNotFeatured} />
           <MetricLine label="GA4" value="A connecter" />
-        </div>
-      </BentoCard>
-    </BentoGrid>
-  );
-}
-
-function BentoStatisticsPanel({ metrics }: { metrics: AdminMetrics }) {
-  const leadMax = Math.max(metrics.totalLeads, 1);
-  const propertyMax = Math.max(metrics.totalProperties, 1);
-  const cityMax = Math.max(...metrics.propertiesByCity.map((item) => item.count), 1);
-  const leadCityMax = Math.max(...metrics.leadsByCity.map((item) => item.count), 1);
-  const activityMax = Math.max(...metrics.activitiesByEntity.map((item) => item.count), 1);
-
-  return (
-    <BentoGrid>
-      <div className="grid gap-4 md:col-span-6 md:grid-cols-2 lg:col-span-12 lg:grid-cols-4">
-        <KpiCard label="Leads actifs" value={metrics.totalLeads} description="Contacts et estimations non archives." />
-        <KpiCard label="Conversion mandat" value={formatPercentage(metrics.conversionRate)} tone="orange" />
-        <KpiCard label="Prix moyen" value={formatPrice(Math.round(metrics.averagePrice))} />
-        <KpiCard
-          label="Prix moyen / m2"
-          value={metrics.averagePricePerSquareMeter ? `${Math.round(metrics.averagePricePerSquareMeter).toLocaleString("fr-FR")} EUR/m2` : "Non calculable"}
-        />
-      </div>
-
-      <BentoCard span="wide" title="Performance leads" description="Le graphique principal conserve plus d'espace car il pilote la priorite commerciale.">
-        <MetricLine label="Contacts" value={metrics.contacts} max={leadMax} />
-        <MetricLine label="Estimations" value={metrics.estimations} max={leadMax} />
-        <MetricLine label="Nouveaux" value={metrics.newLeads} max={leadMax} />
-        <MetricLine label="Contactes" value={metrics.contactedLeads} max={leadMax} />
-        <MetricLine label="Rendez-vous" value={metrics.appointments} max={leadMax} />
-        <MetricLine label="Mandats signes" value={metrics.mandateSigned} max={leadMax} />
-        <MetricLine label="Perdus" value={metrics.lostLeads} max={leadMax} />
-      </BentoCard>
-
-      <BentoCard span="medium" title="Performance formulaires" description="Qualite du volume entrant.">
-        <MetricLine label="Demandes contact" value={metrics.contactSubmissions} />
-        <MetricLine label="Demandes estimation" value={metrics.estimationSubmissions} />
-        <MetricLine label="Ratio estimation/contact" value={Number.isFinite(metrics.estimationContactRatio) ? metrics.estimationContactRatio.toFixed(2) : "Non calculable"} />
-        <MetricLine label="Derniere soumission" value={formatDateTime(metrics.latestSubmissionDate)} />
-      </BentoCard>
-
-      <BentoCard span="large" title="Portefeuille de biens" description="Repartition des biens par statut et type.">
-        <MetricLine label="Disponibles" value={metrics.availableProperties} max={propertyMax} />
-        <MetricLine label="Sous offre" value={metrics.underOfferProperties} max={propertyMax} />
-        <MetricLine label="Vendus" value={metrics.soldProperties} max={propertyMax} />
-        <MetricLine label="A la une" value={metrics.featuredProperties} max={propertyMax} />
-        <MetricLine label="Appartements" value={metrics.apartments} max={propertyMax} />
-        <MetricLine label="Maisons" value={metrics.houses} max={propertyMax} />
-        <MetricLine label="Terrains" value={metrics.lands} max={propertyMax} />
-        <MetricLine label="Locaux commerciaux" value={metrics.commercialProperties} max={propertyMax} />
-        <MetricLine label="Stationnements" value={metrics.parkingProperties} max={propertyMax} />
-        <MetricLine label="Autres biens" value={metrics.otherProperties} max={propertyMax} />
-        <MetricLine label="Surface moyenne" value={`${Math.round(metrics.averageSurface)} m2`} />
-      </BentoCard>
-
-      <BentoCard span="large" title="Biens par ville" description="Lecture locale du portefeuille.">
-        {metrics.propertiesByCity.length ? (
-          metrics.propertiesByCity.slice(0, 6).map((item) => (
-            <div key={item.city} className="grid gap-2">
-              <MetricLine label={item.city} value={item.count} max={cityMax} />
-              <p className="text-xs text-gray-500">Prix moyen : {formatPrice(item.averagePrice)}</p>
-            </div>
-          ))
-        ) : (
-          <BentoEmptyState title="Aucune ville renseignee" description="Les biens importes alimenteront cette analyse." />
-        )}
-      </BentoCard>
-
-      <BentoCard span="medium" title="Leads par ville" description="Origine geographique des demandes.">
-        {metrics.leadsByCity.length ? (
-          metrics.leadsByCity.slice(0, 6).map((item) => (
-            <MetricLine key={item.city} label={item.city} value={item.count} max={leadCityMax} />
-          ))
-        ) : (
-          <BentoEmptyState title="Aucune ville renseignee" description="Les prochaines demandes completeront ce bloc." />
-        )}
-      </BentoCard>
-
-      <BentoCard span="medium" title="Statistiques d'activite" description="Volume et recence des actions CRM.">
-        <MetricLine label="Activites totales" value={metrics.totalActivities} />
-        {metrics.activitiesByEntity.map((item) => (
-          <MetricLine key={item.label} label={item.label} value={item.count} max={activityMax} />
-        ))}
-        <MetricLine label="Derniere activite" value={formatDateTime(metrics.latestActivityDate)} />
-      </BentoCard>
-
-      <BentoCard span="full" variant="muted" title="Statistiques site internet" description="Aucune fausse donnee n'est affichee tant que GA4 n'est pas connecte.">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          {["Sessions", "Utilisateurs", "Pages vues", "Sources de trafic", "Conversions GA4"].map((label) => (
-            <MetricLine key={label} label={label} value="A connecter" />
-          ))}
         </div>
       </BentoCard>
     </BentoGrid>
@@ -5262,7 +5171,7 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
       const href = commercialHrefForTab(tab);
       if (href) router.push(href);
       else {
-        if (tab === "agenda" || activeTab === "agenda") router.push(`/admin?tab=${tab}`);
+        if (tab === "agenda" || activeTab === "agenda" || tab === "statistics" || activeTab === "statistics") router.push(`/admin?tab=${tab}`);
         setActiveTab(tab);
         if (tab !== "contacts") setSelectedContactId(null);
       }
@@ -5332,6 +5241,7 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
         guardCommercialNavigation={guardCommercialNavigation}
         activeTab={activeTab}
         onTabChange={changeTab}
+        statisticsNavigation={activeTab === "statistics" ? <StatisticsSidebarLinks /> : undefined}
         connected={connected}
         loading={loading}
         userName={userName}
@@ -5367,7 +5277,11 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
         ) : null}
 
         <Tabs value={activeTab} onValueChange={(value) => changeTab(value as AdminTab)} className="w-full min-w-0 gap-6 sm:gap-8">
-          {loading ? (
+          {activeTab === "statistics" ? (
+            <TabsContent value="statistics" className="w-full min-w-0">
+              <StatisticsWorkspace />
+            </TabsContent>
+          ) : loading ? (
             <CrmLoadingState />
           ) : loadError ? (
             <CrmLoadErrorState message={loadError} />
@@ -5509,9 +5423,6 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
                   activityVisibility={activityVisibility}
                   setActivityVisibility={setActivityVisibility}
                 />
-              </TabsContent>
-              <TabsContent value="statistics" className="w-full">
-                <BentoStatisticsPanel metrics={metrics} />
               </TabsContent>
             </>
           )}
