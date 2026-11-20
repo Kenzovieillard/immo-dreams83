@@ -9,6 +9,7 @@ import type { Database } from "../src/types/supabase";
 import { verifyPropertyWorkspace } from "./test-property-workspace";
 import { verifyAgendaWorkspace } from "./test-agenda-workspace";
 import { verifyStatisticsWorkspace } from "./test-statistics-workspace";
+import { verifySettingsWorkspace } from "./test-settings-workspace";
 
 type JsonObject = Record<string, unknown>;
 
@@ -1438,6 +1439,12 @@ async function verifyStats() {
 async function cleanup() {
   await dropFailureTrigger();
   const contactIds = [ids.sellerContactId, ids.buyerContactId, ids.rollbackContactId].filter((id): id is string => Boolean(id));
+  if (process.argv.includes("--settings")) {
+    const imported = await supabase.from("contacts").select("id").eq("email", `${runId.toLowerCase()}-csv@example.test`)
+      .eq("name", `${runId} Import`).eq("contact_source", "IMPORT_CSV");
+    assert.ifError(imported.error);
+    for (const row of imported.data ?? []) contactIds.push(row.id);
+  }
   const userIds = [ids.adminUserId, ids.readOnlyUserId].filter((id): id is string => Boolean(id));
   const estimationIds = new Set(
     [ids.estimationId, ids.rollbackEstimationId].filter((id): id is string => Boolean(id)),
@@ -1578,6 +1585,11 @@ async function cleanup() {
     assert.ifError(query.error);
     assert.equal(query.count, 0);
   }
+  if (process.argv.includes("--settings")) {
+    const imported = await supabase.from("contacts").select("id", { count: "exact", head: true }).eq("email", `${runId.toLowerCase()}-csv@example.test`);
+    assert.ifError(imported.error);
+    assert.equal(imported.count, 0);
+  }
   assert.equal(await readPipelineStatsTotal(), baselinePipelineTotal);
   record("Cleanup", `${runId} → 0 enregistrement restant`);
   record(
@@ -1598,13 +1610,17 @@ async function main() {
     server = startServer();
     await waitForServer();
     adminCookie = await login(adminEmail);
-    if (process.argv.includes("--properties") || process.argv.includes("--agenda") || process.argv.includes("--statistics")) {
+    if (["--properties", "--agenda", "--statistics", "--settings"].some(flag => process.argv.includes(flag))) {
       browser = await chromium.launch({ headless: true, executablePath: chromeExecutable() });
       const writer = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
       const reader = await browser.newContext();
       await addAdminCookies(writer);
       await addAdminCookies(reader, await login(readOnlyEmail));
-      if (process.argv.includes("--statistics")) await verifyStatisticsWorkspace({
+      if (process.argv.includes("--settings")) await verifySettingsWorkspace({
+        writer, reader, supabase, baseUrl, runId, adminId: ids.adminUserId, readerId: ids.readOnlyUserId,
+        contactId: ids.buyerContactId, adminEmail, password: userPassword, record,
+      });
+      else if (process.argv.includes("--statistics")) await verifyStatisticsWorkspace({
         writer, reader, supabase, baseUrl, runId, adminId: ids.adminUserId, readerId: ids.readOnlyUserId,
         contactId: ids.buyerContactId, onPropertyCreated: (id) => { ids.propertyId = id; }, record,
       });

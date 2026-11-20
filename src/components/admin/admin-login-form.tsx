@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label";
 export function AdminLoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [mfa, setMfa] = useState(false);
+  const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "error" | "success"; message: string } | null>(null);
 
@@ -22,15 +24,16 @@ export function AdminLoginForm() {
     const response = await fetch("/api/admin/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, code, redirect: new URLSearchParams(window.location.search).get("redirect") }),
     }).catch(() => null);
     const payload = response
-      ? ((await response.json().catch(() => null)) as { message?: string; redirectTo?: string } | null)
+      ? ((await response.json().catch(() => null)) as { message?: string; redirectTo?: string; mfaRequired?: boolean } | null)
       : null;
 
     setLoading(false);
 
     if (!response?.ok) {
+      setMfa(payload?.mfaRequired === true);
       setFeedback({
         type: "error",
         message: payload?.message ?? "Connexion impossible pour le moment.",
@@ -71,7 +74,7 @@ export function AdminLoginForm() {
                   type="email"
                   autoComplete="email"
                   value={email}
-                  onChange={(event) => setEmail(event.target.value)}
+                  onChange={(event) => { setEmail(event.target.value); setMfa(false); setCode(""); }}
                   className="bg-white text-gray-900 placeholder:text-gray-400"
                   placeholder="prenom@immo-dreams83.fr"
                   required
@@ -84,12 +87,17 @@ export function AdminLoginForm() {
                   type="password"
                   autoComplete="current-password"
                   value={password}
-                  onChange={(event) => setPassword(event.target.value)}
+                  onChange={(event) => { setPassword(event.target.value); setMfa(false); setCode(""); }}
                   className="bg-white text-gray-900 placeholder:text-gray-400"
                   placeholder="Mot de passe Supabase Auth"
                   required
                 />
               </div>
+              {mfa ? <div className="grid gap-2">
+                <Label htmlFor="admin-code">Code de vérification</Label>
+                <Input id="admin-code" inputMode="numeric" pattern="[0-9]{6}" autoComplete="one-time-code"
+                  value={code} maxLength={6} onChange={event => setCode(event.target.value.replace(/\D/g, ""))} required />
+              </div> : null}
               {feedback ? (
                 <p
                   className={

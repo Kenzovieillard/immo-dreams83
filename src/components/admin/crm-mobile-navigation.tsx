@@ -16,6 +16,7 @@ import {
   ListChecks,
   LogOut,
   Plus,
+  Settings,
   Target,
 } from "lucide-react";
 import {
@@ -40,7 +41,8 @@ export type CrmTab =
   | "properties"
   | "agenda"
   | "activities"
-  | "statistics";
+  | "statistics"
+  | "settings";
 
 type NavigationItem = {
   value: CrmTab;
@@ -82,6 +84,10 @@ export const crmTabMeta: Record<CrmTab, { title: string; description: string }> 
     title: "Statistiques",
     description: "Indicateurs issus des données disponibles.",
   },
+  settings: {
+    title: "Paramètres",
+    description: "Configuration de l’agence et de votre compte.",
+  },
 };
 
 const primaryItems: NavigationItem[] = [
@@ -95,6 +101,7 @@ const secondaryItems: NavigationItem[] = [
   { value: "legacyReview", label: "Anciennes demandes", icon: ListChecks },
   { value: "activities", label: "Activités", icon: History },
   { value: "statistics", label: "Statistiques", icon: BarChart3 },
+  { value: "settings", label: "Paramètres", icon: Settings },
 ];
 
 const commercialIcons = {

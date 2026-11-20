@@ -379,6 +379,18 @@ export type Database = {
           },
         ]
       }
+      crm_agency_settings: {
+        Row: { id: boolean; information: Json; updated_at: string }
+        Insert: { id?: boolean; information: Json; updated_at?: string }
+        Update: { information?: Json; updated_at?: string }
+        Relationships: []
+      }
+      crm_user_settings: {
+        Row: { user_id: string; preferences: Json; inbox_seen_at: string | null }
+        Insert: { user_id: string; preferences?: Json; inbox_seen_at?: string | null }
+        Update: { preferences?: Json; inbox_seen_at?: string | null }
+        Relationships: []
+      }
       crm_sales: {
         Row: {
           property_id: string
@@ -2988,6 +3000,20 @@ export type Database = {
       }
     }
     Functions: {
+      save_crm_agency: { Args: { p_actor: string; p_information: Json; p_expected: string | null }; Returns: string }
+      update_crm_team_member: {
+        Args: { p_actor: string; p_member: string; p_name: string; p_role: Database["public"]["Enums"]["admin_role"]; p_active: boolean; p_expected: string }
+        Returns: string
+      }
+      read_crm_team: {
+        Args: { p_actor: string }
+        Returns: { id: string; email: string; full_name: string | null; role: Database["public"]["Enums"]["admin_role"]; is_active: boolean; updated_at: string; last_sign_in_at: string | null }[]
+      }
+      read_crm_sessions: {
+        Args: { p_actor: string }
+        Returns: { id: string; created_at: string; last_activity: string; user_agent: string | null }[]
+      }
+      import_crm_contacts: { Args: { p_actor: string; p_rows: Json }; Returns: number }
       record_crm_sale: {
         Args: {
           p_actor: string

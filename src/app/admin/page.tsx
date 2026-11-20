@@ -4,13 +4,14 @@ import { AdminDashboard } from "@/components/admin/admin-dashboard";
 import type { CrmTab } from "@/components/admin/crm-mobile-navigation";
 import { getAdminSession, hasAdminPermission } from "@/lib/admin-auth";
 import { commercialHrefForTab } from "@/lib/commercial-navigation";
+import { getCrmAgencyInformation } from "@/lib/crm-settings-service";
 
 export const metadata: Metadata = {
   title: "Administration locale",
   robots: { index: false, follow: false, nocache: true },
 };
 
-const validTabs = new Set(["overview", "pipeline", "contacts", "estimations", "legacyReview", "properties", "agenda", "activities", "statistics"]);
+const validTabs = new Set(["overview", "pipeline", "contacts", "estimations", "legacyReview", "properties", "agenda", "activities", "statistics", "settings"]);
 
 export default async function AdminPage({ searchParams }: { searchParams: Promise<{ tab?: string; contact?: string; property?: string; q?: string; dossier?: string }> }) {
   const session = await getAdminSession();
@@ -28,6 +29,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     redirect(`${commercialHref}${suffix}`);
   }
   const initialTab = validTabs.has(query.tab ?? "") ? query.tab as CrmTab : "overview";
+  const agency = await getCrmAgencyInformation();
 
   return (
     <AdminDashboard
@@ -38,6 +40,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       properties={[]}
       connected={connected}
       userName={session.profile.full_name ?? session.user.email}
+      agencyName={agency.name}
       userRole={session.profile.role}
       canWriteProperties={hasAdminPermission(session.profile.role, "property.write")}
       initialTab={initialTab}

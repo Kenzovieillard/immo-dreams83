@@ -6,6 +6,7 @@ import {
 } from "@/lib/commercial-access";
 import { requireAdminSession, writeAdminAuditLog } from "@/lib/admin-auth";
 import { generateEstimationPdf } from "@/lib/commercial-pdf";
+import { getCrmAgencyInformation } from "@/lib/crm-settings-service";
 import { loadCommercialEstimations } from "@/lib/commercial-service";
 import { estimationMutationSchema } from "@/lib/commercial-validation";
 import { getSupabaseAdminClient } from "@/lib/supabase";
@@ -133,7 +134,7 @@ export async function POST(request: NextRequest) {
           { success: false, message: "Estimation introuvable." },
           { status: 404 },
         );
-      const bytes = await generateEstimationPdf(payload.detail);
+      const bytes = await generateEstimationPdf(payload.detail, await getCrmAgencyInformation());
       const storagePath = `${input.id}/${Date.now()}-rapport-estimation.pdf`;
       const upload = await supabase.storage
         .from("estimation-reports")

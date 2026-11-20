@@ -48,7 +48,7 @@ const sourceNames: Record<string, string> = {
   WEBSITE: "Site web", WEB: "Site web", SITE: "Site web", SITE_WEB: "Site web",
   REFERRAL: "Recommandation", RECOMMENDATION: "Recommandation", PORTAL: "Portails",
   SOCIAL: "Réseaux sociaux", SOCIAL_MEDIA: "Réseaux sociaux", PHONE: "Téléphone",
-  MANUAL: "Saisie CRM", LESTY_GED_CONTACT: "Import Lesty", LEGACY_IMPORT: "Import historique",
+  MANUAL: "Saisie CRM", IMPORT_CSV: "Import CSV", LESTY_GED_CONTACT: "Import Lesty", LEGACY_IMPORT: "Import historique",
 };
 const typeNames: Record<string, string> = {
   apartment: "Appartement", house: "Maison", villa: "Villa", land: "Terrain",

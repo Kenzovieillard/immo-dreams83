@@ -21,9 +21,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CommercialSidebarMenu } from "@/components/commercial/commercial-sidebar-menu";
+import { SettingsInbox } from "@/components/admin/settings/settings-inbox";
 import { contactQualificationStatusLabels, contactRoleLabels } from "@/lib/crm";
 import { cn } from "@/lib/utils";
 import { commercialLinks } from "@/lib/commercial-navigation";
+import { settingsHref } from "@/lib/crm-settings";
 import type { AdminCrmLead } from "@/types/crm";
 import { crmTabMeta, type CrmTab } from "./crm-mobile-navigation";
 import { RivieraStatusBadge, rivieraPrimaryButtonClass } from "./crm-riviera-ui";
@@ -104,10 +106,12 @@ export function CrmRivieraHeader({
   activeTab,
   onTabChange,
   statisticsNavigation,
+  settingsConnected = false,
   guardCommercialNavigation,
   connected,
   loading,
   userName,
+  agencyName = "IMMO DREAMS83",
   priorityCount,
   visitCount,
   contactsToQualify,
@@ -122,10 +126,12 @@ export function CrmRivieraHeader({
   activeTab: CrmTab;
   onTabChange: (tab: CrmTab) => void;
   statisticsNavigation?: ReactNode;
+  settingsConnected?: boolean;
   guardCommercialNavigation?: (href: string) => boolean;
   connected: boolean;
   loading: boolean;
   userName: string;
+  agencyName?: string;
   priorityCount: number;
   visitCount: number;
   contactsToQualify: number;
@@ -154,7 +160,7 @@ export function CrmRivieraHeader({
       <header className="sticky top-0 z-30 bg-[var(--crm-riviera-bg-header)] text-white md:hidden">
         <div className="grid gap-2 px-5 py-4">
           <div className="flex min-h-5 items-center justify-between gap-4 text-[11px] font-medium">
-            <span className="tracking-[0.08em]">IMMO DREAMS83</span>
+            <span className="min-w-0 truncate tracking-[0.08em]">{agencyName}</span>
             <span className={connected ? "text-[#9db8a2]" : "text-[#dfbd76]"}>
               ● {loading ? "Synchronisation…" : connected ? "Synchronisé" : "Mode local"}
             </span>
@@ -165,7 +171,8 @@ export function CrmRivieraHeader({
                 <ArrowLeft className="size-5" />
               </button>
             ) : null}
-            <h1 className="min-w-0 truncate text-[28px] font-bold leading-9">{mobileTitle}</h1>
+            <h1 className="min-w-0 flex-1 truncate text-[28px] font-bold leading-9">{mobileTitle}</h1>
+            {settingsConnected ? <SettingsInbox canNavigate={guardCommercialNavigation} /> : null}
           </div>
           <p className="truncate text-sm leading-5 text-white/75">{mobileDescription}</p>
           <div className="flex min-h-8 items-center gap-2 overflow-x-auto">
@@ -191,7 +198,7 @@ export function CrmRivieraHeader({
 
       <aside className="fixed inset-y-0 left-0 z-50 hidden w-60 flex-col overflow-y-auto bg-[var(--crm-riviera-bg-header)] px-5 py-6 text-white md:flex">
         <div>
-          <p className="text-lg font-bold tracking-[-0.03em]">IMMO DREAMS83</p>
+          <p className="break-words text-lg font-bold tracking-[-0.03em]">{agencyName}</p>
           <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#b8c7b9]">CRM Riviera v2</p>
         </div>
         <div className="my-5 h-px shrink-0 bg-white/10" />
@@ -221,9 +228,11 @@ export function CrmRivieraHeader({
 
         <div className="mt-auto grid shrink-0 gap-3">
           <div className="h-px bg-white/10" />
-          <button type="button" onClick={() => onTabChange("statistics")} className="flex min-h-10 items-center gap-3 rounded-lg px-4 text-[13px] font-medium text-[#cbd5e1] hover:bg-white/8 hover:text-white">
-            <Settings className="size-[18px]" /> Paramètres
-          </button>
+          <SidebarButton item={{ value: "settings", label: "Paramètres", icon: Settings }} active={activeTab === "settings"} onSelect={onTabChange} />
+          {settingsConnected ? <Link href={settingsHref("security")} onNavigate={event => { if (guardCommercialNavigation?.(settingsHref("security"))) event.preventDefault(); }}
+            className="flex min-h-9 items-center gap-3 rounded-lg px-4 text-[13px] text-[#cbd5e1] hover:bg-white/8 hover:text-white">
+            <UserRound className="size-4" aria-hidden="true" /> Mon compte
+          </Link> : null}
           <div className="flex items-center gap-3 rounded-xl bg-white/6 p-3">
             <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#dce5d7] text-xs font-bold text-[#2f493a]">{initials(userName)}</span>
             <div className="min-w-0 flex-1">
@@ -243,7 +252,7 @@ export function CrmRivieraHeader({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <Button type="button" className={rivieraPrimaryButtonClass} onClick={onCreateContact}><Plus className="size-4" />Créer</Button>
-            <button type="button" aria-label="Notifications" className="relative grid size-10 place-items-center rounded-xl border border-[var(--crm-riviera-border-default)] bg-white text-[var(--crm-riviera-text-secondary)]"><Bell className="size-[18px]" /><span className="absolute right-2 top-2 size-1.5 rounded-full bg-[var(--crm-riviera-status-danger)]" /></button>
+            {settingsConnected ? <SettingsInbox canNavigate={guardCommercialNavigation} /> : <span className="grid size-10 place-items-center" aria-hidden="true"><Bell className="size-[18px]" /></span>}
             <span className="grid size-10 place-items-center rounded-full bg-[var(--crm-riviera-bg-accent)] text-xs font-bold text-[var(--crm-riviera-text-action)]"><UserRound className="size-[18px]" /></span>
           </div>
         </div>

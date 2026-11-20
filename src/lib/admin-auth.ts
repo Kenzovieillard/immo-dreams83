@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { getSupabaseAdminClient, getSupabaseClient } from "@/lib/supabase";
+import { createCrmAuthClient, getSupabaseAdminClient, getSupabaseClient } from "@/lib/supabase";
 import { adminRoles, type AdminProfile, type AdminRole, type AdminSession } from "@/types/admin";
 import type { Json } from "@/types/supabase";
 
@@ -28,7 +28,7 @@ export type AdminPermission =
   | "audit.read"
   | "users.manage";
 
-const permissionMatrix: Record<AdminRole, AdminPermission[]> = {
+export const permissionMatrix: Record<AdminRole, AdminPermission[]> = {
   ADMIN: ["crm.read", "lead.write", "lead.delete", "offer.write", "offer.decide", "property.write", "property.delete", "photo.write", "audit.read", "users.manage"],
   DIRECTOR: ["crm.read", "lead.write", "lead.delete", "offer.write", "offer.decide", "property.write", "property.delete", "photo.write", "audit.read"],
   AGENT: ["crm.read", "lead.write", "offer.write", "property.write", "photo.write"],
@@ -82,8 +82,7 @@ export async function getAdminProfile(user: { id: string; email?: string | null 
     return null;
   }
 
-  const profile = normalizeProfile(data as AdminProfile | null);
-  if (profile) return profile;
+  if (data) return normalizeProfile(data as AdminProfile);
 
   const bootstrapEmails = parseBootstrapEmails();
   if (!bootstrapEmails.includes(user.email.toLowerCase())) return null;
@@ -118,6 +117,7 @@ export async function getAdminSession(): Promise<AdminSession | null> {
 
   const { data, error } = await supabase.auth.getUser(accessToken);
   if (error || !data.user?.email) return null;
+  if (data.user.factors?.some(factor => factor.status === "verified") && crmTokenClaims(accessToken).aal !== "aal2") return null;
 
   const profile = await getAdminProfile({
     id: data.user.id,
@@ -132,6 +132,32 @@ export async function getAdminSession(): Promise<AdminSession | null> {
     },
     profile,
   };
+}
+
+export function crmTokenClaims(accessToken: string): { aal?: string; session_id?: string } {
+  try {
+    return JSON.parse(Buffer.from(accessToken.split(".")[1], "base64url").toString("utf8"));
+  } catch {
+    return {};
+  }
+}
+
+export async function getCrmAuthTokens() {
+  const store = await cookies();
+  return {
+    access_token: store.get(accessTokenCookie)?.value ?? "",
+    refresh_token: store.get(refreshTokenCookie)?.value ?? "",
+  };
+}
+
+export async function getCrmUserAuthClient() {
+  const client = createCrmAuthClient();
+  if (!client) return null;
+  const tokens = await getCrmAuthTokens();
+  if (!tokens.access_token || !tokens.refresh_token) return null;
+  const { data, error } = await client.auth.setSession(tokens);
+  if (error || !data.session) return null;
+  return client;
 }
 
 export async function requireAdminSession(permission: AdminPermission = "crm.read") {

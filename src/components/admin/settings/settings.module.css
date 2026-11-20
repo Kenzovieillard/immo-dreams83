@@ -1,0 +1,124 @@
+.workspace {
+  display: grid;
+  min-width: 0;
+  gap: 2rem;
+  color: #18211f;
+}
+
+.settingsLayout, .content {
+  display: grid;
+  min-width: 0;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.navigation { display: none; }
+.mobileSelect { display: grid; gap: .35rem; }
+
+.navigation button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 2.5rem;
+  padding: .45rem .9rem;
+  border-radius: .5rem;
+  text-align: left;
+  font-size: .875rem;
+  color: #4c5e54;
+}
+
+.navigation button:hover, .navigation button[aria-current] {
+  background: #dce5d7;
+  color: #18211f;
+}
+
+.navigation button[aria-current] { font-weight: 650; }
+
+.card {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+  padding: clamp(.875rem, 2.4vw, 1.5rem);
+  background: #fbfaf7;
+  border: 1px solid #e4e1d7;
+  border-radius: 1rem;
+  box-shadow: 0 2px 8px #17221e12;
+}
+
+.cardTitle {
+  border-bottom: 1px solid #e5e2d8;
+  padding-bottom: .9rem;
+  font-size: 1.125rem;
+  font-weight: 650;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  min-height: 3.5rem;
+  padding-block: .625rem;
+  border-bottom: 1px solid #e7e4dc;
+}
+
+.row > div:first-child { min-width: 0; overflow-wrap: anywhere; }
+.micro { color: #536358; font-size: .6875rem; text-transform: uppercase; }
+.value { margin-top: .15rem; font-size: .875rem; font-weight: 600; }
+.muted { color: #536358; font-size: .75rem; line-height: 1.5; overflow-wrap: anywhere; }
+.empty { color: #536358; font-size: .875rem; padding-block: .6rem; }
+
+.tableWrap { overflow: auto; }
+.table { width: 100%; border-collapse: collapse; font-size: .8125rem; }
+.table td, .table th { border-bottom: 1px solid #e7e4dc; padding: .65rem .7rem; text-align: left; }
+.table th { color: #536358; white-space: nowrap; }
+.table td { min-width: 5.5rem; }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  white-space: nowrap;
+  border-radius: 1rem;
+  background: #dce5d7;
+  padding: .2rem .5rem;
+  font-size: .6875rem;
+  font-weight: 650;
+}
+
+.chip > span { width: .4rem; height: .4rem; border-radius: 50%; background: #4c795b; }
+.chipMuted { background: #efebe1; }
+.chipMuted > span { background: #8b6d39; }
+.identity { display: flex; min-width: 10rem; align-items: center; gap: .5rem; overflow-wrap: anywhere; }
+.avatar { display: grid; flex: 0 0 2rem; height: 2rem; place-items: center; border-radius: 50%; background: #dce5d7; color: #2f493a; font-size: .75rem; font-weight: 700; }
+
+.roleList, .integrations { display: grid; gap: .75rem; }
+.roleList li, .integration { display: flex; gap: .65rem; border: 1px solid #e4e1d7; border-radius: .75rem; padding: .8rem; }
+.roleList li { align-items: center; flex-wrap: wrap; }
+.integration { flex-direction: column; justify-content: space-between; }
+.integration a { align-self: flex-start; background: #f1eee7; }
+.integrationIcon { display: grid; width: 2.2rem; height: 2.2rem; place-items: center; border-radius: .5rem; background: #dce5d7; color: #2f493a; }
+
+.group { border: 0; margin-block: .75rem 1.25rem; }
+.group legend { font-size: .75rem; font-weight: 700; text-transform: uppercase; }
+.switch { display: grid; width: 2.5rem; height: 1.35rem; flex-shrink: 0; align-items: center; padding: 0 .18rem; border-radius: 1rem; background: #dedbd1; }
+.switch[aria-checked="true"] { background: #2f493a; justify-items: end; }
+.switch > span { width: 1rem; height: 1rem; border-radius: 50%; background: #f3b7aa; }
+.switch:focus-visible, .navigation button:focus-visible { outline: 2px solid #2f493a; outline-offset: 2px; }
+.error, .success { padding: .65rem .8rem; border-radius: .5rem; font-size: .875rem; }
+.error { color: #8e3e35; background: #fae9e4; }
+.success { color: #2f493a; background: #e4eddf; }
+
+@media (min-width: 40rem) {
+  .integrations { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (min-width: 62rem) {
+  .settingsLayout { grid-template-columns: minmax(9rem, 14rem) minmax(0, 1fr); gap: 1.75rem; }
+  .navigation { display: grid; }
+  .mobileSelect { display: none; }
+}
+
+@media (min-width: 80rem) {
+  .integrations { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}

@@ -27,6 +27,7 @@ import {
 import { cn } from "@/lib/utils";
 import { commercialLinks } from "@/lib/commercial-navigation";
 import { CommercialSidebarMenu } from "./commercial-sidebar-menu";
+import { SettingsInbox } from "@/components/admin/settings/settings-inbox";
 
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -35,10 +36,12 @@ function isActive(pathname: string, href: string) {
 function SidebarContent({
   pathname,
   userName,
+  agencyName,
   onNavigate,
 }: {
   pathname: string;
   userName: string;
+  agencyName: string;
   onNavigate?: () => void;
 }) {
   const router = useRouter();
@@ -73,7 +76,7 @@ function SidebarContent({
   return (
     <div className="flex h-full flex-col px-5 py-5 text-white">
       <Link href="/commercial/pipeline" onClick={onNavigate} className="block">
-        <p className="text-lg font-bold tracking-[-0.04em]">IMMO DREAMS83</p>
+        <p className="break-words text-lg font-bold tracking-[-0.04em]">{agencyName}</p>
         <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.11em] text-[#b9c9bb]">
           CRM Riviera v2
         </p>
@@ -171,7 +174,7 @@ function SidebarContent({
       <div className="mt-auto grid gap-3">
         <div className="h-px bg-white/10" />
         <Link
-          href="/admin?tab=statistics"
+          href="/admin?tab=settings"
           onClick={onNavigate}
           className={cn(
             baseLink,
@@ -208,9 +211,11 @@ function SidebarContent({
 export function CommercialShell({
   children,
   userName,
+  agencyName = "IMMO DREAMS83",
 }: {
   children: ReactNode;
   userName: string;
+  agencyName?: string;
 }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -225,7 +230,7 @@ export function CommercialShell({
     <QueryClientProvider client={queryClient}>
       <div className="crm-riviera min-h-dvh bg-[#f6f4ef] text-[#18211f]">
         <aside className="fixed inset-y-0 left-0 z-50 hidden w-60 bg-[#17221e] lg:block">
-          <SidebarContent pathname={pathname} userName={userName} />
+          <SidebarContent pathname={pathname} userName={userName} agencyName={agencyName} />
         </aside>
         {mobileOpen ? (
           <div className="fixed inset-0 z-[70] lg:hidden">
@@ -247,6 +252,7 @@ export function CommercialShell({
               <SidebarContent
                 pathname={pathname}
                 userName={userName}
+                agencyName={agencyName}
                 onNavigate={() => setMobileOpen(false)}
               />
             </aside>
@@ -280,13 +286,13 @@ export function CommercialShell({
                 <Plus className="size-4" />
                 Créer
               </Link>
-              <Link
+              {userName === "Aperçu Figma" ? <Link
                 href="/commercial/negociations"
                 aria-label="Notifications de négociation"
                 className="relative grid size-10 place-items-center rounded-full border border-[#dfddd4] bg-[#fbfaf7]"
               >
                 <Bell className="size-[18px]" />
-              </Link>
+              </Link> : <SettingsInbox />}
               <span className="grid size-9 place-items-center rounded-full bg-[#2f493a] text-xs font-bold text-white">
                 {userName.slice(0, 2).toUpperCase()}
               </span>

@@ -2,6 +2,7 @@ import "server-only";
 
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import type { CommercialEstimationDetail } from "@/types/commercial";
+import type { AgencySettings } from "@/lib/crm-settings";
 
 function safeText(value: string | number | null | undefined) {
   return String(value ?? "Non renseigné").replace(/[\u{1F000}-\u{1FAFF}]/gu, "");
@@ -23,20 +24,25 @@ function wrap(text: string, font: PDFFont, size: number, width: number) {
   return lines;
 }
 
-export async function generateEstimationPdf(estimation: CommercialEstimationDetail) {
+export async function generateEstimationPdf(estimation: CommercialEstimationDetail, agency?: AgencySettings) {
   const document = await PDFDocument.create();
   const regular = await document.embedFont(StandardFonts.Helvetica);
   const bold = await document.embedFont(StandardFonts.HelveticaBold);
   const dark = rgb(0.09, 0.13, 0.12);
   const green = rgb(0.18, 0.29, 0.23);
   const orange = rgb(0.91, 0.38, 0.12);
+  const agencyText = (value: string) => [...value].map(character => {
+    try { regular.encodeText(character); return character; } catch { return " "; }
+  }).join("").replace(/\s+/g, " ").trim();
+  const agencyName = agencyText(agency?.name ?? "IMMO DREAMS83") || "IMMO DREAMS83";
+  const brandSize = Math.min(18, 360 / Math.max(1, bold.widthOfTextAtSize(agencyName, 1)));
   let page!: PDFPage;
   let y = 0;
   const newPage = () => {
     page = document.addPage([595.28, 841.89]);
     page.drawRectangle({ x: 0, y: 0, width: 595.28, height: 841.89, color: rgb(0.98, 0.97, 0.94) });
     page.drawRectangle({ x: 0, y: 770, width: 595.28, height: 71.89, color: green });
-    page.drawText("IMMO DREAMS83", { x: 44, y: 802, size: 18, font: bold, color: rgb(1, 1, 1) });
+    page.drawText(agencyName, { x: 44, y: 802, size: brandSize, font: bold, color: rgb(1, 1, 1) });
     page.drawText("Rapport d'estimation immobilière", { x: 44, y: 781, size: 10, font: regular, color: rgb(0.87, 0.91, 0.88) });
     y = 735;
   };
@@ -54,6 +60,15 @@ export async function generateEstimationPdf(estimation: CommercialEstimationDeta
 
   newPage();
   page.drawText(estimation.reference ?? `EST-${estimation.id.slice(0, 8).toUpperCase()}`, { x: 430, y: 805, size: 9, font: bold, color: rgb(1, 1, 1) });
+  if (agency) {
+    const coordinates = [agency.address, agency.phone, agency.email].filter(Boolean).map(agencyText).filter(Boolean);
+    const registration = [agency.siret && `SIRET ${agency.siret}`, agency.professionalCard && `Carte ${agency.professionalCard}`].filter(Boolean).map(agencyText).filter(Boolean);
+    if (coordinates.length || registration.length) {
+      heading("Agence");
+      if (coordinates.length) field("Coordonnées", coordinates.join(" · "));
+      if (registration.length) field("Identifiants", registration.join(" · "));
+    }
+  }
   heading("Propriétaire et bien");
   field("Propriétaire", estimation.contactName);
   field("Coordonnées", `${estimation.contactEmail}${estimation.contactPhone ? ` · ${estimation.contactPhone}` : ""}`);
@@ -80,8 +95,8 @@ export async function generateEstimationPdf(estimation: CommercialEstimationDeta
   ensure(50);
   page.drawText(`Document généré le ${new Intl.DateTimeFormat("fr-FR", { dateStyle: "long", timeStyle: "short", timeZone: "Europe/Paris" }).format(new Date())}`, { x: 44, y: 42, size: 8, font: regular, color: rgb(0.4, 0.45, 0.42) });
   page.drawText("Ce rapport constitue un avis de valeur et non une expertise judiciaire.", { x: 44, y: 29, size: 8, font: regular, color: rgb(0.4, 0.45, 0.42) });
-  document.setTitle(`Estimation ${estimation.reference ?? estimation.id} - IMMO DREAMS83`);
-  document.setAuthor("IMMO DREAMS83");
+  document.setTitle(`Estimation ${estimation.reference ?? estimation.id} - ${agencyName}`);
+  document.setAuthor(agencyName);
   document.setSubject("Rapport d'estimation immobilière");
   return document.save();
 }

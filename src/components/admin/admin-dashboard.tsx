@@ -43,6 +43,7 @@ import {
 import { CrmRivieraContacts } from "@/components/admin/crm-riviera-contacts";
 import { CrmRivieraHeader } from "@/components/admin/crm-riviera-header";
 import { StatisticsSidebarLinks, StatisticsWorkspace } from "@/components/admin/statistics/statistics-workspace";
+import { SettingsWorkspace } from "@/components/admin/settings/settings-workspace";
 import { CrmRivieraOnboarding } from "@/components/admin/crm-riviera-onboarding";
 import { PropertyWorkspace } from "@/components/admin/properties/property-workspace";
 import { AgendaWorkspace } from "@/components/admin/agenda/agenda-workspace";
@@ -1603,7 +1604,7 @@ function BentoDesignDashboard({
           savingStep={onboardingSavingStep}
           saveError={onboardingError}
           onToggleStep={onToggleOnboardingStep}
-          onOpenProfile={() => setActiveTab("statistics")}
+          onOpenProfile={() => setActiveTab("settings")}
           onOpenContacts={() => {
             onCreateContact();
             setActiveTab("contacts");
@@ -1935,6 +1936,7 @@ type Props = {
   properties: Property[];
   connected: boolean;
   userName: string;
+  agencyName?: string;
   userRole: AdminRole;
   initialTab?: AdminTab;
   initialContactId?: string | null;
@@ -4888,7 +4890,7 @@ function scrollToCrmSection(id: string) {
   });
 }
 
-export function AdminDashboard({ contacts, estimations, activities: initialActivities, properties, connected, userName, userRole, initialTab = "overview", initialContactId = null, initialPropertyId = null, initialSearch = "", canWriteProperties = false }: Props) {
+export function AdminDashboard({ contacts, estimations, activities: initialActivities, properties, connected, userName, agencyName, userRole, initialTab = "overview", initialContactId = null, initialPropertyId = null, initialSearch = "", canWriteProperties = false }: Props) {
   const router = useRouter();
   const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(connected);
@@ -4896,7 +4898,7 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
   useEffect(() => {
     function restoreTab() {
       const tab = new URLSearchParams(window.location.search).get("tab");
-      if (tab === "agenda" || tab === "overview" || tab === "properties" || tab === "contacts" || tab === "activities" || tab === "statistics" || tab === "legacyReview") setActiveTab(tab);
+      if (tab === "agenda" || tab === "overview" || tab === "properties" || tab === "contacts" || tab === "activities" || tab === "statistics" || tab === "legacyReview" || tab === "settings") setActiveTab(tab);
       else if (!tab) setActiveTab("overview");
     }
     window.addEventListener("popstate", restoreTab);
@@ -5171,7 +5173,8 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
       const href = commercialHrefForTab(tab);
       if (href) router.push(href);
       else {
-        if (tab === "agenda" || activeTab === "agenda" || tab === "statistics" || activeTab === "statistics") router.push(`/admin?tab=${tab}`);
+        const routedTabs: AdminTab[] = ["agenda", "statistics", "settings"];
+        if (routedTabs.includes(tab) || routedTabs.includes(activeTab)) router.push(`/admin?tab=${tab}`);
         setActiveTab(tab);
         if (tab !== "contacts") setSelectedContactId(null);
       }
@@ -5242,9 +5245,11 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
         activeTab={activeTab}
         onTabChange={changeTab}
         statisticsNavigation={activeTab === "statistics" ? <StatisticsSidebarLinks /> : undefined}
+        settingsConnected={connected}
         connected={connected}
         loading={loading}
         userName={userName}
+        agencyName={agencyName}
         priorityCount={activeTab === "pipeline" ? pipelinePriorityCount : dailyPriorities.length}
         visitCount={overviewSnapshot?.metrics.visits ?? metrics.appointments}
         contactsToQualify={metrics.contactsToQualify}
@@ -5277,7 +5282,11 @@ export function AdminDashboard({ contacts, estimations, activities: initialActiv
         ) : null}
 
         <Tabs value={activeTab} onValueChange={(value) => changeTab(value as AdminTab)} className="w-full min-w-0 gap-6 sm:gap-8">
-          {activeTab === "statistics" ? (
+          {activeTab === "settings" ? (
+            <TabsContent value="settings" className="w-full min-w-0">
+              <SettingsWorkspace />
+            </TabsContent>
+          ) : activeTab === "statistics" ? (
             <TabsContent value="statistics" className="w-full min-w-0">
               <StatisticsWorkspace />
             </TabsContent>

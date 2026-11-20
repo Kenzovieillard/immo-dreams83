@@ -8,7 +8,8 @@ export function proxy(request: NextRequest) {
   if ((pathname.startsWith("/admin") || pathname.startsWith("/commercial")) && !isLoginPage && !hasAdminCookie) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/admin/login";
-    loginUrl.searchParams.set("redirect", pathname);
+    loginUrl.search = "";
+    loginUrl.searchParams.set("redirect", pathname + request.nextUrl.search);
     return NextResponse.redirect(loginUrl);
   }
 
