@@ -277,9 +277,12 @@ export async function verifyPropertyWorkspace({
       "Description de recette sur la base isolée.",
     );
     await description.fill("Modification à abandonner.");
-    await page
+    const crmNavigation = page.getByRole("navigation", {
+      name: "Navigation principale du CRM",
+    });
+    await crmNavigation.getByRole("button", { name: "Commercial" }).click();
+    await crmNavigation
       .getByRole("link", { name: "Pipeline", exact: true })
-      .first()
       .click();
     await leave.getByRole("button", { name: "Continuer la saisie" }).click();
     await expect(description).toHaveValue("Modification à abandonner.");

@@ -8,7 +8,6 @@ import {
   Bell,
   Building2,
   CalendarDays,
-  ChevronDown,
   ContactRound,
   LayoutDashboard,
   LogOut,
@@ -20,6 +19,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CommercialSidebarMenu } from "@/components/commercial/commercial-sidebar-menu";
 import { contactQualificationStatusLabels, contactRoleLabels } from "@/lib/crm";
 import { cn } from "@/lib/utils";
 import { commercialLinks } from "@/lib/commercial-navigation";
@@ -194,18 +194,22 @@ export function CrmRivieraHeader({
         <div className="my-5 h-px bg-white/10" />
         <nav aria-label="Navigation principale du CRM" className="grid gap-1">
           {mainItems.map((item) => <SidebarButton key={item.value} item={item} active={activeTab === item.value} onSelect={onTabChange} />)}
-          <Link href="/commercial/pipeline" onNavigate={(event) => { if (guardCommercialNavigation?.("/commercial/pipeline")) event.preventDefault(); }} className="mt-1 flex min-h-10 w-full items-center gap-3 rounded-lg px-4 text-left text-[13px] font-medium text-[#cbd5e1] transition-colors hover:bg-white/8 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
-            <Target className="size-[18px]" aria-hidden="true" />
-            <span className="flex-1">Commercial</span>
-            <ChevronDown className="size-4" aria-hidden="true" />
-          </Link>
-          <div className="grid gap-0.5">
-            {commercialLinks.map((item) => (
-              <Link key={item.key} href={item.href} onNavigate={(event) => { if (guardCommercialNavigation?.(item.href)) event.preventDefault(); }} className="flex min-h-10 items-center rounded-lg px-6 text-[13px] font-medium text-[#cbd5e1] transition-colors hover:bg-white/8 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
-                {item.label}
-              </Link>
-            ))}
-          </div>
+          <CommercialSidebarMenu icon={Target}>
+            <div className="grid gap-0.5">
+              {commercialLinks.map((item) => (
+                <Link
+                  key={item.key}
+                  href={item.href}
+                  onNavigate={(event) => {
+                    if (guardCommercialNavigation?.(item.href)) event.preventDefault();
+                  }}
+                  className="flex min-h-10 items-center rounded-lg px-6 text-[13px] font-medium text-[#cbd5e1] transition-colors hover:bg-white/8 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+          </CommercialSidebarMenu>
           <div className="mt-1 grid gap-1">
             {resourceItems.map((item) => <SidebarButton key={item.label} item={item} active={activeTab === item.value} onSelect={onTabChange} />)}
           </div>

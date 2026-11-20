@@ -14,7 +14,6 @@ import {
   BriefcaseBusiness,
   Building2,
   CalendarDays,
-  ChevronDown,
   ContactRound,
   Handshake,
   LayoutDashboard,
@@ -27,6 +26,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { commercialLinks } from "@/lib/commercial-navigation";
+import { CommercialSidebarMenu } from "./commercial-sidebar-menu";
 
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -102,41 +102,38 @@ function SidebarContent({
           <ContactRound className="size-4" />
           Contacts
         </Link>
-        <div className="mt-1 flex min-h-9 items-center gap-3 px-4 text-[13px] font-semibold">
-          <BriefcaseBusiness className="size-4" />
-          <span className="flex-1">Commercial</span>
-          <ChevronDown className="size-3.5" />
-        </div>
-        <div className="grid gap-0.5 pl-2">
-          {commercialLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              onClick={onNavigate}
-              aria-current={isActive(pathname, link.href) ? "page" : undefined}
-              className={cn(
-                baseLink,
-                "pl-6",
-                isActive(pathname, link.href)
-                  ? "bg-[#2f493a] font-semibold text-white"
-                  : "text-[#cbd5e1] hover:bg-white/8 hover:text-white",
-              )}
-            >
-              {link.label === "Négociations" ? (
-                <Handshake className="size-3.5" />
-              ) : null}
-              <span className="flex-1">{link.label}</span>
-              {link.label === "Négociations" && negotiationActionCount > 0 ? (
-                <span
-                  aria-label={`${negotiationActionCount} négociations nécessitent une action`}
-                  className="grid min-w-5 place-items-center rounded-full bg-[#a94d43] px-1.5 py-0.5 text-[10px] font-bold text-white"
-                >
-                  {negotiationActionCount}
-                </span>
-              ) : null}
-            </Link>
-          ))}
-        </div>
+        <CommercialSidebarMenu icon={BriefcaseBusiness} defaultOpen>
+          <div className="grid gap-0.5 pl-2">
+            {commercialLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={onNavigate}
+                aria-current={isActive(pathname, link.href) ? "page" : undefined}
+                className={cn(
+                  baseLink,
+                  "pl-6",
+                  isActive(pathname, link.href)
+                    ? "bg-[#2f493a] font-semibold text-white"
+                    : "text-[#cbd5e1] hover:bg-white/8 hover:text-white",
+                )}
+              >
+                {link.label === "Négociations" ? (
+                  <Handshake className="size-3.5" />
+                ) : null}
+                <span className="flex-1">{link.label}</span>
+                {link.label === "Négociations" && negotiationActionCount > 0 ? (
+                  <span
+                    aria-label={`${negotiationActionCount} négociations nécessitent une action`}
+                    className="grid min-w-5 place-items-center rounded-full bg-[#a94d43] px-1.5 py-0.5 text-[10px] font-bold text-white"
+                  >
+                    {negotiationActionCount}
+                  </span>
+                ) : null}
+              </Link>
+            ))}
+          </div>
+        </CommercialSidebarMenu>
         <Link
           href="/admin?tab=properties"
           onClick={onNavigate}
